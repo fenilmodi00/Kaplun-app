@@ -9,6 +9,8 @@ __pycache__/
 *opencode-rag.json
 .pytest_cache/
 .playwright-mcp/
+node_modules/
+kaplun.tech/
 
 # STAR registry state (runtime)
 data/memory/
