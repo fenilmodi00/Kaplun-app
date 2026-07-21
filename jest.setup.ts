@@ -1,6 +1,11 @@
 // Set required env vars before any module imports
 process.env.EXPO_PUBLIC_IG_API_BASE_URL = 'http://localhost:8000';
 process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_mock_key';
+process.env.EXPO_PUBLIC_IG_APP_ID = 'test_app_id';
+process.env.EXPO_PUBLIC_IG_API_PROXY_URL = 'https://test-proxy.example.com';
+process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI = 'https://test-callback.example.com/';
+process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT = 'https://test-appwrite.example.com/v1';
+process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID = 'test-project-id';
 
 // Mock @clerk/expo
 jest.mock('@clerk/expo', () => ({
@@ -143,12 +148,15 @@ jest.mock('expo-secure-store', () => ({
 // Mock expo-auth-session
 jest.mock('expo-auth-session', () => ({
   useAuthRequest: jest.fn().mockReturnValue([{}, { startAsync: jest.fn() }]),
-  makeRedirectUri: jest.fn().mockReturnValue('https://example.com/callback'),
+  makeRedirectUri: jest.fn().mockReturnValue('kaplun://instagram-callback'),
 }));
 
 // Mock expo-web-browser
 jest.mock('expo-web-browser', () => ({
-  openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'success' }),
+  openAuthSessionAsync: jest.fn().mockResolvedValue({ 
+    type: 'success', 
+    url: 'kaplun://instagram-callback?code=test_auth_code' 
+  }),
 }));
 
 // Mock react-native-reanimated

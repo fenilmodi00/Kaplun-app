@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
-import { View, Text, ScrollView, TextInput } from '@/tw';
-import { cn, clayInput } from '@/tw/cn';
+import { View, Text, ScrollView } from '@/tw';
+import { cn } from '@/tw/cn';
 import { useDashboard } from '@/hooks/useDashboard';
+import { account } from '@/lib/appwrite';
 import {
-  loginInstagram,
   disconnectInstagram,
   fetchMedia,
   fetchInsights,
   fetchProfile,
 } from '@/lib/instagram';
+import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
 import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
@@ -39,13 +40,10 @@ function Entrance({ delay = 0, children }: { delay?: number; children: React.Rea
 
 export default function HomeScreen() {
   const { user } = useUser();
-  const { getToken } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [igUsername, setIgUsername] = useState('');
-  const [igPassword, setIgPassword] = useState('');
   const router = useRouter();
   const { data: dashboardData, loading: dashboardLoading, error: dashboardError, refresh: refreshDashboard } = useDashboard();
 
@@ -53,7 +51,7 @@ export default function HomeScreen() {
     async function checkConnection() {
       if (!user) return;
       try {
-        const profile = await fetchProfile(await getToken() ?? '');
+        const profile = await fetchProfile();
         if (profile) {
           setIsConnected(true);
           setUsername(profile.username);
@@ -68,26 +66,32 @@ export default function HomeScreen() {
     checkConnection();
   }, [user]);
 
-  async function handleLogin() {
+  async function handleConnect() {
     if (!user) return;
     setIsLoading(true);
     setError(null);
     try {
-      const profile = await loginInstagram(await getToken() ?? '', user.id, igUsername, igPassword);
+      // Get Appwrite user ID for row permissions
+      const appwriteUser = await account.get();
+      // Start OAuth — ig-oauth-callback handles token exchange server-side
+      const success = await startInstagramOAuth(user.id, appwriteUser.$id);
+      if (!success) {
+        throw new Error('Instagram connection was not successful');
+      }
+      // Fetch profile to verify connection and get username
+      const profile = await fetchProfile();
       setIsConnected(true);
       setUsername(profile.username);
-      setIgUsername('');
-      setIgPassword('');
-      try { await fetchMedia(await getToken() ?? ''); } catch (e: any) {
-        if (e?.message === 'session_expired') setIsConnected(false);
+      // Fetch media and insights
+      try { await fetchMedia(); } catch (e: unknown) {
+        if (e instanceof Error && e.message === 'session_expired') setIsConnected(false);
       }
-      try { await fetchInsights(await getToken() ?? ''); } catch (e: any) {
-        if (e?.message === 'session_expired') setIsConnected(false);
+      try { await fetchInsights(); } catch (e: unknown) {
+        if (e instanceof Error && e.message === 'session_expired') setIsConnected(false);
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to connect';
-      if (message === 'Invalid credentials') setError('Invalid Instagram credentials');
-      else if (message === 'Instagram login failed') setError('Could not connect to Instagram. Check 2FA or try again.');
+      if (message === 'Instagram OAuth was cancelled') setError('Instagram connection was cancelled');
       else setError(message);
     } finally {
       setIsLoading(false);
@@ -98,11 +102,9 @@ export default function HomeScreen() {
     setIsLoading(true);
     setError(null);
     try {
-      await disconnectInstagram(await getToken() ?? '');
+      await disconnectInstagram();
       setIsConnected(false);
       setUsername(null);
-      setIgUsername('');
-      setIgPassword('');
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to disconnect';
       setError(message);
@@ -136,44 +138,76 @@ export default function HomeScreen() {
     );
   }
 
-  // Not connected — login form
+  // Not connected — Instagram connection screen
   if (!isConnected) {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
-        <Text className="text-display-sm font-medium tracking-[-0.5px] text-center">
-          Welcome to Kaplun
-        </Text>
-        <Entrance delay={0}>
-          <View className="w-full max-w-[320px] items-center gap-4">
-            <Text className="text-center text-muted">Connect your Instagram account to start creating.</Text>
-            <TextInput
-              placeholder="Instagram username"
-              value={igUsername}
-              onChangeText={setIgUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              className={cn(clayInput, 'w-full')}
-            />
-            <TextInput
-              placeholder="Instagram password"
-              value={igPassword}
-              onChangeText={setIgPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              className={cn(clayInput, 'w-full')}
-            />
-            <ClayAnimatedButton variant="primary" fullWidth onPress={handleLogin}>
-              Connect
-            </ClayAnimatedButton>
-          </View>
-        </Entrance>
-        {error && (
-          <Text className="text-error text-center text-xs">
-            {error}
-          </Text>
-        )}
-      </View>
+      <ScrollView className="flex-1 bg-canvas" contentContainerStyle={{ flexGrow: 1 }}>
+        <View className="flex-1 items-center justify-center gap-6 px-6 py-12">
+          {/* Hero */}
+          <Entrance delay={0}>
+            <View className="items-center gap-3">
+              <View className="w-20 h-20 rounded-full bg-primary items-center justify-center mb-2">
+                <Text className="text-canvas text-2xl font-bold">K</Text>
+              </View>
+              <Text className="text-display-sm font-medium tracking-[-0.5px] text-center text-primary">
+                Welcome to Kaplun
+              </Text>
+              <Text className="text-center text-muted leading-relaxed max-w-[280px]">
+                Your creator workspace for managing Instagram campaigns, tracking deals, and connecting with brands.
+              </Text>
+            </View>
+          </Entrance>
+
+          {/* Value cards */}
+          <Entrance delay={100}>
+            <View className="flex-row flex-wrap gap-3 justify-center">
+              <View className="w-[140px]">
+                <ClayFeatureCard
+                  color="pink"
+                  padding="p-4"
+                  title="📊"
+                  description="Track analytics"
+                />
+              </View>
+              <View className="w-[140px]">
+                <ClayFeatureCard
+                  color="teal"
+                  padding="p-4"
+                  title="💼"
+                  description="Manage deals"
+                />
+              </View>
+              <View className="w-[140px]">
+                <ClayFeatureCard
+                  color="lavender"
+                  padding="p-4"
+                  title="💬"
+                  description="Brand DMs"
+                />
+              </View>
+            </View>
+          </Entrance>
+
+          {/* CTA */}
+          <Entrance delay={200}>
+            <View className="w-full max-w-[320px] items-center gap-3">
+              <ClayAnimatedButton variant="primary" fullWidth onPress={handleConnect}>
+                Connect Instagram
+              </ClayAnimatedButton>
+              <Text className="text-xs text-muted text-center">
+                Uses Instagram's official API — your credentials are never stored
+              </Text>
+            </View>
+          </Entrance>
+
+          {/* Error */}
+          {error && (
+            <ErrorShake>
+              <Text className="text-error text-center text-xs mt-2">{error}</Text>
+            </ErrorShake>
+          )}
+        </View>
+      </ScrollView>
     );
   }
 

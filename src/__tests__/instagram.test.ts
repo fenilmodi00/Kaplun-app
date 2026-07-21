@@ -9,171 +9,82 @@
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+jest.mock('@/lib/appwrite', () => ({
+  account: { createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }) },
+}));
+
+process.env.EXPO_PUBLIC_IG_API_PROXY_URL = 'https://test-proxy.example.com';
+
 import {
-  loginInstagram,
   fetchProfile,
   fetchMedia,
   fetchInsights,
   disconnectInstagram,
 } from '@/lib/instagram';
 
-const TEST_TOKEN = 'test-clerk-jwt';
-
 beforeEach(() => {
   mockFetch.mockReset();
 });
 
 const mockProfile = {
-  pk: '12345',
+  id: '12345',
   username: 'test_creator',
-  full_name: 'Test Creator',
+  name: 'Test Creator',
   biography: 'A test bio',
-  external_url: null,
-  follower_count: 1500,
-  following_count: 500,
+  website: null,
+  followers_count: 1500,
+  follows_count: 500,
   media_count: 42,
-  is_private: false,
-  is_verified: true,
-  profile_pic_url: 'https://example.com/pic.jpg',
-  is_business: true,
+  profile_picture_url: 'https://example.com/pic.jpg',
 };
 
 const mockMedia = [
   {
-    pk: 'm1',
-    caption_text: 'Great post',
-    media_type: 1,
+    id: 'm1',
+    caption: 'Great post',
+    media_type: 'IMAGE',
     thumbnail_url: 'https://example.com/thumb.jpg',
     media_url: 'https://example.com/media.mp4',
     permalink: 'https://instagram.com/p/abc',
-    taken_at: 1700000000,
+    timestamp: '2024-01-01T00:00:00Z',
     like_count: 100,
-    comment_count: 10,
-    view_count: 5000,
-    play_count: 4800,
+    comments_count: 10,
   },
   {
-    pk: 'm2',
-    caption_text: 'Another post',
-    media_type: 2,
+    id: 'm2',
+    caption: 'Another post',
+    media_type: 'CAROUSEL_ALBUM',
     thumbnail_url: 'https://example.com/thumb2.jpg',
     media_url: 'https://example.com/media2.jpg',
     permalink: 'https://instagram.com/p/def',
-    taken_at: 1699900000,
+    timestamp: '2024-01-01T00:00:00Z',
     like_count: 200,
-    comment_count: 20,
-    view_count: 0,
-    play_count: 0,
+    comments_count: 20,
   },
 ];
 
 const mockInsights = {
   data: [
-    {
-      name: 'impressions',
-      period: 'days_28',
-      values: [{ value: 10000, end_time: '2024-01-01T00:00:00Z' }],
-    },
+    { name: 'reach', period: 'day', values: [{ value: 5000, end_time: '2024-01-01T00:00:00+0000' }] },
+    { name: 'views', period: 'day', total_value: { value: 12000 } },
   ],
 };
-
-describe('loginInstagram', () => {
-  const clerkId = 'clerk_123';
-  const username = 'myuser';
-  const password = 'mypass';
-
-  it('happy: returns profile on 200', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => mockProfile,
-    } as Response);
-
-    const result = await loginInstagram(TEST_TOKEN, clerkId, username, password);
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, options] = mockFetch.mock.calls[0];
-    expect(url).toContain('/login');
-    expect(options.method).toBe('POST');
-    expect(options.headers).toBeDefined();
-    expect(options.headers['Authorization']).toBe(`Bearer ${TEST_TOKEN}`);
-    expect(options.headers['Content-Type']).toBe('application/json');
-
-    const body = JSON.parse(options.body);
-    expect(body).toEqual({
-      clerk_id: clerkId,
-      username,
-      password,
-    });
-
-    expect(result).toEqual(mockProfile);
-  });
-
-  it('failure: throws Invalid credentials on 401', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: async () => ({}),
-    } as Response);
-
-    await expect(loginInstagram(TEST_TOKEN, clerkId, username, password)).rejects.toThrow(
-      'Invalid credentials'
-    );
-  });
-
-  it('failure: throws Instagram login failed on 502', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 502,
-      json: async () => ({}),
-    } as Response);
-
-    await expect(loginInstagram(TEST_TOKEN, clerkId, username, password)).rejects.toThrow(
-      'Instagram login failed'
-    );
-  });
-
-  it('failure: throws generic error on other non-ok status', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: async () => ({}),
-    } as Response);
-
-    await expect(loginInstagram(TEST_TOKEN, clerkId, username, password)).rejects.toThrow(
-      'Instagram login failed'
-    );
-  });
-
-  it('malformed_input: handles non-JSON response gracefully', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 502,
-      json: async () => {
-        throw new Error('Unexpected token');
-      },
-    } as unknown as Response);
-
-    await expect(loginInstagram(TEST_TOKEN, clerkId, username, password)).rejects.toThrow();
-  });
-});
 
 describe('fetchProfile', () => {
   it('happy: returns profile on 200', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => mockProfile,
+      json: async () => ({ success: true, data: mockProfile }),
     } as Response);
 
-    const result = await fetchProfile(TEST_TOKEN);
+    const result = await fetchProfile();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('/profile');
     expect(options.method).toBe('GET');
-    expect(options.headers['Authorization']).toBe(`Bearer ${TEST_TOKEN}`);
+    expect(options.headers['x-appwrite-user-jwt']).toBeDefined();
 
     expect(result).toEqual(mockProfile);
   });
@@ -185,13 +96,13 @@ describe('fetchProfile', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(fetchProfile(TEST_TOKEN)).rejects.toThrow('session_expired');
+    await expect(fetchProfile()).rejects.toThrow('session_expired');
   });
 
   it('malformed_input: handles fetch throwing a network error', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    await expect(fetchProfile(TEST_TOKEN)).rejects.toThrow();
+    await expect(fetchProfile()).rejects.toThrow();
   });
 });
 
@@ -200,17 +111,17 @@ describe('fetchMedia', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ data: mockMedia }),
+      json: async () => ({ success: true, data: mockMedia }),
     } as Response);
 
-    const result = await fetchMedia(TEST_TOKEN);
+    const result = await fetchMedia();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('/media');
     expect(url).toContain('amount=25');
     expect(options.method).toBe('GET');
-    expect(options.headers['Authorization']).toBe(`Bearer ${TEST_TOKEN}`);
+    expect(options.headers['x-appwrite-user-jwt']).toBeDefined();
 
     expect(result).toEqual(mockMedia);
     expect(Array.isArray(result)).toBe(true);
@@ -224,7 +135,7 @@ describe('fetchMedia', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(fetchMedia(TEST_TOKEN)).rejects.toThrow('session_expired');
+    await expect(fetchMedia()).rejects.toThrow('session_expired');
   });
 
   it('non-ok: throws on 500', async () => {
@@ -235,17 +146,17 @@ describe('fetchMedia', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(fetchMedia(TEST_TOKEN)).rejects.toThrow();
+    await expect(fetchMedia()).rejects.toThrow();
   });
 
   it('malformed_input: handles empty data array', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ data: [] }),
+      json: async () => ({ success: true, data: [] }),
     } as Response);
 
-    const result = await fetchMedia(TEST_TOKEN);
+    const result = await fetchMedia();
     expect(result).toEqual([]);
   });
 });
@@ -255,16 +166,16 @@ describe('fetchInsights', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => mockInsights,
+      json: async () => ({ success: true, data: mockInsights }),
     } as Response);
 
-    const result = await fetchInsights(TEST_TOKEN);
+    const result = await fetchInsights();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('/insights');
     expect(options.method).toBe('GET');
-    expect(options.headers['Authorization']).toBe(`Bearer ${TEST_TOKEN}`);
+    expect(options.headers['x-appwrite-user-jwt']).toBeDefined();
 
     expect(result).toEqual(mockInsights);
   });
@@ -274,10 +185,10 @@ describe('fetchInsights', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => businessError,
+      json: async () => ({ success: true, data: businessError }),
     } as Response);
 
-    const result = await fetchInsights(TEST_TOKEN);
+    const result = await fetchInsights();
 
     expect(result).toEqual(businessError);
   });
@@ -289,7 +200,7 @@ describe('fetchInsights', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(fetchInsights(TEST_TOKEN)).rejects.toThrow('session_expired');
+    await expect(fetchInsights()).rejects.toThrow('session_expired');
   });
 
   it('non-ok: throws on 500', async () => {
@@ -300,7 +211,7 @@ describe('fetchInsights', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(fetchInsights(TEST_TOKEN)).rejects.toThrow();
+    await expect(fetchInsights()).rejects.toThrow();
   });
 });
 
@@ -312,13 +223,13 @@ describe('disconnectInstagram', () => {
       json: async () => ({}),
     } as Response);
 
-    await disconnectInstagram(TEST_TOKEN);
+    await disconnectInstagram();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('/disconnect');
     expect(options.method).toBe('POST');
-    expect(options.headers['Authorization']).toBe(`Bearer ${TEST_TOKEN}`);
+    expect(options.headers['x-appwrite-user-jwt']).toBeDefined();
   });
 
   it('malformed_input: throws on non-ok disconnect response', async () => {
@@ -329,7 +240,7 @@ describe('disconnectInstagram', () => {
       json: async () => ({}),
     } as Response);
 
-    await expect(disconnectInstagram(TEST_TOKEN)).rejects.toThrow();
+    await expect(disconnectInstagram()).rejects.toThrow();
   });
 });
 

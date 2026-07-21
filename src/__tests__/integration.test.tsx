@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import Home from '@/app/(tabs)/(home)/index';
-import { loginInstagram, fetchMedia, fetchInsights, disconnectInstagram } from '@/lib/instagram';
+import { fetchMedia, fetchInsights, disconnectInstagram, fetchProfile } from '@/lib/instagram';
+import { startInstagramOAuth } from '@/lib/instagram-oauth';
 
-const mockLoginInstagram = loginInstagram as jest.Mock;
 const mockFetchMedia = fetchMedia as jest.Mock;
 const mockFetchInsights = fetchInsights as jest.Mock;
 const mockDisconnectInstagram = disconnectInstagram as jest.Mock;
+const mockStartInstagramOAuth = startInstagramOAuth as jest.Mock;
+const mockFetchProfile = fetchProfile as jest.Mock;
 
 jest.mock('@clerk/clerk-expo', () => ({
   useAuth: () => ({
@@ -47,12 +49,32 @@ jest.mock('@clerk/clerk-expo', () => ({
   ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+jest.mock('@/lib/appwrite', () => ({
+  account: {
+    createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }),
+    get: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
+  },
+}));
+
 jest.mock('@/lib/instagram', () => ({
-  loginInstagram: jest.fn(),
   fetchMedia: jest.fn(),
   fetchInsights: jest.fn(),
   disconnectInstagram: jest.fn(),
-  fetchProfile: jest.fn().mockRejectedValue(new Error('not connected')),
+  fetchProfile: jest.fn().mockResolvedValue({
+    id: '1',
+    username: 'testuser',
+    name: 'Test User',
+    biography: 'A test bio',
+    website: null,
+    followers_count: 100,
+    follows_count: 50,
+    media_count: 10,
+    profile_picture_url: 'https://example.com/pic.jpg',
+  }),
+}));
+
+jest.mock('@/lib/instagram-oauth', () => ({
+  startInstagramOAuth: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('@/hooks/useDashboard', () => ({
@@ -66,7 +88,6 @@ jest.mock('@/hooks/useDashboard', () => ({
 
 describe('Integration Tests', () => {
   beforeEach(() => {
-    mockLoginInstagram.mockReset();
     mockFetchMedia.mockReset();
     mockFetchInsights.mockReset();
     mockDisconnectInstagram.mockReset();
@@ -76,106 +97,53 @@ describe('Integration Tests', () => {
   });
 
   describe('Home Screen', () => {
-    it('renders login form with username and password inputs and a Connect button', async () => {
+    it('renders connected state with username', async () => {
       await render(<Home />);
 
-      expect(screen.getByPlaceholderText('Instagram username')).toBeTruthy();
-      expect(screen.getByPlaceholderText('Instagram password')).toBeTruthy();
-      expect(screen.getByText('Connect')).toBeTruthy();
-    });
-
-    it('calls loginInstagram with correct credentials when Connect is pressed', async () => {
-      mockLoginInstagram.mockResolvedValue({
-        pk: '12345',
-        username: 'test_creator',
-      });
-
-      await render(<Home />);
-
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
-      await fireEvent.press(screen.getByText('Connect'));
-
-      await waitFor(() => {
-        expect(mockLoginInstagram).toHaveBeenCalledWith('test-token', 'test-user-id', 'testuser', 'testpass');
-      });
+      expect(screen.getByText('Welcome, @testuser')).toBeTruthy();
+      expect(screen.getByText('Refresh')).toBeTruthy();
     });
 
     it('shows welcome message after successful login', async () => {
-      mockLoginInstagram.mockResolvedValue({
-        pk: '12345',
-        username: 'test_creator',
-      });
-
       await render(<Home />);
 
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
-      await fireEvent.press(screen.getByText('Connect'));
-
       await waitFor(() => {
-        expect(screen.getByText(/Welcome, @test_creator/)).toBeTruthy();
+        expect(screen.getByText('Welcome, @testuser')).toBeTruthy();
       });
     });
 
     it('shows error text on login failure', async () => {
-      mockLoginInstagram.mockRejectedValue(new Error('Invalid credentials'));
+      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+      mockStartInstagramOAuth.mockRejectedValue(new Error('Invalid credentials'));
 
       await render(<Home />);
 
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
       await fireEvent.press(screen.getByText('Connect'));
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid Instagram credentials')).toBeTruthy();
+        expect(screen.getByText('Invalid credentials')).toBeTruthy();
       });
     });
 
-    it('shows generic error text on Instagram login failure', async () => {
-      mockLoginInstagram.mockRejectedValue(new Error('Instagram login failed'));
+    it('shows generic error text on Instagram connect failure', async () => {
+      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+      mockStartInstagramOAuth.mockRejectedValue(new Error('Instagram connect failed'));
 
       await render(<Home />);
 
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
       await fireEvent.press(screen.getByText('Connect'));
 
       await waitFor(() => {
-        expect(
-          screen.getByText('Could not connect to Instagram. Check 2FA or try again.')
-        ).toBeTruthy();
+        expect(screen.getByText('Instagram connect failed')).toBeTruthy();
       });
-    });
-
-    it('clears credentials from inputs after successful login', async () => {
-      mockLoginInstagram.mockResolvedValue({
-        pk: '12345',
-        username: 'test_creator',
-      });
-
-      await render(<Home />);
-
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
-      await fireEvent.press(screen.getByText('Connect'));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Welcome, @test_creator/)).toBeTruthy();
-      });
-
-      // After successful login, inputs are cleared from DOM (replaced by dashboard)
-      expect(screen.queryByPlaceholderText('Instagram username')).toBeNull();
-      expect(screen.queryByPlaceholderText('Instagram password')).toBeNull();
     });
 
     it('shows error state with retry on session_expired error', async () => {
-      mockLoginInstagram.mockRejectedValue(new Error('session_expired'));
+      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+      mockStartInstagramOAuth.mockRejectedValue(new Error('session_expired'));
 
       await render(<Home />);
 
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram username'), 'testuser');
-      await fireEvent.changeText(screen.getByPlaceholderText('Instagram password'), 'testpass');
       await fireEvent.press(screen.getByText('Connect'));
 
       await waitFor(() => {

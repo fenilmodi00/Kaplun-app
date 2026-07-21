@@ -16,7 +16,7 @@ const COLOR: Record<Color, { bg: string; text: string }> = {
 };
 
 // Transitional: accept legacy space tokens until screens are migrated (Phase 4)
-type Padding = 'p-6' | 'p-8' | '$lg' | '$xl';
+type Padding = 'p-4' | 'p-6' | 'p-8' | '$lg' | '$xl';
 const LEGACY_PADDING: Record<string, string> = { '$lg': 'p-6', '$xl': 'p-8' };
 
 export function ClayFeatureCard({

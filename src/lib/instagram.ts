@@ -1,32 +1,35 @@
 /**
- * Instagram FastAPI helper functions.
+ * Instagram ig-api-proxy helper functions.
  *
- * Replaced Graph API OAuth flow with FastAPI backend calls:
- * - loginInstagram(): POSTs credentials to FastAPI /login
- * - fetchProfile(): GETs profile from FastAPI /profile
- * - fetchMedia(): GETs media from FastAPI /media?amount=25
- * - fetchInsights(): GETs insights from FastAPI /insights
- * - disconnectInstagram(): POSTs disconnect to FastAPI /disconnect
+ * Calls the Appwrite ig-api-proxy function for Instagram operations:
+ * - fetchProfile(): GETs profile from /profile
+ * - fetchMedia(): GETs media from /media?amount=25
+ * - fetchInsights(): GETs insights from /insights
+ * - disconnectInstagram(): POSTs disconnect to /disconnect
  *
- * All endpoints use JWT auth via getAuthHeaders() (Authorization: Bearer header).
+ * All endpoints use Appwrite JWT auth via getAuthHeaders() (x-appwrite-user-jwt header).
+ * The ig-api-proxy function returns { success: true, data: ... } — functions extract .data.
  */
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
+import { account } from './appwrite';
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_PROXY_URL;
 
 if (!API_BASE_URL) {
   throw new Error(
-    'EXPO_PUBLIC_IG_API_BASE_URL is not set. Add it to your .env file (e.g. http://localhost:8000 or ngrok URL).'
+    'EXPO_PUBLIC_IG_API_PROXY_URL is not set. Add it to your .env file (e.g. https://ig-api-proxy.sgp.appwrite.run).'
   );
 }
 
 const FETCH_TIMEOUT_MS = 15_000;
 
 /**
- * Returns auth headers with Clerk JWT Bearer token for FastAPI endpoint calls.
+ * Returns auth headers with Appwrite JWT for ig-api-proxy endpoint calls.
  */
-function getAuthHeaders(clerkToken: string): HeadersInit {
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const jwtResponse = await account.createJWT();
   return {
-    Authorization: `Bearer ${clerkToken}`,
+    'x-appwrite-user-jwt': jwtResponse.jwt,
     'Content-Type': 'application/json',
   };
 }
@@ -49,94 +52,57 @@ async function fetchWithTimeout(
 }
 
 /**
- * Instagram profile response matching instagrapi user_info output.
+ * Instagram profile response from ig-api-proxy.
  */
 export interface InstagramProfileResponse {
-  pk: string;
+  id: string;
   username: string;
-  full_name: string;
+  name: string;
   biography: string;
-  external_url: string | null;
-  follower_count: number;
-  following_count: number;
+  website?: string;
+  followers_count: number;
+  follows_count: number;
   media_count: number;
-  is_private: boolean;
-  is_verified: boolean;
-  profile_pic_url: string;
-  is_business: boolean;
+  profile_picture_url: string;
 }
 
 /**
- * Instagram media response matching instagrapi user_medias output.
+ * Instagram media response from ig-api-proxy.
  */
 export interface InstagramMediaResponse {
-  pk: string;
-  caption_text: string | null;
-  media_type: number;
+  id: string;
+  caption: string | null;
+  media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS';
   thumbnail_url: string | null;
   media_url: string | null;
-  permalink: string;
-  taken_at: number;
+  permalink: string | null;
+  timestamp: string;
   like_count: number;
-  comment_count: number;
-  view_count: number;
-  play_count: number;
+  comments_count: number;
 }
 
 /**
- * Instagram insights response.
+ * Instagram insights response from ig-api-proxy.
  */
 export interface InstagramInsightsResponse {
   data: Array<{
     name: string;
     period: string;
     values: Array<{ value: number; end_time: string }>;
+    total_value?: { value: number };
+    id?: string;
   }>;
   error?: string;
 }
 
 /**
- * Logs in to Instagram via the FastAPI backend.
- * Sends credentials to /login — credentials are NOT stored client-side.
- *
- * @throws Error("Invalid credentials") on 401
- * @throws Error("Instagram login failed") on 502 or other non-200
- */
-export async function loginInstagram(
-  clerkToken: string,
-  clerkId: string,
-  username: string,
-  password: string
-): Promise<InstagramProfileResponse> {
-  const headers = getAuthHeaders(clerkToken);
-  const response = await fetchWithTimeout(`${API_BASE_URL}/login`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      clerk_id: clerkId,
-      username,
-      password,
-    }),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('Invalid credentials');
-    }
-    throw new Error('Instagram login failed');
-  }
-
-  return response.json();
-}
-
-/**
- * Fetches the current user's Instagram profile from the FastAPI backend.
- * No params — the JWT identifies the user.
+ * Fetches the current user's Instagram profile from the ig-api-proxy function.
+ * The JWT identifies the user.
  *
  * @throws Error("session_expired") on 401
  */
-export async function fetchProfile(clerkToken: string): Promise<InstagramProfileResponse> {
-  const headers = getAuthHeaders(clerkToken);
+export async function fetchProfile(): Promise<InstagramProfileResponse> {
+  const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/profile`, {
     method: 'GET',
     headers,
@@ -149,17 +115,18 @@ export async function fetchProfile(clerkToken: string): Promise<InstagramProfile
     throw new Error(`Fetch profile failed: ${response.statusText}`);
   }
 
-  return response.json();
+  const body = await response.json();
+  return body.data as InstagramProfileResponse;
 }
 
 /**
- * Fetches the current user's Instagram media from the FastAPI backend.
+ * Fetches the current user's Instagram media from the ig-api-proxy function.
  * Returns up to 25 media items.
  *
  * @throws Error("session_expired") on 401
  */
-export async function fetchMedia(clerkToken: string): Promise<InstagramMediaResponse[]> {
-  const headers = getAuthHeaders(clerkToken);
+export async function fetchMedia(): Promise<InstagramMediaResponse[]> {
+  const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/media?amount=25`, {
     method: 'GET',
     headers,
@@ -177,14 +144,14 @@ export async function fetchMedia(clerkToken: string): Promise<InstagramMediaResp
 }
 
 /**
- * Fetches Instagram insights from the FastAPI backend.
+ * Fetches Instagram insights from the ig-api-proxy function.
  * Returns insights data or an error object — callers handle gracefully.
  *
  * @throws Error("session_expired") on 401
  * @throws Error on other non-200 responses
  */
-export async function fetchInsights(clerkToken: string): Promise<InstagramInsightsResponse> {
-  const headers = getAuthHeaders(clerkToken);
+export async function fetchInsights(): Promise<InstagramInsightsResponse> {
+  const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/insights`, {
     method: 'GET',
     headers,
@@ -197,14 +164,15 @@ export async function fetchInsights(clerkToken: string): Promise<InstagramInsigh
     throw new Error(`Fetch insights failed: ${response.statusText}`);
   }
 
-  return response.json();
+  const body = await response.json();
+  return body.data as InstagramInsightsResponse;
 }
 
 /**
- * Disconnects Instagram session via the FastAPI backend.
+ * Disconnects Instagram session via the ig-api-proxy function.
  */
-export async function disconnectInstagram(clerkToken: string): Promise<void> {
-  const headers = getAuthHeaders(clerkToken);
+export async function disconnectInstagram(): Promise<void> {
+  const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/disconnect`, {
     method: 'POST',
     headers,

@@ -24,9 +24,12 @@ jest.mock('@clerk/clerk-expo', () => ({
   ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+jest.mock('@/lib/appwrite', () => ({
+  account: { createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }) },
+}));
+
 jest.mock('@/lib/instagram', () => ({
   fetchProfile: jest.fn(),
-  loginInstagram: jest.fn(),
   fetchMedia: jest.fn(),
   fetchInsights: jest.fn(),
   disconnectInstagram: jest.fn(),
@@ -34,11 +37,11 @@ jest.mock('@/lib/instagram', () => ({
 
 const mockDashboardData = {
   creator: {
-    pk: '12345',
+    id: '12345',
     username: 'test_creator',
-    full_name: 'Test Creator',
-    follower_count: 1500,
-    following_count: 500,
+    name: 'Test Creator',
+    followers_count: 1500,
+    follows_count: 500,
     media_count: 42,
   },
   threads: [
@@ -71,11 +74,11 @@ const mockFetchProfile = fetchProfile as jest.Mock;
 const mockDisconnectInstagram = disconnectInstagram as jest.Mock;
 
 const mockProfile = {
-  pk: '12345',
+  id: '12345',
   username: 'test_creator',
-  full_name: 'Test Creator',
-  follower_count: 1500,
-  following_count: 500,
+  name: 'Test Creator',
+  followers_count: 1500,
+  follows_count: 500,
   media_count: 42,
 };
 
