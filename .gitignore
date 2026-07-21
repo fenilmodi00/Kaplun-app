@@ -1,31 +1,41 @@
-.env
-ig_session.json
-data/*.db
-data/ig_session.json
-__pycache__/
-.python-version
-.omo/
-.opencode/
-*opencode-rag.json
-.pytest_cache/
-.playwright-mcp/
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
 node_modules/
-kaplun.tech/
 
-# STAR registry state (runtime)
-data/memory/
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
 
-# Expo frontend (app/ subdirectory)
-app/.env
-app/node_modules/
-app/.expo/
-app/dist/
-app/web-build/
-app/expo-env.d.ts
-app/*.tsbuildinfo
-app/ios/
-app/android/
-app/tsc_output.txt
-app/dist-test/
-app/.omo/
-app/.opencode/
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
