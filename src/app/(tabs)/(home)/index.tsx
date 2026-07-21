@@ -141,7 +141,7 @@ export default function HomeScreen() {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
         <Text className="text-display-sm font-medium tracking-[-0.5px] text-center">
-          Welcome to Creator Workspace
+          Welcome to Kaplun
         </Text>
         <Entrance delay={0}>
           <View className="w-full max-w-[320px] items-center gap-4">

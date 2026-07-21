@@ -1,4 +1,4 @@
-# Authentication Plan for app-fresh
+# Authentication Plan for Kaplun
 
 **Goal:** Implement a complete auth system using Clerk's available features for Expo/React Native.
 

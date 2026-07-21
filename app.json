@@ -1,14 +1,15 @@
 {
   "expo": {
-    "name": "app-fresh",
-    "slug": "app-fresh",
-    "scheme": "appfresh",
+    "name": "Kaplun",
+    "slug": "kaplun",
+    "scheme": "kaplun",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fenilmodi00.kaplun"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
@@ -23,7 +24,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.fenilmodi00.creatorworkspace"
+      "package": "com.fenilmodi00.kaplun"
     },
     "web": {
       "favicon": "./assets/favicon.png"

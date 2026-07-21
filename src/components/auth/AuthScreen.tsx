@@ -488,7 +488,7 @@ export default function AuthScreen() {
       compact={isCompact}
       safeTop={insets.top}
     >
-      <Text style={[styles.brand, isCompact && styles.brandCompact]}>Creator Workspace</Text>
+      <Text style={[styles.brand, isCompact && styles.brandCompact]}>Kaplun</Text>
 
       <View style={styles.subtitleSlot}>
         <Animated.View style={[styles.absoluteCenter, loginFadeStyle]}>
