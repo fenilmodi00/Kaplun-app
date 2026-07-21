@@ -117,7 +117,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
     emailRef.current = email;
 
     const future = signIn.__internal_future;
-    const { error } = await future.create({ identifier: email, strategy: 'email_code' });
+    const { error } = await future.create({ identifier: email, strategy: 'email_code' as any });
     if (error) {
       setState((s) => ({ ...s, step: 'error', error: clerkErr(error) }));
       setLoading(false);
@@ -135,7 +135,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
       return;
     }
 
-    const { error: sendErr } = await future.emailCode.sendCode();
+    const { error: sendErr } = await (future.emailCode as any).sendCode();
     if (sendErr) {
       setState((s) => ({ ...s, step: 'error', error: clerkErr(sendErr) }));
       setLoading(false);
@@ -220,7 +220,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
       const { error } = await signUp.__internal_future.verifications.sendEmailCode();
       if (error) setState((s) => ({ ...s, error: clerkErr(error) }));
     } else if (signIn) {
-      const { error } = await signIn.__internal_future.emailCode.sendCode();
+      const { error } = await (signIn.__internal_future.emailCode as any).sendCode();
       if (error) setState((s) => ({ ...s, error: clerkErr(error) }));
     }
 

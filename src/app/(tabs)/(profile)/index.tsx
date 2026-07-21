@@ -94,7 +94,7 @@ export default function ProfileScreen() {
 
   async function handleDisconnect() {
     try {
-      await disconnectInstagram(await getToken() ?? '');
+      await disconnectInstagram();
       refresh();
     } catch {
       // Silently handle — user can retry

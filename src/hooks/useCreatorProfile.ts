@@ -97,9 +97,9 @@ export function useCreatorProfile(): UseCreatorProfileResult {
       if (cancelledRef.current) return;
       setRecentReels(postsResult.rows as unknown as PostRow[]);
 
-      // 4. Fetch media and insights from FastAPI
+      // 4. Fetch media and insights from Appwrite IG proxy
       try {
-        const media = await fetchMedia(await getToken() ?? '');
+        const media = await fetchMedia();
         if (!cancelledRef.current) {
           setRecentMedia(media);
         }
@@ -113,7 +113,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
       }
 
       try {
-        const insightsData = await fetchInsights(await getToken() ?? '');
+        const insightsData = await fetchInsights();
         if (!cancelledRef.current) {
           if (insightsData.error) {
             // Business account required — not an error, just unavailable
