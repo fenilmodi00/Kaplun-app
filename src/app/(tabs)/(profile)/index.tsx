@@ -18,31 +18,21 @@ import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
 import { ClayAvatar } from '@/components/clay/ClayAvatar';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 
+/** Status chip color styling per DESIGN.md §3.3 & §5.4 */
+const STATUS_META: Record<string, { bg: string; text: string }> = {
+  invited: { bg: 'bg-brand-teal', text: 'text-on-dark' },
+  negotiating: { bg: 'bg-brand-ochre', text: 'text-ink' },
+  contracted: { bg: 'bg-brand-mint', text: 'text-ink' },
+  content_pending: { bg: 'bg-brand-lavender', text: 'text-on-dark' },
+  live: { bg: 'bg-brand-mint', text: 'text-ink' },
+  completed: { bg: 'bg-surface-card', text: 'text-muted' },
+  declined: { bg: 'bg-error', text: 'text-on-dark' },
+};
+
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
-}
-
-function statusBg(status: string): string {
-  switch (status) {
-    case 'invited':
-      return 'bg-brand-teal';
-    case 'negotiating':
-      return 'bg-brand-ochre';
-    case 'contracted':
-      return 'bg-success';
-    case 'content_pending':
-      return 'bg-brand-lavender'; // D12: lavender everywhere
-    case 'live':
-      return 'bg-success';
-    case 'completed':
-      return 'bg-muted';
-    case 'declined':
-      return 'bg-error';
-    default:
-      return 'bg-muted';
-  }
 }
 
 function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
@@ -161,13 +151,13 @@ export default function ProfileScreen() {
 
           {/* Badges */}
           <View className="mt-3 flex-row flex-wrap gap-2">
-            <Text className="rounded-pill bg-brand-mint px-3 py-1 text-caption text-ink">
+            <Text className="rounded-pill bg-brand-mint px-3 py-1 text-caption font-semibold text-ink">
               {creator.engagement_rate.toFixed(1)}% engagement
             </Text>
-            <Text className="rounded-pill bg-brand-lavender px-3 py-1 text-caption text-ink">
+            <Text className="rounded-pill bg-brand-lavender px-3 py-1 text-caption font-semibold text-on-dark">
               {creator.creator_tier.replace(/_/g, ' ')}
             </Text>
-            <Text className="rounded-pill bg-brand-peach px-3 py-1 text-caption text-ink">
+            <Text className="rounded-pill bg-brand-peach px-3 py-1 text-caption font-semibold text-on-dark">
               {creator.niche}
             </Text>
           </View>
@@ -245,39 +235,39 @@ export default function ProfileScreen() {
           </Text>
           {dealThreads.length > 0 ? (
             <View className="gap-2">
-              {dealThreads.map((thread, index) => (
-                <ClayAnimatedCard
-                  key={thread.$id ?? thread.thread_id}
-                  delay={index * 100}
-                  padding="p-4"
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-1 gap-1">
-                      <Text className="text-body-sm font-semibold text-ink">
-                        {thread.campaign_title}
-                      </Text>
-                      <Text className="text-caption text-muted">
-                        {thread.agent_assigned}
-                      </Text>
-                    </View>
-                    <View className="flex-row items-center gap-2">
-                      <Text
-                        className={cn(
-                          'rounded-pill px-2 py-1 text-caption text-on-primary',
-                          statusBg(thread.status),
-                        )}
-                      >
-                        {thread.status.replace(/_/g, ' ')}
-                      </Text>
-                      {thread.unread_count > 0 && (
-                        <Text className="h-[22px] w-[22px] rounded-full bg-error text-center text-caption leading-[22px] text-on-primary">
-                          {thread.unread_count}
+              {dealThreads.map((thread, index) => {
+                const meta = STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' };
+                return (
+                  <ClayAnimatedCard
+                    key={thread.$id ?? thread.thread_id}
+                    delay={index * 100}
+                    padding="p-4"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 gap-1">
+                        <Text className="text-body-sm font-semibold text-ink">
+                          {thread.campaign_title}
                         </Text>
-                      )}
+                        <Text className="text-caption text-muted">
+                          {thread.agent_assigned}
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center gap-2">
+                        <View className={cn('rounded-pill px-2.5 py-1', meta.bg)}>
+                          <Text className={cn('text-caption-uppercase font-semibold', meta.text)}>
+                            {thread.status.replace(/_/g, ' ')}
+                          </Text>
+                        </View>
+                        {thread.unread_count > 0 && (
+                          <Text className="h-[22px] min-w-[22px] rounded-pill bg-error px-1.5 text-center text-caption leading-[22px] text-on-primary">
+                            {thread.unread_count}
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                </ClayAnimatedCard>
-              ))}
+                  </ClayAnimatedCard>
+                );
+              })}
             </View>
           ) : (
             <Text className="text-body-sm text-muted">

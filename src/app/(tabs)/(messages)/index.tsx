@@ -11,14 +11,15 @@ import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 
-const STATUS_BG: Record<string, string> = {
-  invited: 'bg-brand-teal',
-  negotiating: 'bg-brand-ochre',
-  contracted: 'bg-success',
-  content_pending: 'bg-brand-lavender', // D12: lavender everywhere
-  live: 'bg-success',
-  completed: 'bg-muted',
-  declined: 'bg-error',
+/** Status badge color styling per DESIGN.md §3.3 & §5.4 */
+const STATUS_META: Record<string, { bg: string; text: string }> = {
+  invited: { bg: 'bg-brand-teal', text: 'text-on-dark' },
+  negotiating: { bg: 'bg-brand-ochre', text: 'text-ink' },
+  contracted: { bg: 'bg-brand-mint', text: 'text-ink' },
+  content_pending: { bg: 'bg-brand-lavender', text: 'text-on-dark' },
+  live: { bg: 'bg-brand-mint', text: 'text-ink' },
+  completed: { bg: 'bg-surface-card', text: 'text-muted' },
+  declined: { bg: 'bg-error', text: 'text-on-dark' },
 };
 
 function formatTimestamp(iso: string | undefined): string {
@@ -69,7 +70,7 @@ function ThreadRow({
   index: number;
   onPress: () => void;
 }) {
-  const statusBg = STATUS_BG[thread.status] ?? 'bg-muted';
+  const meta = STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' };
   const hasUnread = (thread.unread_count ?? 0) > 0;
 
   return (
@@ -86,7 +87,7 @@ function ThreadRow({
                 {thread.campaign_title}
               </Text>
               {hasUnread && (
-                <Text className="min-w-[22px] rounded-pill bg-error px-1.5 text-center text-caption text-on-primary">
+                <Text className="min-w-[22px] h-[22px] leading-[22px] rounded-pill bg-error px-1.5 text-center text-caption font-semibold text-on-primary">
                   {thread.unread_count > 99 ? '99+' : thread.unread_count}
                 </Text>
               )}
@@ -103,8 +104,8 @@ function ThreadRow({
 
           {/* Bottom row: status chip + agent */}
           <View className="mt-1 flex-row items-center justify-between">
-            <View className={cn('rounded-pill px-3 py-1', statusBg)}>
-              <Text className="text-caption-uppercase font-semibold text-on-primary">
+            <View className={cn('rounded-pill px-2.5 py-1', meta.bg)}>
+              <Text className={cn('text-caption-uppercase font-semibold', meta.text)}>
                 {thread.status.replace(/_/g, ' ')}
               </Text>
             </View>

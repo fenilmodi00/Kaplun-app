@@ -12,14 +12,15 @@ import { tablesDB } from '@/lib/appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
 import type { DealThread, Message } from '@/lib/types';
 
-const STATUS_BG: Record<string, string> = {
-  invited: 'bg-brand-teal',
-  negotiating: 'bg-brand-ochre',
-  contracted: 'bg-success',
-  content_pending: 'bg-brand-lavender', // D12: lavender everywhere
-  live: 'bg-success',
-  completed: 'bg-muted',
-  declined: 'bg-error',
+/** Status chip colors per DESIGN.md §3.3 & §5.4 */
+const STATUS_META: Record<string, { bg: string; text: string }> = {
+  invited: { bg: 'bg-brand-teal', text: 'text-on-dark' },
+  negotiating: { bg: 'bg-brand-ochre', text: 'text-ink' },
+  contracted: { bg: 'bg-brand-mint', text: 'text-ink' },
+  content_pending: { bg: 'bg-brand-lavender', text: 'text-on-dark' },
+  live: { bg: 'bg-brand-mint', text: 'text-ink' },
+  completed: { bg: 'bg-surface-card', text: 'text-muted' },
+  declined: { bg: 'bg-error', text: 'text-on-dark' },
 };
 
 function formatRelativeTime(iso: string): string {
@@ -194,7 +195,9 @@ export default function ThreadDetail() {
     );
   }
 
-  const statusBg = thread ? (STATUS_BG[thread.status] ?? 'bg-muted') : 'bg-muted';
+  const meta = thread
+    ? (STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' })
+    : { bg: 'bg-surface-card', text: 'text-muted' };
 
   return (
     <KeyboardAvoidingView
@@ -216,8 +219,8 @@ export default function ThreadDetail() {
             ) : null}
           </View>
           {thread ? (
-            <View className={cn('rounded-sm px-2.5 py-[3px]', statusBg)}>
-              <Text className="text-caption-uppercase font-semibold capitalize text-on-primary">
+            <View className={cn('rounded-pill px-2.5 py-[3px]', meta.bg)}>
+              <Text className={cn('text-caption-uppercase font-semibold capitalize', meta.text)}>
                 {thread.status.replace(/_/g, ' ')}
               </Text>
             </View>

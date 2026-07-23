@@ -32,15 +32,15 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-/** Clay-color-coded status badges for deal-thread lifecycle. */
+/** Clay-color-coded status badges for deal-thread lifecycle per DESIGN.md §3.3 & §5.4. */
 const STATUS_META: Record<DealThread['status'], { label: string; className: string }> = {
-  invited: { label: 'Invited', className: 'bg-surface-strong text-body' },
+  invited: { label: 'Invited', className: 'bg-brand-teal text-on-dark' },
   negotiating: { label: 'Negotiating', className: 'bg-brand-ochre text-ink' },
-  contracted: { label: 'Contracted', className: 'bg-brand-teal text-on-dark' },
-  content_pending: { label: 'Content Pending', className: 'bg-brand-peach text-ink' },
+  contracted: { label: 'Contracted', className: 'bg-brand-mint text-ink' },
+  content_pending: { label: 'Content Pending', className: 'bg-brand-lavender text-on-dark' },
   live: { label: 'Live', className: 'bg-brand-mint text-ink' },
   completed: { label: 'Completed', className: 'bg-surface-card text-muted' },
-  declined: { label: 'Declined', className: 'bg-surface-strong text-muted' },
+  declined: { label: 'Declined', className: 'bg-error text-on-dark' },
 };
 
 // ── Animation wrappers (web-safe via @/tw/animated, NOT raw reanimated) ──
@@ -70,7 +70,7 @@ function StatusBadge({ status }: { status: DealThread['status'] }) {
   const meta = STATUS_META[status];
   return (
     <View className={cn('rounded-pill px-2.5 py-1 self-start', meta.className)}>
-      <Text className="text-caption font-medium">{meta.label}</Text>
+      <Text className="text-caption-uppercase font-semibold">{meta.label}</Text>
     </View>
   );
 }
@@ -462,7 +462,7 @@ export default function HomeScreen() {
         <View className="flex-1">
           <ClayAnimatedCard delay={200} onPress={() => router.push('/(tabs)/(messages)')}>
             <View className="items-center gap-2">
-              <Text className="font-semibold">View Messages</Text>
+              <Text className="font-semibold text-ink">View Messages</Text>
               <Text className="text-xs text-muted">Check your threads</Text>
             </View>
           </ClayAnimatedCard>
@@ -470,7 +470,7 @@ export default function HomeScreen() {
         <View className="flex-1">
           <ClayAnimatedCard delay={200} onPress={() => router.push('/(tabs)/(profile)')}>
             <View className="items-center gap-2">
-              <Text className="font-semibold">View Profile</Text>
+              <Text className="font-semibold text-ink">View Profile</Text>
               <Text className="text-xs text-muted">Your creator profile</Text>
             </View>
           </ClayAnimatedCard>
@@ -479,11 +479,11 @@ export default function HomeScreen() {
 
       {/* Recent activity */}
       <View className="gap-2.5">
-        <Text className="text-title-md font-semibold">Recent Activity</Text>
+        <Text className="text-title-md font-semibold text-ink">Recent Activity</Text>
         {recentThreads.map((thread, index) => (
           <ClayAnimatedCard key={thread.$id ?? index} delay={index * 100}>
             <View className="gap-2">
-              <Text className="font-semibold" selectable>
+              <Text className="font-semibold text-ink" selectable>
                 {thread.campaign_title}
               </Text>
               <View className="flex-row justify-between items-center">

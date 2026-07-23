@@ -9,21 +9,30 @@ type Color = 'pink' | 'teal' | 'lavender' | 'peach' | 'ochre' | 'cream';
 const COLOR: Record<Color, { bg: string; text: string }> = {
   pink: { bg: 'bg-brand-pink', text: 'text-on-dark' },
   teal: { bg: 'bg-brand-teal', text: 'text-on-dark' },
-  lavender: { bg: 'bg-brand-lavender', text: 'text-ink' },
-  peach: { bg: 'bg-brand-peach', text: 'text-ink' },
+  lavender: { bg: 'bg-brand-lavender', text: 'text-on-dark' },
+  peach: { bg: 'bg-brand-peach', text: 'text-on-dark' },
   ochre: { bg: 'bg-brand-ochre', text: 'text-ink' },
   cream: { bg: 'bg-surface-card', text: 'text-ink' },
 };
 
-// Transitional: accept legacy space tokens until screens are migrated (Phase 4)
+// Transitional: accept legacy space tokens until screens are migrated
 type Padding = 'p-4' | 'p-6' | 'p-8' | '$lg' | '$xl';
 const LEGACY_PADDING: Record<string, string> = { '$lg': 'p-6', '$xl': 'p-8' };
 
 export function ClayFeatureCard({
-  children, color, title, description, delay = 0, padding = 'p-8',
+  children,
+  color,
+  title,
+  description,
+  delay = 0,
+  padding = 'p-8',
 }: {
-  children?: React.ReactNode; color: Color; title?: string; description?: string;
-  delay?: number; padding?: Padding;
+  children?: React.ReactNode;
+  color: Color;
+  title?: string;
+  description?: string;
+  delay?: number;
+  padding?: Padding;
 }) {
   const { animatedStyle } = useEntranceAnimation(delay);
   const s = COLOR[color];
