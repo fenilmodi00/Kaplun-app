@@ -42,6 +42,7 @@ jest.mock('@clerk/clerk-expo', () => ({
 
 jest.mock('@/lib/fonts', () => ({
   useClayFonts: () => [true, null] as [boolean, null],
+  CLAY_FONTS: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold' },
 }));
 
 jest.mock('@/components/auth/AuthScreen', () => {
@@ -64,16 +65,16 @@ jest.mock('@/lib/logger', () => ({
 import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import RootLayout from '@/app/_layout';
-import { createAppwriteSession } from '@/lib/auth-bridge';
+import { ensureAppwriteSession } from '@/lib/auth-bridge';
 
-const mockCreateAppwriteSession = createAppwriteSession as jest.Mock;
+const mockEnsureAppwriteSession = ensureAppwriteSession as jest.Mock;
 
 describe('AuthGate — Appwrite session retry', () => {
   let mockUseAuth: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateAppwriteSession.mockReset();
+    mockEnsureAppwriteSession.mockReset();
     mockGetToken.mockReset();
     mockGetToken.mockResolvedValue('fake-token');
     jest.useFakeTimers();
@@ -90,51 +91,51 @@ describe('AuthGate — Appwrite session retry', () => {
   });
 
   it('retries with 1s backoff on first failure, succeeds on retry, no third call', async () => {
-    mockCreateAppwriteSession
+    mockEnsureAppwriteSession
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({});
 
     await act(async () => { render(<RootLayout />); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
 
     await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(2);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
 
     await act(async () => { jest.advanceTimersByTime(10000); await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(2);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
   });
 
   it('stops after 4 total attempts (1 initial + 3 retries) when all fail', async () => {
-    mockCreateAppwriteSession.mockRejectedValue(new Error('Network error'));
+    mockEnsureAppwriteSession.mockRejectedValue(new Error('Network error'));
 
     await act(async () => { render(<RootLayout />); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
 
     await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(2);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
 
     await act(async () => { jest.advanceTimersByTime(2000); await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(3);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(3);
 
     await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(4);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(4);
 
     await act(async () => { jest.advanceTimersByTime(10000); await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(4);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(4);
   });
 
   it('resets retry state on sign-out then sign-in', async () => {
-    mockCreateAppwriteSession.mockRejectedValue(new Error('Network error'));
+    mockEnsureAppwriteSession.mockRejectedValue(new Error('Network error'));
 
     await act(async () => { render(<RootLayout />); });
     await act(async () => { await Promise.resolve(); });
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
 
     mockUseAuth.mockReturnValue({
       isSignedIn: false,
@@ -144,8 +145,8 @@ describe('AuthGate — Appwrite session retry', () => {
     const utils = await act(async () => { return render(<RootLayout />); });
     await act(async () => { await Promise.resolve(); });
 
-    mockCreateAppwriteSession.mockReset();
-    mockCreateAppwriteSession.mockResolvedValue({});
+    mockEnsureAppwriteSession.mockReset();
+    mockEnsureAppwriteSession.mockResolvedValue({});
     mockUseAuth.mockReturnValue({
       isSignedIn: true,
       isLoaded: true,
@@ -155,6 +156,6 @@ describe('AuthGate — Appwrite session retry', () => {
     await act(async () => { await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
 
-    expect(mockCreateAppwriteSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
   });
 });

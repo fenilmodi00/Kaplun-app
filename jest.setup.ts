@@ -86,6 +86,9 @@ jest.mock('@/lib/appwrite', () => ({
   },
   account: {
     createSession: jest.fn().mockResolvedValue({}),
+    get: jest.fn().mockResolvedValue({ $id: 'test-appwrite-user-id' }),
+    createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }),
+    deleteSession: jest.fn().mockResolvedValue({}),
   },
   storage: {},
   client: {},
@@ -94,6 +97,7 @@ jest.mock('@/lib/appwrite', () => ({
 // Mock @/lib/auth-bridge
 jest.mock('@/lib/auth-bridge', () => ({
   createAppwriteSession: jest.fn().mockResolvedValue({}),
+  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-user-id' }),
 }));
 
 // Mock @/lib/realtime

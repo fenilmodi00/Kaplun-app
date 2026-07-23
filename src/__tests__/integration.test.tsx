@@ -113,12 +113,14 @@ describe('Integration Tests', () => {
     });
 
     it('shows error text on login failure', async () => {
-      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+      mockFetchProfile.mockReset();
+      mockFetchProfile.mockRejectedValue(new Error('not connected'));
+      mockStartInstagramOAuth.mockReset();
       mockStartInstagramOAuth.mockRejectedValue(new Error('Invalid credentials'));
 
       await render(<Home />);
 
-      await fireEvent.press(screen.getByText('Connect'));
+      await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
         expect(screen.getByText('Invalid credentials')).toBeTruthy();
@@ -126,29 +128,33 @@ describe('Integration Tests', () => {
     });
 
     it('shows generic error text on Instagram connect failure', async () => {
-      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+      mockFetchProfile.mockReset();
+      mockFetchProfile.mockRejectedValue(new Error('not connected'));
+      mockStartInstagramOAuth.mockReset();
       mockStartInstagramOAuth.mockRejectedValue(new Error('Instagram connect failed'));
 
       await render(<Home />);
 
-      await fireEvent.press(screen.getByText('Connect'));
+      await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
         expect(screen.getByText('Instagram connect failed')).toBeTruthy();
       });
     });
 
-    it('shows error state with retry on session_expired error', async () => {
-      mockFetchProfile.mockRejectedValueOnce(new Error('not connected'));
+    it('shows inline error text on session_expired error', async () => {
+      mockFetchProfile.mockReset();
+      mockFetchProfile.mockRejectedValue(new Error('not connected'));
+      mockStartInstagramOAuth.mockReset();
       mockStartInstagramOAuth.mockRejectedValue(new Error('session_expired'));
 
       await render(<Home />);
 
-      await fireEvent.press(screen.getByText('Connect'));
+      await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
         expect(screen.getByText('session_expired')).toBeTruthy();
-        expect(screen.getByText('Retry')).toBeTruthy();
+        expect(screen.getByText('Connect Instagram')).toBeTruthy();
       });
     });
   });

@@ -1,6 +1,6 @@
 import '@/global.css';
 import '@/lib/polyfills';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -8,12 +8,10 @@ import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
-import { createAppwriteSession } from '@/lib/auth-bridge';
 import { secureTokenCache } from '@/lib/tokenCache';
 import AuthScreen from '@/components/auth/AuthScreen';
 import { useClayFonts } from '@/lib/fonts';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
-import { addLog } from '@/lib/logger';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_PUBLISHABLE_KEY) {
@@ -43,69 +41,11 @@ async function applyClaySystemChrome() {
 }
 
 function AuthGate() {
-  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { isSignedIn, isLoaded } = useAuth();
   const [fontsLoaded, fontsError] = useClayFonts();
-  const appwriteSessionCreated = useRef(false);
-  const sessionAttempts = useRef(0);
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
 
   useEffect(() => {
     applyClaySystemChrome();
-  }, []);
-
-  const tryCreateSession = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (token) {
-        await createAppwriteSession(token);
-      }
-      appwriteSessionCreated.current = true;
-      sessionAttempts.current = 0;
-      if (retryTimer.current !== null) {
-        clearTimeout(retryTimer.current);
-        retryTimer.current = null;
-      }
-    } catch (err) {
-      addLog('Failed to create Appwrite session: ' + String(err));
-      appwriteSessionCreated.current = false;
-      if (sessionAttempts.current < 3 && mountedRef.current) {
-        const delays = [1000, 2000, 4000];
-        retryTimer.current = setTimeout(tryCreateSession, delays[sessionAttempts.current]);
-        sessionAttempts.current += 1;
-      }
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    if (isSignedIn && !appwriteSessionCreated.current) {
-      appwriteSessionCreated.current = true;
-      tryCreateSession();
-    }
-
-    if (!isSignedIn) {
-      appwriteSessionCreated.current = false;
-      sessionAttempts.current = 0;
-      if (retryTimer.current !== null) {
-        clearTimeout(retryTimer.current);
-        retryTimer.current = null;
-      }
-    }
-
-    return () => {
-      if (retryTimer.current !== null) {
-        clearTimeout(retryTimer.current);
-        retryTimer.current = null;
-      }
-    };
-  }, [isSignedIn, isLoaded, tryCreateSession]);
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
   }, []);
 
   if (!fontsLoaded && !fontsError) {
@@ -128,6 +68,9 @@ function AuthGate() {
     return <AuthScreen />;
   }
 
+  // User is authenticated by Clerk — show the app immediately.
+  // The Appwrite session (created on first sign-in, valid 1 year) is
+  // persisted by the SDK. Data hooks self-heal if it ever expires.
   return <Slot />;
 }
 
@@ -154,5 +97,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: CANVAS,
+    gap: 16,
+    padding: 24,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
