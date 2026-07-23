@@ -37,29 +37,36 @@ import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { CLAY_FONTS } from '@/lib/fonts';
 
 const TOGGLE_WIDTH = 280;
-const PILL_WIDTH = TOGGLE_WIDTH / 2 - 4;
-const INPUT_HEIGHT = 48;
-/** Room for focused field + one field below it. */
-const FIELD_STACK = INPUT_HEIGHT + 12 + INPUT_HEIGHT;
+const PILL_WIDTH = TOGGLE_WIDTH / 2 - 3;
+/** Standard Clay input height per DESIGN.md §5.2 */
+const INPUT_HEIGHT = 44;
+/** Room for focused field + password field + submit button. */
+const FIELD_STACK = INPUT_HEIGHT + 12 + INPUT_HEIGHT + 16 + INPUT_HEIGHT;
 
 type AuthScrollApi = {
   ensureVisible: (target: View | TextInput | null) => void;
 };
 const AuthScrollContext = createContext<AuthScrollApi>({ ensureVisible: () => {} });
 
-/** Clay design tokens — StyleSheet only (no NativeWind on this screen). */
+/**
+ * Clay & Kaplun design tokens — StyleSheet only (no NativeWind on this screen per src/components/clay/AGENTS.md).
+ * Synchronized with src/global.css and DESIGN.md §2.
+ */
 const C = {
-  canvas: '#fffaf0',
-  primary: '#0a0a0a',
-  surfaceCard: '#f5f0e0',
-  hairline: '#e5e5e5',
-  ink: '#0a0a0a',
-  muted: '#6a6a6a',
-  mutedSoft: '#9a9a9a',
-  bodyStrong: '#1a1a1a',
-  error: '#ef4444',
-  brandTeal: '#1a3a3a',
-  onPrimary: '#ffffff',
+  canvas: '#fffaf0', // --color-canvas
+  primary: '#0a0a0a', // --color-primary / --color-ink
+  primaryActive: '#1f1f1f', // --color-primary-active
+  surfaceCard: '#f5f0e0', // --color-surface-card
+  buttonSecondary: '#f3f2ed', // --color-button-secondary
+  hairline: '#e5e5e5', // --color-hairline
+  borderSubtle: 'rgba(209, 205, 199, 0.45)', // --color-border-subtle
+  ink: '#0a0a0a', // --color-ink
+  muted: '#6a6a6a', // --color-muted
+  mutedSoft: '#9a9a9a', // --color-muted-soft
+  bodyStrong: '#1a1a1a', // --color-body-strong
+  error: '#ef4444', // --color-error
+  brandTeal: '#1a3a3a', // --color-brand-teal
+  onPrimary: '#ffffff', // --color-on-primary
 } as const;
 
 // ─── Capsule Toggle ───
@@ -100,6 +107,7 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
 // ─── Email Input ───
 function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
   const inputRef = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
   const { ensureVisible } = useContext(AuthScrollContext);
 
   return (
@@ -113,8 +121,12 @@ function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: 
       autoComplete="email"
       textContentType="emailAddress"
       placeholderTextColor={C.mutedSoft}
-      style={styles.input}
-      onFocus={() => ensureVisible(inputRef.current)}
+      style={[styles.input, focused && styles.inputFocused]}
+      onFocus={() => {
+        setFocused(true);
+        ensureVisible(inputRef.current);
+      }}
+      onBlur={() => setFocused(false)}
     />
   );
 }
@@ -122,6 +134,7 @@ function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: 
 // ─── Password Input ───
 function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
   const [visible, setVisible] = useState(false);
+  const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const { ensureVisible } = useContext(AuthScrollContext);
 
@@ -137,8 +150,12 @@ function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (
         autoComplete="new-password"
         textContentType="newPassword"
         placeholderTextColor={C.mutedSoft}
-        style={[styles.input, styles.passwordInput]}
-        onFocus={() => ensureVisible(inputRef.current)}
+        style={[styles.input, styles.passwordInput, focused && styles.inputFocused]}
+        onFocus={() => {
+          setFocused(true);
+          ensureVisible(inputRef.current);
+        }}
+        onBlur={() => setFocused(false)}
       />
       <Pressable
         onPress={() => setVisible((v) => !v)}
@@ -162,6 +179,7 @@ function OTPInput({
   disabled: boolean;
 }) {
   const inputs = useRef<(TextInput | null)[]>([]);
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const { ensureVisible } = useContext(AuthScrollContext);
   const digits = value.split('');
   while (digits.length < 6) digits.push('');
@@ -184,7 +202,14 @@ function OTPInput({
   return (
     <View style={styles.otpRow}>
       {digits.map((digit, index) => (
-        <View key={index} style={[styles.otpCell, digit ? styles.otpCellFilled : null]}>
+        <View
+          key={index}
+          style={[
+            styles.otpCell,
+            digit ? styles.otpCellFilled : null,
+            focusedIndex === index ? styles.otpCellFocused : null,
+          ]}
+        >
           <TextInput
             ref={(ref) => {
               inputs.current[index] = ref;
@@ -192,7 +217,11 @@ function OTPInput({
             value={digit}
             onChangeText={(text) => handleChange(text, index)}
             onKeyPress={(e) => handleKeyPress(e, index)}
-            onFocus={() => ensureVisible(inputs.current[index])}
+            onFocus={() => {
+              setFocusedIndex(index);
+              ensureVisible(inputs.current[index]);
+            }}
+            onBlur={() => setFocusedIndex(null)}
             keyboardType="number-pad"
             maxLength={1}
             editable={!disabled}
@@ -205,7 +234,7 @@ function OTPInput({
   );
 }
 
-/** Shared shell: stay in safe area; only nudge enough to keep focused + next field visible. */
+/** Shared shell: stay in safe area; dynamically scroll so input + submit button are above soft keyboard. */
 function AuthShell({
   children,
   topPad,
@@ -229,9 +258,7 @@ function AuthShell({
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const onShow = Keyboard.addListener(showEvent, (e) => {
-      // Modest inset only — pan/resize already moves the window a bit.
-      // Full keyboard height was shoving content into the status bar.
-      const h = Math.min(e.endCoordinates.height, FIELD_STACK + 24);
+      const h = Math.min(e.endCoordinates.height, FIELD_STACK + 36);
       keyboardHeightRef.current = e.endCoordinates.height;
       setKeyboardHeight(h);
     });
@@ -255,21 +282,20 @@ function AuthShell({
       const scrollNode = findNodeHandle(scrollRef.current);
       if (node == null || scrollNode == null) return;
 
-      // Delay so keyboard height is known
       setTimeout(() => {
         UIManager.measureInWindow(node, (_x, y, _w, height) => {
           const kb = keyboardHeightRef.current;
           if (kb <= 0) return;
 
           const keyboardTop = windowHeight - kb;
-          // Keep focused field + one field below clear of the keyboard
-          const needBottom = y + height + INPUT_HEIGHT + 20;
+          // Ensure room for focused input + submit button below it (approx 64px)
+          const needBottom = y + height + 64;
           const overflow = needBottom - keyboardTop;
 
           if (overflow > 0) {
-            // Cap scroll so title never crosses the safe-area / notification zone
             const maxScroll = Math.max(0, y - safeTop - 12);
-            const scrollBy = Math.min(overflow, maxScroll, 120);
+            // Dynamic scroll without artificial 120px ceiling so Create Account button stays visible
+            const scrollBy = Math.min(overflow + 16, maxScroll);
             if (scrollBy > 0) {
               scrollRef.current?.scrollTo({ y: scrollBy, animated: true });
             }
@@ -293,7 +319,6 @@ function AuthShell({
           contentContainerStyle={[
             styles.scrollContent,
             {
-              // Always honor safe area — never collapse into the notification zone
               paddingTop: Math.max(topPad, safeTop + 12),
               paddingBottom: bottomPad + keyboardHeight,
               paddingHorizontal: compact ? 20 : 28,
@@ -346,7 +371,6 @@ export default function AuthScreen() {
   const showPassword = mode === 'signup';
   const isCompact = windowHeight < 700;
 
-  // Comfortable vertical padding — centers form on tall phones
   const verticalPad = Math.max(insets.top, 16) + (isCompact ? 28 : Math.round(windowHeight * 0.1));
   const bottomPad = Math.max(insets.bottom, 16) + 40;
 
@@ -372,7 +396,8 @@ export default function AuthScreen() {
   }, [mode, showOTP, loginOpacity, signupOpacity]);
 
   useEffect(() => {
-    passwordHeight.value = withTiming(showPassword ? INPUT_HEIGHT : 0, { duration: 300 });
+    // INPUT_HEIGHT + 6 (50px) matches inputContainer height (44px input + 3px top/bottom padding)
+    passwordHeight.value = withTiming(showPassword ? INPUT_HEIGHT + 6 : 0, { duration: 300 });
     passwordOpacity.value = withTiming(showPassword ? 1 : 0, { duration: 300 });
   }, [showPassword, passwordHeight, passwordOpacity]);
 
@@ -398,10 +423,8 @@ export default function AuthScreen() {
     await submitOTP(otpCode);
   }, [otpCode, isLoading, submitOTP]);
 
-  // Keep ref in sync so the auto-verify timer always calls the latest handleVerify
   handleVerifyRef.current = handleVerify;
 
-  // Auto-verify when all 6 digits are entered — ref-based timer survives re-renders
   useEffect(() => {
     if (otpCode.length !== 6) return;
 
@@ -504,10 +527,16 @@ export default function AuthScreen() {
       </View>
 
       <View style={styles.formWidth}>
-        <EmailField value={email} onChangeText={setEmail} />
+        <View style={styles.inputContainer}>
+          <EmailField value={email} onChangeText={setEmail} />
+        </View>
 
         <Animated.View
-          style={[styles.fullWidth, styles.mt12, { overflow: 'hidden' }, passwordContainerStyle]}
+          style={[
+            styles.inputContainer,
+            { overflow: 'hidden' },
+            passwordContainerStyle,
+          ]}
         >
           <PasswordInput value={password} onChangeText={setPassword} />
         </Animated.View>
@@ -588,6 +617,11 @@ const styles = StyleSheet.create({
   fullWidth: {
     width: '100%',
   },
+  inputContainer: {
+    width: '100%',
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+  },
   absoluteCenter: {
     position: 'absolute',
     alignItems: 'center',
@@ -597,16 +631,16 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontFamily: CLAY_FONTS.medium,
-    fontSize: 32,
-    lineHeight: 37,
-    letterSpacing: -0.5,
+    fontSize: 36,
+    lineHeight: 40,
+    letterSpacing: -1,
     color: C.ink,
     textAlign: 'center',
     marginBottom: 10,
   },
   brandCompact: {
-    fontSize: 28,
-    lineHeight: 33,
+    fontSize: 30,
+    lineHeight: 34,
   },
   title: {
     fontFamily: CLAY_FONTS.semibold,
@@ -624,7 +658,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: CLAY_FONTS.regular,
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 25,
     color: C.muted,
     textAlign: 'center',
     paddingHorizontal: 8,
@@ -646,25 +680,25 @@ const styles = StyleSheet.create({
   mt12: { marginTop: 12 },
   toggleTrack: {
     width: TOGGLE_WIDTH,
-    height: 48,
+    height: 44,
     backgroundColor: C.surfaceCard,
     borderRadius: 9999,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 4,
+    padding: 3,
     alignSelf: 'center',
   },
   togglePill: {
     position: 'absolute',
-    left: 4,
+    left: 3,
     width: PILL_WIDTH,
-    height: 40,
+    height: 38,
     backgroundColor: C.primary,
     borderRadius: 9999,
   },
   toggleTab: {
     flex: 1,
-    height: 40,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
@@ -672,6 +706,7 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontFamily: CLAY_FONTS.semibold,
     fontSize: 14,
+    letterSpacing: -0.14,
     color: C.bodyStrong,
   },
   toggleLabelActive: {
@@ -689,6 +724,10 @@ const styles = StyleSheet.create({
     fontFamily: CLAY_FONTS.regular,
     fontSize: 16,
     color: C.ink,
+  },
+  inputFocused: {
+    borderColor: C.ink,
+    borderWidth: 1.5,
   },
   passwordWrap: {
     width: '100%',
@@ -710,7 +749,7 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: 16,
     width: '100%',
-    height: 48,
+    height: 44,
     borderRadius: 12,
     borderCurve: 'continuous',
     backgroundColor: C.primary,
@@ -721,7 +760,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   submitLabelSlot: {
-    height: 20,
+    height: 22,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
@@ -729,7 +768,9 @@ const styles = StyleSheet.create({
   submitLabel: {
     fontFamily: CLAY_FONTS.semibold,
     fontSize: 14,
-    lineHeight: 14,
+    lineHeight: 18,
+    letterSpacing: -0.14,
+    includeFontPadding: false,
     color: C.onPrimary,
   },
   dividerRow: {
@@ -789,11 +830,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   otpCell: {
-    width: 48,
-    height: 56,
+    width: 44,
+    height: 52,
     borderRadius: 12,
     borderCurve: 'continuous',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: C.hairline,
     backgroundColor: C.canvas,
     justifyContent: 'center',
@@ -803,9 +844,13 @@ const styles = StyleSheet.create({
   otpCellFilled: {
     borderColor: C.primary,
   },
+  otpCellFocused: {
+    borderColor: C.primary,
+    borderWidth: 2,
+  },
   otpInput: {
-    width: 48,
-    height: 56,
+    width: 44,
+    height: 52,
     textAlign: 'center',
     fontSize: 22,
     fontFamily: CLAY_FONTS.semibold,

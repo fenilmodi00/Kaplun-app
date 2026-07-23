@@ -7,6 +7,13 @@ process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI = 'https://test-callback.example.c
 process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT = 'https://test-appwrite.example.com/v1';
 process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID = 'test-project-id';
 
+// Mock expo-font
+jest.mock('expo-font', () => ({
+  useFonts: () => [true, null],
+  isLoaded: () => true,
+  loadAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock @clerk/expo
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({
@@ -68,6 +75,7 @@ jest.mock('expo-router', () => ({
   }),
   useLocalSearchParams: () => ({}),
   Link: ({ children }: { children: React.ReactNode }) => children,
+  Slot: ({ children }: { children?: React.ReactNode }) => children || null,
 }));
 
 // Mock @/lib/appwrite
@@ -176,6 +184,19 @@ jest.mock('react-native-reanimated', () => {
     Image: (props: any) => React.createElement(RNImage, props),
   };
 
+  const createAnimMock = () => {
+    const mock: any = {
+      duration: jest.fn().mockReturnThis(),
+      delay: jest.fn().mockReturnThis(),
+      springify: jest.fn().mockReturnThis(),
+      damping: jest.fn().mockReturnThis(),
+      stiffness: jest.fn().mockReturnThis(),
+      withCallback: jest.fn().mockReturnThis(),
+      easing: jest.fn().mockReturnThis(),
+    };
+    return mock;
+  };
+
   return {
     __esModule: true,
     useSharedValue: (init: any) => ({ value: init }),
@@ -196,17 +217,17 @@ jest.mock('react-native-reanimated', () => {
     measure: jest.fn(),
     runOnUI: (fn: any) => fn,
     runOnJS: (fn: any) => fn,
-    FadeIn: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    FadeInUp: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    FadeInDown: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    FadeInLeft: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    FadeInRight: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    FadeOut: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    SlideInUp: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    SlideInDown: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    SlideInLeft: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    SlideInRight: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
-    LinearTransition: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
+    FadeIn: createAnimMock(),
+    FadeInUp: createAnimMock(),
+    FadeInDown: createAnimMock(),
+    FadeInLeft: createAnimMock(),
+    FadeInRight: createAnimMock(),
+    FadeOut: createAnimMock(),
+    SlideInUp: createAnimMock(),
+    SlideInDown: createAnimMock(),
+    SlideInLeft: createAnimMock(),
+    SlideInRight: createAnimMock(),
+    LinearTransition: createAnimMock(),
     Easing: {
       linear: jest.fn(),
       ease: jest.fn(),

@@ -12,6 +12,7 @@ import { secureTokenCache } from '@/lib/tokenCache';
 import AuthScreen from '@/components/auth/AuthScreen';
 import { useClayFonts } from '@/lib/fonts';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
+import { ensureAppwriteSession } from '@/lib/auth-bridge';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_PUBLISHABLE_KEY) {
@@ -41,12 +42,43 @@ async function applyClaySystemChrome() {
 }
 
 function AuthGate() {
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
   const [fontsLoaded, fontsError] = useClayFonts();
 
   useEffect(() => {
     applyClaySystemChrome();
   }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const maxRetries = 3;
+
+    async function trySession() {
+      attempts++;
+      try {
+        if (!cancelled) {
+          await ensureAppwriteSession(getToken);
+        }
+      } catch (_err) {
+        if (cancelled) return;
+        if (attempts <= maxRetries) {
+          const backoff = Math.pow(2, attempts - 1) * 1000;
+          timerId = setTimeout(trySession, backoff);
+        }
+      }
+    }
+
+    trySession();
+
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [isLoaded, isSignedIn, getToken]);
 
   if (!fontsLoaded && !fontsError) {
     return (
@@ -68,9 +100,6 @@ function AuthGate() {
     return <AuthScreen />;
   }
 
-  // User is authenticated by Clerk — show the app immediately.
-  // The Appwrite session (created on first sign-in, valid 1 year) is
-  // persisted by the SDK. Data hooks self-heal if it ever expires.
   return <Slot />;
 }
 

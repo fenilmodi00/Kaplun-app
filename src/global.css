@@ -3,27 +3,34 @@
 @import "tailwindcss/utilities.css";
 @import "nativewind/theme";
 
-/* ── Clay design system — @theme tokens ── */
+/* ── Clay & Kaplun design system — @theme tokens ── */
 @layer theme {
   @theme {
     /* Brand & accent colors */
     --color-canvas: #fffaf0;
+    --color-canvas-alt: #f9f8f5;
     --color-primary: #0a0a0a;
     --color-primary-active: #1f1f1f;
     --color-primary-disabled: #e5e5e5;
+    --color-button-secondary: #f3f2ed;
+    --color-button-secondary-hover: #eae8df;
     --color-ink: #0a0a0a;
     --color-body-strong: #1a1a1a;
     --color-body: #3a3a3a;
     --color-muted: #6a6a6a;
     --color-muted-soft: #9a9a9a;
     --color-hairline: #e5e5e5;
+    --color-border-subtle: rgba(209, 205, 199, 0.45);
+    --color-border-strong: rgba(10, 10, 10, 0.12);
     --color-surface-soft: #faf5e8;
     --color-surface-card: #f5f0e0;
     --color-surface-strong: #ebe6d6;
-    --color-surface-dark: #0a1a1a;
+    --color-surface-dark: #035d44;
     --color-surface-dark-elevated: #1a2a2a;
     --color-on-primary: #ffffff;
     --color-on-dark: #ffffff;
+
+    /* Saturated 6-card set */
     --color-brand-pink: #ff4d8b;
     --color-brand-teal: #1a3a3a;
     --color-brand-lavender: #b8a4ed;
@@ -31,6 +38,32 @@
     --color-brand-ochre: #e8b94a;
     --color-brand-mint: #a4d4c5;
     --color-brand-coral: #ff6b5a;
+
+    /* Category Badge Tokens */
+    --color-badge-data-bg: #eff6ff;
+    --color-badge-data-text: #2563eb;
+    --color-badge-agents-bg: #fff7ed;
+    --color-badge-agents-text: #d97706;
+    --color-badge-orchestration-bg: #f7fee7;
+    --color-badge-orchestration-text: #65a30d;
+    --color-badge-execution-bg: #fdf2f8;
+    --color-badge-execution-text: #db2777;
+
+    /* Band Tint Tokens */
+    --color-band-blue-bg: #eaf2fb;
+    --color-band-blue-text: #001433;
+    --color-band-blue-btn: #1a6dff;
+    --color-band-orange-bg: #fdf0e4;
+    --color-band-orange-text: #381005;
+    --color-band-orange-btn: #c45c0c;
+    --color-band-green-bg: #e6f4ea;
+    --color-band-green-text: #053219;
+    --color-band-green-btn: #0d7a3b;
+    --color-band-pink-bg: #fce8f0;
+    --color-band-pink-text: #3c0a1e;
+    --color-band-pink-btn: #c21e6b;
+
+    /* Semantic */
     --color-success: #22c55e;
     --color-warning: #f59e0b;
     --color-error: #ef4444;
@@ -41,7 +74,18 @@
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
+    --radius-2xl: 32px;
     --radius-pill: 9999px;
+
+    /* Spacing tokens */
+    --spacing-xxs: 4px;
+    --spacing-xs: 8px;
+    --spacing-sm: 12px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --spacing-xxl: 48px;
+    --spacing-section: 96px;
 
     /* Fonts — expo-font loaded family names */
     --font-sans: "Inter_400Regular";
@@ -67,6 +111,8 @@
     --text-title-md--line-height: 25px;
     --text-title-sm: 16px;
     --text-title-sm--line-height: 22px;
+    --text-body-lg: 18px;
+    --text-body-lg--line-height: 28px;
     --text-body-md: 16px;
     --text-body-md--line-height: 25px;
     --text-body-sm: 14px;
@@ -78,6 +124,7 @@
     --text-caption-uppercase--letter-spacing: 1.5px;
     --text-button: 14px;
     --text-button--line-height: 14px;
+    --text-button--letter-spacing: -0.14px;
     --text-nav-link: 14px;
     --text-nav-link--line-height: 20px;
   }

@@ -69,7 +69,9 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: CLAY_FONTS.semibold,
     fontSize: 14,
-    lineHeight: 14,
+    lineHeight: 18,
+    letterSpacing: -0.14,
+    includeFontPadding: false,
   },
 });
 
