@@ -37,6 +37,7 @@ from instagrapi.exceptions import (
 from api.auth import get_clerk_user_id
 from api.session_manager import StaleSessionError, get_session_manager
 from api.appwrite_client import get_appwrite_client
+from api.routes.instagram_oauth import router as instagram_oauth_router
 
 
 class LoginRequest(BaseModel):
@@ -112,6 +113,10 @@ def require_clerk_user_id(authorization: str | None = Header(None)) -> str:
         )
     return get_clerk_user_id(authorization)
 
+
+# ── Instagram OAuth ───────────────────────────────────────────────────────────
+
+app.include_router(instagram_oauth_router)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
