@@ -1,0 +1,155 @@
+{
+  "embedding": {
+    "provider": "openai",
+    "baseUrl": "https://api.tokenfactory.nebius.com/v1/",
+    "model": "Qwen/Qwen3-Embedding-8B",
+    "apiKey": "v1.CmQKHHN0YXRpY2tleS1lMDBoMnY1OHJ2YmM5cWZyZTUSIXNlcnZpY2VhY2NvdW50LWUwMGM4dzdreHo0YnJ5YjF2eDIMCJuf-dIGEJiHxLIBOgwImaKRngcQwM3WrANAAloDZTAw.AAAAAAAAAAEo2sxC_LEaJ7HrLCV5U3dItltrPzF89nLeOIf9uvwfRhXQUoDzNMyne2_bOPOLQJkoM0nMm9NFc1Ypc9mPGhME",
+    "timeoutMs": 120000,
+    "vectorDimension": 4096
+  },
+  "indexing": {
+    "includeExtensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".py",
+      ".java",
+      ".go",
+      ".md",
+      ".mdx",
+      ".c",
+      ".h",
+      ".cpp",
+      ".cc",
+      ".cxx",
+      ".hpp",
+      ".hxx",
+      ".cs",
+      ".aspx",
+      ".razor",
+      ".cshtml",
+      ".json",
+      ".html",
+      ".htm",
+      ".css",
+      ".xml",
+      ".csproj",
+      ".sln",
+      ".rs",
+      ".rb",
+      ".kt",
+      ".kts",
+      ".swift",
+      ".tex",
+      ".pdf",
+      ".docx",
+      ".doc",
+      ".xls",
+      ".xlsx",
+      ".sh",
+      ".bash",
+      ".zsh",
+      ".png",
+      ".php",
+      ".ps1",
+      ".psm1",
+      ".psd1",
+      ".ini",
+      ".cfg",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".sql",
+      ".ssl",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".bmp",
+      ".svg",
+      ".webp",
+      "dockerfile",
+      "containerfile",
+      ".dockerfile",
+      ".containerfile"
+    ],
+    "excludeDirs": [
+      "node_modules",
+      ".git",
+      ".opencode",
+      "dist",
+      "build",
+      "__pycache__",
+      ".venv",
+      ".claude",
+      ".github",
+      "memory:",
+      "wasm",
+      ".commandcode",
+      ".agents",
+      "graphify-out"
+    ],
+    "chunkOverlap": 0,
+    "minFileSizeBytes": 0,
+    "concurrency": 8,
+    "embedBatchSize": 100
+  },
+  "vectorStore": {
+    "path": "./.opencode/rag_db"
+  },
+  "retrieval": {
+    "topK": 20,
+    "minScore": 0.35,
+    "hybridSearch": {
+      "enabled": true,
+      "keywordWeight": 0.4
+    }
+  },
+  "openCode": {
+    "enabled": true,
+    "maxContextChunks": 10,
+    "readOverride": true,
+    "autoIndex": {
+      "enabled": false,
+      "debounceMs": 2000,
+      "intervalMs": 300000,
+      "watcher": "chokidar"
+    }
+  },
+  "imageDescription": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "Qwen/Qwen2.5-VL-72B-Instruct",
+    "baseUrl": "https://api.tokenfactory.nebius.com/v1/",
+    "apiKey": "v1.CmQKHHN0YXRpY2tleS1lMDBoMnY1OHJ2YmM5cWZyZTUSIXNlcnZpY2VhY2NvdW50LWUwMGM4dzdreHo0YnJ5YjF2eDIMCJuf-dIGEJiHxLIBOgwImaKRngcQwM3WrANAAloDZTAw.AAAAAAAAAAEo2sxC_LEaJ7HrLCV5U3dItltrPzF89nLeOIf9uvwfRhXQUoDzNMyne2_bOPOLQJkoM0nMm9NFc1Ypc9mPGhME",
+    "timeoutMs": 60000,
+    "think": false,
+    "numCtx": 2048
+  },
+  "description": {
+    "enabled": true,
+    "provider": "openai",
+    "baseUrl": "https://api.aiand.com/v1/",
+    "model": "deepseek-ai/deepseek-v4-flash",
+    "apiKey": "sk-11d7bb9d5a70fd9d371fb04c5ed7ce6576a995abbd3c23e7323b09f8c2f3f9c9",
+    "think": false,
+    "numCtx": 4096,
+    "timeoutMs": 60000,
+    "maxContentChars": 4000
+  },
+  "wikiMode": {
+    "enabled": false
+  },
+  "mcp": {
+    "enabled": true
+  },
+  "logging": {
+    "level": "info",
+    "logFilePath": "./.opencode/opencode-rag.log"
+  },
+  "chunking": {
+    "nodeTypes": {}
+  }
+}
