@@ -2,50 +2,40 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, ScrollView } from '@/tw';
-import { Image } from '@/tw/image';
-import { AnimatedView } from '@/tw/animated';
-import { cn } from '@/tw/cn';
-import { useDashboard } from '@/hooks/useDashboard';
-import { ensureAppwriteSession } from '@/lib/auth-bridge';
-import {
-  disconnectInstagram,
-  fetchMedia,
-  fetchInsights,
-  fetchProfile,
-  type InstagramProfileResponse,
-} from '@/lib/instagram';
-import { startInstagramOAuth } from '@/lib/instagram-oauth';
+import { View, Text, ScrollView, Pressable } from '@/tw';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
-import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimations';
-import type { DealThread } from '@/lib/types';
+import { AnimatedView } from '@/tw/animated';
+import { ensureAppwriteSession } from '@/lib/auth-bridge';
+import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
+import { startInstagramOAuth } from '@/lib/instagram-oauth';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/** Formats large counts: 1500 -> "1.5K", 1_500_000 -> "1.5M". */
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
-  return String(n);
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
-/** Clay-color-coded status badges for deal-thread lifecycle per DESIGN.md §3.3 & §5.4. */
-const STATUS_META: Record<DealThread['status'], { label: string; className: string }> = {
-  invited: { label: 'Invited', className: 'bg-brand-teal text-on-dark' },
-  negotiating: { label: 'Negotiating', className: 'bg-brand-ochre text-ink' },
-  contracted: { label: 'Contracted', className: 'bg-brand-mint text-ink' },
-  content_pending: { label: 'Content Pending', className: 'bg-brand-lavender text-on-dark' },
-  live: { label: 'Live', className: 'bg-brand-mint text-ink' },
-  completed: { label: 'Completed', className: 'bg-surface-card text-muted' },
-  declined: { label: 'Declined', className: 'bg-error text-on-dark' },
-};
+function getInitials(name: string): string {
+  return (
+    name
+      .split(' ')
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'K'
+  );
+}
 
-// ── Animation wrappers (web-safe via @/tw/animated, NOT raw reanimated) ──
+// ── Animation wrappers ───────────────────────────────────────────────
 
-/** Shakes its children on mount — used for error messages. */
 function ErrorShake({ children }: { children: React.ReactNode }) {
   const { shake, animatedStyle } = useShakeAnimation();
   useEffect(() => {
@@ -54,56 +44,278 @@ function ErrorShake({ children }: { children: React.ReactNode }) {
   return <AnimatedView style={animatedStyle}>{children}</AnimatedView>;
 }
 
-/** Fades + slides its children in on mount with a stagger delay. */
 function Entrance({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
   const { animatedStyle } = useEntranceAnimation(delay);
   return (
-    <AnimatedView style={[{ width: '100%', alignItems: 'center' }, animatedStyle]}>
+    <AnimatedView style={[{ width: '100%' }, animatedStyle]}>
       {children}
     </AnimatedView>
   );
 }
 
-// ── Status badge ─────────────────────────────────────────────────────
+// ── Sub-components ───────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: DealThread['status'] }) {
-  const meta = STATUS_META[status];
+function HeaderAvatar({ name }: { name: string }) {
   return (
-    <View className={cn('rounded-pill px-2.5 py-1 self-start', meta.className)}>
-      <Text className="text-caption-uppercase font-semibold">{meta.label}</Text>
+    <View
+      className="bg-brand-ochre items-center justify-center"
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+      }}
+    >
+      <Text className="font-semibold text-ink" style={{ fontSize: 15 }}>
+        {getInitials(name)}
+      </Text>
     </View>
   );
 }
 
-// ── Profile avatar (image or initials fallback) ──────────────────────
+function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }) {
+  return (
+    <View className="flex-row items-center gap-[11px]">
+      <View
+        className="items-center justify-center"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 10,
+          backgroundColor: 'rgba(255,255,255,0.7)',
+        }}
+      >
+        <Ionicons name={icon} size={16} color="#0a0a0a" />
+      </View>
+      <Text className="font-medium text-ink" style={{ fontSize: 14.5, lineHeight: 20 }}>
+        {text}
+      </Text>
+    </View>
+  );
+}
 
-function ProfileAvatar({ url, name, size = 56 }: { url?: string; name: string; size?: number }) {
-  const initials =
-    name
-      .split(' ')
-      .map((w) => w[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'K';
+function ErrorStrip({ message }: { message: string }) {
+  return (
+    <ErrorShake>
+      <View
+        className="flex-row items-start gap-[9px] rounded-md"
+        style={{
+          backgroundColor: 'rgba(239,68,68,0.1)',
+          borderWidth: 1,
+          borderColor: 'rgba(239,68,68,0.5)',
+          padding: 11,
+          paddingHorizontal: 12,
+          marginBottom: 14,
+        }}
+      >
+        <Ionicons name="alert-circle-outline" size={15} color="#ef4444" style={{ marginTop: 1 }} />
+        <Text className="text-[13px] leading-[1.45]" style={{ color: '#1a1a1a', flex: 1 }}>
+          <Text className="font-semibold" style={{ color: '#1a1a1a' }}>
+            Instagram connection failed.
+          </Text>{' '}
+          {message}
+        </Text>
+      </View>
+    </ErrorShake>
+  );
+}
 
-  if (url) {
-    return (
-      <Image
-        source={{ uri: url }}
-        className="bg-surface-strong"
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-      />
-    );
-  }
+function PermissionsPanel({ open }: { open: boolean }) {
+  if (!open) return null;
+
+  const scopes = [
+    { label: 'See your profile and media', code: 'instagram_business_basic' },
+    { label: 'Read and reply to your DMs', code: 'instagram_business_manage_messages' },
+    { label: 'Read your analytics', code: 'instagram_business_manage_insights' },
+    { label: 'Publish posts you approve', code: 'instagram_business_content_publish' },
+    { label: 'Read and reply to comments', code: 'instagram_business_manage_comments' },
+  ];
+
   return (
     <View
-      className="bg-primary items-center justify-center"
-      style={{ width: size, height: size, borderRadius: size / 2, borderCurve: 'continuous' }}
+      className="bg-white border border-hairline rounded-lg"
+      style={{ padding: 16, marginTop: 12 }}
     >
-      <Text className="text-on-primary font-semibold" style={{ fontSize: size * 0.36 }}>
-        {initials}
+      <Text
+        className="font-semibold uppercase text-muted"
+        style={{ fontSize: 13, letterSpacing: 1.2, marginBottom: 12 }}
+      >
+        What Kaplun can do
       </Text>
+      <View className="gap-[10px]" style={{ marginBottom: 14 }}>
+        {scopes.map((s) => (
+          <View key={s.code} className="flex-row gap-[10px] items-start">
+            <View
+              className="bg-brand-lavender"
+              style={{ width: 7, height: 7, borderRadius: 3.5, marginTop: 5 }}
+            />
+            <View className="flex-1">
+              <Text className="text-[13.5px] leading-[1.4]" style={{ color: '#0a0a0a' }}>
+                {s.label}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 11,
+                  color: '#6a6a6a',
+                  marginTop: 1,
+                }}
+              >
+                {s.code}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+      <View
+        style={{ borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 12 }}
+      >
+        <Text className="text-[12.5px] leading-[1.5] text-muted">
+          Secure sign-in via Meta. Kaplun never sees your password. Disconnect anytime from Profile.
+        </Text>
+        <Text className="text-[12.5px] leading-[1.5] text-muted" style={{ marginTop: 8 }}>
+          Requires an Instagram Business or Creator account.{" "}
+          <Text style={{ color: '#0a0a0a', fontWeight: '500' }}>How to switch</Text>
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function ConnectionChip({ profile }: { profile: InstagramProfileResponse }) {
+  return (
+    <View
+      className="flex-row items-center gap-[11px] bg-white border border-hairline"
+      style={{
+        borderRadius: 9999,
+        padding: 8,
+        paddingRight: 16,
+        marginBottom: 16,
+      }}
+    >
+      <LinearGradient
+        colors={['#f9ce34', '#ee2a7b', '#6228d7']}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 0 }}
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+      </LinearGradient>
+      <View className="flex-1" style={{ minWidth: 0 }}>
+        <Text className="font-semibold text-ink" style={{ fontSize: 14.5, letterSpacing: -0.2 }}>
+          @{profile.username}
+        </Text>
+        <Text className="text-[12px] text-muted">Instagram Business</Text>
+      </View>
+      <View className="flex-row items-center gap-[6px]">
+        <View className="bg-success" style={{ width: 8, height: 8, borderRadius: 4 }} />
+        <Text className="font-semibold text-[12.5px]" style={{ color: '#15803d' }}>
+          Connected
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function Module({
+  title,
+  subtitle,
+  emptyTitle,
+  emptyBody,
+  buttonText,
+  buttonRoute,
+  bgClass,
+}: {
+  title: string;
+  subtitle: string;
+  emptyTitle: string;
+  emptyBody: string;
+  buttonText: string;
+  buttonRoute: string;
+  bgClass: string;
+}) {
+  const router = useRouter();
+  return (
+    <View className={`${bgClass} rounded-xl`} style={{ padding: 20, marginBottom: 14 }}>
+      <Text
+        className="font-semibold text-white"
+        style={{ fontSize: 19, letterSpacing: -0.3, marginBottom: 4 }}
+      >
+        {title}
+      </Text>
+      <Text className="text-[13px] text-white" style={{ opacity: 0.82, marginBottom: 16 }}>
+        {subtitle}
+      </Text>
+      <View
+        className="items-center"
+        style={{
+          borderWidth: 1.5,
+          borderStyle: 'dashed',
+          borderColor: 'rgba(255,255,255,0.65)',
+          borderRadius: 16,
+          padding: 16,
+          paddingHorizontal: 14,
+        }}
+      >
+        <Text className="font-semibold text-white" style={{ fontSize: 14.5, marginBottom: 3 }}>
+          {emptyTitle}
+        </Text>
+        <Text className="text-[12.5px] text-white" style={{ opacity: 0.8, lineHeight: 18, textAlign: 'center' }}>
+          {emptyBody}
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => router.push(buttonRoute as never)}
+        className="flex-row items-center self-start gap-[7px] text-white"
+        style={{
+          marginTop: 14,
+          backgroundColor: 'rgba(255,255,255,0.12)',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.3)',
+          borderRadius: 12,
+          paddingVertical: 9,
+          paddingHorizontal: 14,
+          minHeight: 44,
+        }}
+      >
+        <Text className="font-semibold text-white" style={{ fontSize: 13.5 }}>
+          {buttonText}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function QuickActions() {
+  const router = useRouter();
+  const actions = [
+    { label: 'New post', icon: 'add-circle-outline' as const, route: '/(tabs)/(publish)' },
+    { label: 'Reply to DMs', icon: 'chatbubble-outline' as const, route: '/(tabs)/(messages)' },
+    { label: 'View insights', icon: 'stats-chart-outline' as const, route: '/(tabs)/(insights)' },
+  ];
+
+  return (
+    <View className="flex-row gap-[9px]">
+      {actions.map((a) => (
+        <Pressable
+          key={a.label}
+          onPress={() => router.push(a.route as never)}
+          className="flex-1 items-center justify-center bg-white border border-hairline"
+          style={{ borderRadius: 12, minHeight: 64, gap: 6 }}
+        >
+          <Ionicons name={a.icon} size={17} color="#0a0a0a" />
+          <Text className="font-semibold text-ink" style={{ fontSize: 12 }}>
+            {a.label}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -115,19 +327,15 @@ export default function HomeScreen() {
   const { getToken } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const {
-    data: dashboardData,
-    loading: dashboardLoading,
-    error: dashboardError,
-    refresh: refreshDashboard,
-  } = useDashboard();
 
   const [profile, setProfile] = useState<InstagramProfileResponse | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [skipped, setSkipped] = useState(false);
 
-  // Check Instagram connection on mount (prevents onboarding flash before resolve)
+  // Check Instagram connection on mount
   useEffect(() => {
     let cancelled = false;
     async function checkConnection() {
@@ -138,8 +346,8 @@ export default function HomeScreen() {
       try {
         const p = await fetchProfile();
         if (!cancelled) setProfile(p);
-      } catch (_e: unknown) {
-        // session_expired or not connected yet — leave profile null so onboarding shows
+      } catch (_err: unknown) {
+        // session_expired or not connected yet — leave profile null
       } finally {
         if (!cancelled) setIsCheckingConnection(false);
       }
@@ -160,55 +368,23 @@ export default function HomeScreen() {
       if (!success) throw new Error('Instagram connection was not successful');
       const p = await fetchProfile();
       setProfile(p);
-      try {
-        await fetchMedia();
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message === 'session_expired') setProfile(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect';
+      if (message === 'Instagram OAuth was cancelled') {
+        // Silent return — no error shown
+      } else {
+        setError(message);
       }
-      try {
-        await fetchInsights();
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message === 'session_expired') setProfile(null);
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Failed to connect';
-      setError(
-        message === 'Instagram OAuth was cancelled'
-          ? 'Instagram connection was cancelled'
-          : message,
-      );
     } finally {
       setIsConnecting(false);
     }
   }, [user, getToken]);
 
-  const handleDisconnect = useCallback(async () => {
-    setIsConnecting(true);
-    setError(null);
-    try {
-      await disconnectInstagram();
-      setProfile(null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to disconnect');
-    } finally {
-      setIsConnecting(false);
-    }
-  }, []);
-
-  // ── Derived state ──
-  const isLoading = isCheckingConnection || isConnecting || dashboardLoading;
-  const username =
-    profile?.username ??
-    dashboardData.creator?.ig_username ??
-    dashboardData.creator?.username ??
-    null;
-  const displayName = profile?.name ?? dashboardData.creator?.full_name ?? username ?? 'Creator';
-  const avatarUrl =
-    profile?.profile_picture_url ?? dashboardData.creator?.profile_pic_url ?? undefined;
-  const followerCount = profile?.followers_count ?? dashboardData.creator?.follower_count ?? null;
+  const firstName = user?.firstName || 'Creator';
+  const displayName = user?.fullName || firstName;
 
   // ── Loading state ──
-  if (isLoading) {
+  if (isCheckingConnection) {
     return (
       <View className="flex-1 items-center justify-center bg-canvas">
         <ClaySpinner size={40} label="Loading…" />
@@ -216,301 +392,212 @@ export default function HomeScreen() {
     );
   }
 
-  // ── Error state (dashboard load errors only) ──
-  if (dashboardError && profile) {
-    return (
-      <View className="flex-1 items-center justify-center gap-4 bg-canvas p-6">
-        <ErrorShake>
-          <Text className="text-error text-center text-body-sm" selectable>
-            {dashboardError}
-          </Text>
-        </ErrorShake>
-        <ClayAnimatedButton
-          variant="secondary"
-          onPress={() => {
-            setError(null);
-            void refreshDashboard();
-          }}
-        >
-          Retry
-        </ClayAnimatedButton>
-      </View>
-    );
-  }
-
-  // ── Not connected — Instagram onboarding hero ──
-  if (!profile) {
-    return (
-      <View
-        className="flex-1 bg-canvas"
-        style={{
-          paddingHorizontal: 24,
-          paddingTop: insets.top + 24,
-          paddingBottom: insets.bottom + 16,
-        }}
-      >
-        {/* Top block */}
-        <Entrance delay={0}>
-          <View className="items-center gap-3">
-            <View
-              className="bg-primary items-center justify-center"
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 28,
-                borderCurve: 'continuous',
-                boxShadow: '0 8px 24px rgba(10, 10, 10, 0.18)',
-              }}
-            >
-              <Text
-                className="text-on-primary font-medium"
-                style={{ fontSize: 24, lineHeight: 28, letterSpacing: -0.5 }}
-              >
-                K
-              </Text>
-            </View>
-            <Text className="text-display-sm font-medium tracking-[-0.5px] text-center text-primary">
-              Welcome to Kaplun
-            </Text>
-            <Text className="text-center text-muted leading-relaxed max-w-[300px]">
-              Your creator workspace for brand deals and Instagram growth.
-            </Text>
-          </View>
-        </Entrance>
-
-        {/* Middle block — feature rows */}
-        <Entrance delay={100}>
-          <View className="w-full gap-4 mt-4">
-            <View className="flex-row items-center gap-3">
-              <View
-                className="bg-brand-pink items-center justify-center"
-                style={{ width: 40, height: 40, borderRadius: 12, borderCurve: 'continuous' }}
-              >
-                <Text style={{ fontSize: 18 }}>📊</Text>
-              </View>
-              <View className="flex-1 gap-0.5">
-                <Text className="text-title-sm font-semibold">Track analytics</Text>
-                <Text className="text-body-sm text-muted">Follower growth and reel performance</Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-center gap-3">
-              <View
-                className="bg-brand-teal items-center justify-center"
-                style={{ width: 40, height: 40, borderRadius: 12, borderCurve: 'continuous' }}
-              >
-                <Text style={{ fontSize: 18 }}>💼</Text>
-              </View>
-              <View className="flex-1 gap-0.5">
-                <Text className="text-title-sm font-semibold">Manage deals</Text>
-                <Text className="text-body-sm text-muted">Every brand deal in one pipeline</Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-center gap-3">
-              <View
-                className="bg-brand-lavender items-center justify-center"
-                style={{ width: 40, height: 40, borderRadius: 12, borderCurve: 'continuous' }}
-              >
-                <Text style={{ fontSize: 18 }}>💬</Text>
-              </View>
-              <View className="flex-1 gap-0.5">
-                <Text className="text-title-sm font-semibold">Brand DMs</Text>
-                <Text className="text-body-sm text-muted">Never miss a brand DM</Text>
-              </View>
-            </View>
-          </View>
-        </Entrance>
-
-        {/* Bottom block — anchored */}
-        <Entrance delay={200}>
-          <View className="w-full items-center gap-3" style={{ marginTop: 'auto' }}>
-            {error && (
-              <ErrorShake>
-                <Text className="text-error text-center text-body-sm" selectable>
-                  {error}
-                </Text>
-              </ErrorShake>
-            )}
-            <ClayAnimatedButton
-              variant="primary"
-              fullWidth
-              loading={isConnecting}
-              onPress={handleConnect}
-            >
-              Connect Instagram
-            </ClayAnimatedButton>
-            <Text className="text-xs text-muted-soft text-center">
-              Uses Instagram's official API — your credentials are never stored
-            </Text>
-          </View>
-        </Entrance>
-      </View>
-    );
-  }
-
-  // ── Connected but no dashboard data — empty state ──
-  if (!dashboardData || (!dashboardData.deals?.length && !dashboardData.threads?.length)) {
-    return (
-      <View
-        className="flex-1 bg-canvas"
-        style={{
-          paddingHorizontal: 24,
-          paddingTop: insets.top + 16,
-          paddingBottom: insets.bottom + 16,
-        }}
-      >
-        <View className="flex-1 items-center justify-center gap-4">
-          <ProfileAvatar url={avatarUrl} name={displayName} size={72} />
-          <Text
-            className="text-display-sm font-medium tracking-[-0.5px] text-center"
-            selectable
-          >
-            Welcome, @{username}
-          </Text>
-          <Text className="text-center text-muted text-body-sm max-w-[280px]">
-            No campaign data yet — your agent will start outreach soon
-          </Text>
-          <ClayAnimatedButton variant="secondary" onPress={() => void refreshDashboard()}>
-            Refresh
-          </ClayAnimatedButton>
-        </View>
-      </View>
-    );
-  }
-
-  // ── Connected with data — dashboard ──
-  const activeDeals = dashboardData.deals?.length ?? 0;
-  const unreadThreads =
-    dashboardData.threads?.filter((t) => t.unread_count > 0).length ?? 0;
-  const pendingContent =
-    dashboardData.threads?.filter((t) => t.status === 'content_pending').length ?? 0;
-  const recentThreads = dashboardData.threads?.slice(0, 3) ?? [];
+  const isConnected = !!profile || skipped;
 
   return (
     <ScrollView
       className="flex-1 bg-canvas"
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        gap: 16,
-        paddingHorizontal: 16,
+        paddingHorizontal: 18,
         paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + 16,
+        paddingBottom: insets.bottom + 110,
       }}
     >
-      {error && (
-        <ErrorShake>
-          <Text className="text-error text-center text-body-sm" selectable>
-            {error}
+      {/* Header */}
+      <Entrance delay={0}>
+        <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
+          <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
+            Kaplun
           </Text>
-        </ErrorShake>
-      )}
+          <HeaderAvatar name={displayName} />
+        </View>
+      </Entrance>
 
-      {/* Profile header */}
-      <View className="flex-row items-center gap-3">
-        <ProfileAvatar url={avatarUrl} name={displayName} size={48} />
-        <View className="flex-1 gap-0.5">
-          <Text
-            className="text-display-sm font-medium tracking-[-0.5px]"
-            numberOfLines={1}
-            selectable
+      {/* Greeting */}
+      <Entrance delay={50}>
+        <View style={{ marginBottom: 16 }}>
+          <Text className="text-[13px] text-muted" style={{ marginBottom: 2 }}>
+            {getGreeting()}
+          </Text>
+          <Text className="font-medium text-ink" style={{ fontSize: 24, letterSpacing: -0.5 }}>
+            {firstName}
+          </Text>
+        </View>
+      </Entrance>
+
+      {!isConnected ? (
+        <Entrance delay={100}>
+          {/* Connect hero card */}
+          <View
+            className="bg-brand-lavender rounded-xl"
+            style={{ padding: 18, opacity: isConnecting ? 0.78 : 1 }}
           >
-            Welcome, @{username}
-          </Text>
-          <Text className="text-muted">Here&apos;s your campaign overview</Text>
-          {followerCount != null && (
-            <Text
-              className="text-muted-soft text-caption"
-              style={{ fontVariant: ['tabular-nums'] }}
+            {/* Hero visual placeholder */}
+            <View
+              className="items-center justify-center"
+              style={{
+                height: 118,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderStyle: 'dashed',
+                borderColor: 'rgba(10,10,10,0.38)',
+                backgroundColor: 'rgba(255,255,255,0.55)',
+                marginBottom: 16,
+                gap: 8,
+              }}
             >
-              {formatCount(followerCount)} followers
-            </Text>
-          )}
-        </View>
-      </View>
-
-      {/* Stats — pink -> teal -> ochre (cycle, no adjacent repeats) */}
-      <View className="flex-row flex-wrap gap-3">
-        <View className="flex-1 min-w-[100px]">
-          <ClayFeatureCard
-            color="pink"
-            padding="p-4"
-            title={String(activeDeals)}
-            description="Active Deals"
-          />
-        </View>
-        <View className="flex-1 min-w-[100px]">
-          <ClayFeatureCard
-            color="teal"
-            padding="p-4"
-            title={String(unreadThreads)}
-            description="Unread Threads"
-          />
-        </View>
-        <View className="flex-1 min-w-[100px]">
-          <ClayFeatureCard
-            color="ochre"
-            padding="p-4"
-            title={String(pendingContent)}
-            description="Pending Content"
-          />
-        </View>
-      </View>
-
-      {/* Quick links */}
-      <View className="flex-row gap-3">
-        <View className="flex-1">
-          <ClayAnimatedCard delay={200} onPress={() => router.push('/(tabs)/(messages)')}>
-            <View className="items-center gap-2">
-              <Text className="font-semibold text-ink">View Messages</Text>
-              <Text className="text-xs text-muted">Check your threads</Text>
-            </View>
-          </ClayAnimatedCard>
-        </View>
-        <View className="flex-1">
-          <ClayAnimatedCard delay={200} onPress={() => router.push('/(tabs)/(profile)')}>
-            <View className="items-center gap-2">
-              <Text className="font-semibold text-ink">View Profile</Text>
-              <Text className="text-xs text-muted">Your creator profile</Text>
-            </View>
-          </ClayAnimatedCard>
-        </View>
-      </View>
-
-      {/* Recent activity */}
-      <View className="gap-2.5">
-        <Text className="text-title-md font-semibold text-ink">Recent Activity</Text>
-        {recentThreads.map((thread, index) => (
-          <ClayAnimatedCard key={thread.$id ?? index} delay={index * 100}>
-            <View className="gap-2">
-              <Text className="font-semibold text-ink" selectable>
-                {thread.campaign_title}
+              <Ionicons name="logo-instagram" size={34} color="rgba(10,10,10,0.6)" />
+              <Text className="font-medium" style={{ fontSize: 11.5, letterSpacing: 0.2, color: 'rgba(10,10,10,0.6)' }}>
+                TODO: hero visual — clay phone with Instagram glyph
               </Text>
-              <View className="flex-row justify-between items-center">
-                <StatusBadge status={thread.status} />
-                {thread.unread_count > 0 && (
-                  <Text
-                    className="text-xs text-muted"
-                    style={{ fontVariant: ['tabular-nums'] }}
-                  >
-                    {thread.unread_count} unread
-                  </Text>
-                )}
-              </View>
             </View>
-          </ClayAnimatedCard>
-        ))}
-        {recentThreads.length === 0 && (
-          <Text className="text-xs text-muted">No recent activity</Text>
-        )}
-      </View>
 
-      {/* Disconnect */}
-      <View className="items-center mt-2">
-        <ClayAnimatedButton variant="text-link" onPress={handleDisconnect}>
-          Disconnect Instagram
-        </ClayAnimatedButton>
-      </View>
+            {/* Eyebrow */}
+            <Text
+              className="font-semibold uppercase"
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.5,
+                color: 'rgba(10,10,10,0.62)',
+                marginBottom: 8,
+              }}
+            >
+              Step 1 of 1
+            </Text>
+
+            {/* H1 */}
+            <Text
+              className="font-medium text-ink"
+              style={{ fontSize: 29, lineHeight: 32.5, letterSpacing: -0.5, marginBottom: 8 }}
+            >
+              Connect your Instagram
+            </Text>
+
+            {/* Lede */}
+            <Text
+              className="text-body-strong"
+              style={{ fontSize: 15, lineHeight: 22.5, marginBottom: 14 }}
+            >
+              Kaplun reads your DMs, insights and posts so your creator workspace comes alive.
+            </Text>
+
+            {/* Value bullets */}
+            <View className="gap-[11px]" style={{ marginBottom: 18 }}>
+              <ValueBullet
+                icon="chatbubble-outline"
+                text="Answer Instagram DMs from one inbox"
+              />
+              <ValueBullet
+                icon="stats-chart-outline"
+                text="See post & audience insights without switching apps"
+              />
+              <ValueBullet
+                icon="calendar-outline"
+                text="Publish and schedule content in one place"
+              />
+            </View>
+
+            {/* Error strip */}
+            {error && <ErrorStrip message={error} />}
+
+            {/* CTA */}
+            <ClayAnimatedButton
+              variant="primary"
+              fullWidth
+              loading={isConnecting}
+              onPress={handleConnect}
+              height={50}
+            >
+              <View className="flex-row items-center gap-[9px]">
+                <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+                <Text className="font-semibold text-white" style={{ fontSize: 15, letterSpacing: -0.2 }}>
+                  {error ? 'Try again' : isConnecting ? 'Waiting for Instagram…' : 'Connect Instagram'}
+                </Text>
+              </View>
+            </ClayAnimatedButton>
+
+            {/* CTA caption */}
+            <Text
+              className="text-center"
+              style={{
+                fontSize: 12.5,
+                color: 'rgba(10,10,10,0.65)',
+                marginTop: 10,
+              }}
+            >
+              {isConnecting
+                ? 'Complete sign-in in the Instagram window to continue.'
+                : 'Secure sign-in via Meta · takes about 30 seconds'}
+            </Text>
+
+            {/* Why we ask toggle */}
+            <Pressable
+              onPress={() => setShowPermissions((p) => !p)}
+              className="self-center"
+              style={{ marginTop: 13, paddingVertical: 6, paddingHorizontal: 8 }}
+            >
+              <Text
+                className="font-medium text-ink"
+                style={{ fontSize: 14, textDecorationLine: 'underline' }}
+              >
+                Why we ask for this{' '}
+                <Text style={{ transform: [{ rotate: showPermissions ? '180deg' : '0deg' }] }}>
+                  ▾
+                </Text>
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Permissions panel */}
+          <PermissionsPanel open={showPermissions} />
+
+          {/* Skip block */}
+          <View className="items-center" style={{ marginTop: 16 }}>
+            <Pressable
+              onPress={() => setSkipped(true)}
+              style={{ paddingVertical: 10, paddingHorizontal: 14, minHeight: 44 }}
+            >
+              <Text className="font-medium text-muted" style={{ fontSize: 14 }}>
+                Continue without Instagram
+              </Text>
+            </Pressable>
+            <Text
+              className="text-center text-muted-soft"
+              style={{ fontSize: 12, lineHeight: 17.4, paddingHorizontal: 22 }}
+            >
+              You can connect later from Profile. Some features stay locked.
+            </Text>
+          </View>
+        </Entrance>
+      ) : (
+        <Entrance delay={100}>
+          {/* Connected home */}
+          {profile && <ConnectionChip profile={profile} />}
+
+          <Module
+            title="Instagram DMs"
+            subtitle="Your unified inbox"
+            emptyTitle="Waiting for first sync"
+            emptyBody="Unread threads will appear here as soon as your messages finish syncing."
+            buttonText="Open Messages"
+            buttonRoute="/(tabs)/(messages)"
+            bgClass="bg-brand-pink"
+          />
+
+          <Module
+            title="Latest post performance"
+            subtitle="Reach, likes and comments"
+            emptyTitle="No posts synced yet"
+            emptyBody="Publish your first post from Kaplun and its insights will land here."
+            buttonText="View insights"
+            buttonRoute="/(tabs)/(insights)"
+            bgClass="bg-brand-teal"
+          />
+
+          <QuickActions />
+        </Entrance>
+      )}
     </ScrollView>
   );
 }
