@@ -4,12 +4,15 @@
  * Opens Instagram's OAuth authorization page via expo-web-browser,
  * then checks the redirect URL for success/error status.
  *
- * The callback URL (https://ig-oauth-callback.sgp.appwrite.run/) processes
- * the code server-side and redirects back to kaplun://instagram-callback
- * with ?status=success or ?status=error.
+ * The callback URL processes the code server-side and redirects back
+ * to the app's deep link with ?status=success or ?status=error.
+ *
+ * In Expo Go: uses exp://host:port (no path) to avoid "Failed to download update" error
+ * In production: uses kaplun://instagram-callback
  */
 
 import { openAuthSessionAsync } from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 
 const IG_APP_ID = process.env.EXPO_PUBLIC_IG_APP_ID;
 const IG_OAUTH_REDIRECT_URI = process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI;
@@ -36,7 +39,28 @@ const SCOPES = [
   'instagram_business_manage_insights',
 ];
 
-const REDIRECT_DEEP_LINK = 'kaplun://instagram-callback';
+/**
+ * Returns the deep link URL for the OAuth callback.
+ *
+ * In Expo Go: exp://192.168.0.103:8081 (base URL only, no path — avoids
+ *   "Failed to download update" error when Expo Go tries to interpret
+ *   the /--/ path as a route to load)
+ * In production: kaplun://instagram-callback
+ */
+function getRedirectDeepLink(): string {
+  const fullUrl = Linking.createURL('instagram-callback');
+  // For exp:// URLs in Expo Go, strip the path to just the base URL.
+  // This prevents Expo Go from trying to download a bundle for the path.
+  if (fullUrl.startsWith('exp://')) {
+    try {
+      const parsed = new URL(fullUrl);
+      return `exp://${parsed.host}`;
+    } catch {
+      return fullUrl;
+    }
+  }
+  return fullUrl;
+}
 
 /**
  * Opens Instagram's OAuth authorization page and returns the auth code.
@@ -50,9 +74,12 @@ export async function startInstagramOAuth(
   clerkId: string,
   appwriteUserId: string
 ): Promise<boolean> {
+  const redirectDeepLink = getRedirectDeepLink();
+
   const state = JSON.stringify({
     clerk_id: clerkId,
     uid: appwriteUserId,
+    redirect_url: redirectDeepLink,
   });
 
   const params = new URLSearchParams({
@@ -65,29 +92,43 @@ export async function startInstagramOAuth(
 
   const authUrl = `${IG_AUTHORIZE_URL}?${params.toString()}`;
 
-  const result = await openAuthSessionAsync(authUrl, REDIRECT_DEEP_LINK);
+  const result = await openAuthSessionAsync(authUrl, redirectDeepLink);
 
-  if (result.type === 'dismiss' || result.type === 'cancel') {
+  // In Expo Go on Android, the auth session may return 'dismiss' or 'cancel'
+  // when the browser redirects to exp:// (because Expo Go intercepts the URL).
+  // We treat any non-cancel result as potentially successful and let the
+  // caller verify by calling fetchProfile().
+  if (result.type === 'cancel') {
     throw new Error('Instagram OAuth was cancelled');
   }
 
-  if (result.type !== 'success' || !result.url) {
-    throw new Error('Instagram OAuth failed: unexpected result type');
+  // If we got a success result with a URL, try to parse the status
+  if (result.type === 'success' && result.url) {
+    const cleanUrl = result.url.replace(/#_$/, '');
+    let parsedUrl: URL | null = null;
+    try {
+      parsedUrl = new URL(cleanUrl);
+    } catch {
+      // URL parsing failed — fall through to optimistic success
+    }
+
+    if (parsedUrl) {
+      const status = parsedUrl.searchParams.get('status');
+
+      if (status === 'success') {
+        return true;
+      }
+
+      if (status === 'error') {
+        const message = parsedUrl.searchParams.get('message');
+        throw new Error(message || 'Instagram connection failed');
+      }
+    }
   }
 
-  // Instagram appends `#_` to the redirect URL — strip it before parsing
-  const cleanUrl = result.url.replace(/#_$/, '');
-  const parsedUrl = new URL(cleanUrl);
-  const status = parsedUrl.searchParams.get('status');
-
-  if (status === 'success') {
-    return true;
-  }
-
-  if (status === 'error') {
-    const message = parsedUrl.searchParams.get('message');
-    throw new Error(message || 'Instagram connection failed');
-  }
-
-  throw new Error('Instagram OAuth failed: unexpected redirect status');
+  // In Expo Go, the auth session often returns 'dismiss' when the browser
+  // redirects to exp:// (because Expo Go intercepts the URL as an intent).
+  // We treat this as a likely success — the caller should verify by
+  // calling fetchProfile() to check if the connection actually worked.
+  return true;
 }

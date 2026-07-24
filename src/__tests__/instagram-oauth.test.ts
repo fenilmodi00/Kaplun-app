@@ -10,6 +10,10 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
 }));
 
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path: string) => `kaplun://${path}`),
+}));
+
 // Set env vars before importing the module under test
 process.env.EXPO_PUBLIC_IG_APP_ID = 'test_app_id';
 process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI = 'https://test-callback.example.com/';
@@ -45,16 +49,6 @@ describe('startInstagramOAuth', () => {
     expect(redirectUrl).toBe('kaplun://instagram-callback');
   });
 
-  it('cancel: throws when user dismisses the browser', async () => {
-    mockOpenAuthSessionAsync.mockResolvedValueOnce({
-      type: 'dismiss',
-    });
-
-    await expect(
-      startInstagramOAuth(CLERK_ID, APPWRITE_UID)
-    ).rejects.toThrow('Instagram OAuth was cancelled');
-  });
-
   it('cancel: throws when user cancels the browser', async () => {
     mockOpenAuthSessionAsync.mockResolvedValueOnce({
       type: 'cancel',
@@ -63,6 +57,15 @@ describe('startInstagramOAuth', () => {
     await expect(
       startInstagramOAuth(CLERK_ID, APPWRITE_UID)
     ).rejects.toThrow('Instagram OAuth was cancelled');
+  });
+
+  it('dismiss: returns true (Expo Go intercepts exp:// redirect)', async () => {
+    mockOpenAuthSessionAsync.mockResolvedValueOnce({
+      type: 'dismiss',
+    });
+
+    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    expect(result).toBe(true);
   });
 
   it('failure: throws when redirect URL has status=error', async () => {
@@ -76,26 +79,22 @@ describe('startInstagramOAuth', () => {
     ).rejects.toThrow('Instagram connection failed');
   });
 
-  it('failure: throws on unexpected result type', async () => {
+  it('optimistic: returns true on unexpected result type (Expo Go behavior)', async () => {
     mockOpenAuthSessionAsync.mockResolvedValueOnce({
       type: 'locked',
     });
 
-    await expect(
-      startInstagramOAuth(CLERK_ID, APPWRITE_UID)
-    ).rejects.toThrow('Instagram OAuth failed: unexpected result type');
+    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    expect(result).toBe(true);
   });
 
-  it('failure: throws when redirect URL has no status parameter', async () => {
+  it('optimistic: returns true when redirect URL has no status parameter', async () => {
     mockOpenAuthSessionAsync.mockResolvedValueOnce({
       type: 'success',
       url: 'kaplun://instagram-callback',
     });
 
-    await expect(
-      startInstagramOAuth(CLERK_ID, APPWRITE_UID)
-    ).rejects.toThrow(
-      'Instagram OAuth failed: unexpected redirect status'
-    );
+    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    expect(result).toBe(true);
   });
 });

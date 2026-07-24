@@ -246,26 +246,15 @@ def build_creator_data(
 
 
 def success_page(username: str, redirect_url: str) -> str:
-    """Return an HTML page that redirects to the app with a success status.
-
-    The page shows a brief success message and uses meta refresh to
-    navigate back to the app with ?status=success.
-
-    Args:
-        username: The Instagram username that was connected.
-        redirect_url: The deep link URL to redirect to.
-
-    Returns:
-        HTML string.
-    """
+    """Return an HTML page that redirects to the app with a success status."""
     safe_username = html.escape(username)
-    safe_redirect = html.escape(redirect_url)
+    clean_url = _clean_redirect_url(redirect_url)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="2;url={safe_redirect}?status=success">
+    <meta http-equiv="refresh" content="2;url={clean_url}?status=success">
     <title>Connected Successfully</title>
     <style>
         body {{
@@ -304,27 +293,16 @@ def success_page(username: str, redirect_url: str) -> str:
 
 
 def error_page(message: str, redirect_url: str) -> str:
-    """Return an HTML page that redirects to the app with an error status.
-
-    The page shows the error message and uses meta refresh to navigate
-    back to the app with ?status=error&message=...
-
-    Args:
-        message: The error message to display.
-        redirect_url: The deep link URL to redirect to.
-
-    Returns:
-        HTML string.
-    """
+    """Return an HTML page that redirects to the app with an error status."""
     safe_message = html.escape(message)
-    safe_redirect = html.escape(redirect_url)
+    clean_url = _clean_redirect_url(redirect_url)
     encoded_message = urlencode({"message": safe_message})
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="3;url={safe_redirect}?status=error&{encoded_message}">
+    <meta http-equiv="refresh" content="3;url={clean_url}?status=error&{encoded_message}">
     <title>Connection Failed</title>
     <style>
         body {{
@@ -357,6 +335,22 @@ def error_page(message: str, redirect_url: str) -> str:
     </div>
 </body>
 </html>"""
+
+
+def _clean_redirect_url(redirect_url: str) -> str:
+    """Strip path from exp:// URLs to prevent Expo Go 'Failed to download update' error.
+
+    Expo Go interprets paths in exp:// URLs as routes to load. When the
+    callback page redirects to exp://host:port/--/instagram-callback,
+    Expo Go tries to download a bundle for that route and fails.
+    Stripping the path leaves just exp://host:port which brings the
+    app to the foreground without triggering a bundle load.
+    """
+    if redirect_url.startswith("exp://"):
+        from urllib.parse import urlparse
+        parsed = urlparse(redirect_url)
+        return f"exp://{parsed.netloc}"
+    return html.escape(redirect_url)
 
 
 # ── Callback Endpoint ─────────────────────────────────────────────────────────
