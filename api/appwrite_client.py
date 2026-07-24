@@ -79,7 +79,7 @@ class AppwriteClient:
             existing = documents[0] if documents else None
 
             if existing:
-                doc_id = existing["$id"]
+                doc_id = getattr(existing, '$id', None) or getattr(existing, 'id', '')
                 self._databases.update_document(
                     database_id=APPWRITE_DATABASE_ID,
                     collection_id=APPWRITE_CREATORS_TABLE_ID,
@@ -131,7 +131,7 @@ class AppwriteClient:
                 logger.warning("No creator profile found for {} to clear", clerk_user_id)
                 return False
 
-            doc_id = existing["$id"]
+            doc_id = getattr(existing, '$id', None) or getattr(existing, 'id', '')
             self._databases.update_document(
                 database_id=APPWRITE_DATABASE_ID,
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
@@ -174,7 +174,7 @@ class AppwriteClient:
                 logger.warning("No creator profile found for {} to save session", clerk_user_id)
                 return False
 
-            doc_id = existing["$id"]
+            doc_id = getattr(existing, '$id', None) or getattr(existing, 'id', '')
             self._databases.update_document(
                 database_id=APPWRITE_DATABASE_ID,
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
@@ -210,6 +210,15 @@ class AppwriteClient:
 
             if not existing:
                 return ""
+
+            token = getattr(existing, 'access_token', None) or (existing.get('access_token', '') if isinstance(existing, dict) else '')
+            return token if token else ""
+        except AppwriteException:
+            logger.exception("Appwrite error getting session for {}", clerk_user_id)
+            return ""
+        except Exception:
+            logger.exception("Unexpected error getting session for {}", clerk_user_id)
+            return ""
 
             token = existing.get("access_token", "")
             return token if token else ""
