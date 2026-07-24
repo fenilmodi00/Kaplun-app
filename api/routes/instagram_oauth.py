@@ -221,7 +221,6 @@ def build_creator_data(
         "clerk_user_id": clerk_id,
         "ig_user_id": profile.get("id", ""),
         "ig_scoped_id": profile.get("id", ""),
-        "ig_username": profile.get("username", ""),
         "username": profile.get("username", ""),
         "full_name": profile.get("name", ""),
         "bio": profile.get("biography", ""),
@@ -229,16 +228,14 @@ def build_creator_data(
         "profile_pic_url": profile.get("profile_picture_url", ""),
         "follower_count": profile.get("followers_count", 0),
         "following_count": profile.get("follows_count", 0),
-        "media_count": profile.get("media_count", 0),
         "post_count": profile.get("media_count", 0),
-        "is_verified": False,  # Basic Display API does not return this
+        "is_verified": False,
         "is_business": is_business,
         "account_type": account_type,
         "is_onboarded": True,
         "access_token": access_token,
         "token_expires_at": token_expires_at,
         "updated_at": now,
-        "created_at": now,
     }
 
 
