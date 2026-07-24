@@ -74,7 +74,7 @@ class AppwriteClient:
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
                 queries=[Query.equal("clerk_user_id", clerk_user_id), Query.limit(1)],
             )
-            documents = result.get("documents", [])
+            documents = getattr(result, "documents", None) or result.get("documents", [])
 
             existing = documents[0] if documents else None
 
@@ -123,7 +123,7 @@ class AppwriteClient:
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
                 queries=[Query.equal("clerk_user_id", clerk_user_id), Query.limit(1)],
             )
-            documents = result.get("documents", [])
+            documents = getattr(result, "documents", None) or result.get("documents", [])
 
             existing = documents[0] if documents else None
 
@@ -167,7 +167,7 @@ class AppwriteClient:
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
                 queries=[Query.equal("clerk_user_id", clerk_user_id), Query.limit(1)],
             )
-            documents = result.get("documents", [])
+            documents = getattr(result, "documents", None) or result.get("documents", [])
             existing = documents[0] if documents else None
 
             if not existing:
@@ -205,7 +205,7 @@ class AppwriteClient:
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
                 queries=[Query.equal("clerk_user_id", clerk_user_id), Query.limit(1)],
             )
-            documents = result.get("documents", [])
+            documents = getattr(result, "documents", None) or result.get("documents", [])
             existing = documents[0] if documents else None
 
             if not existing:
