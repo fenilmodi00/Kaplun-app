@@ -1,8 +1,8 @@
 /**
  * Home Dashboard screen integration tests.
  *
- * Tests the connected (dashboard) state where Instagram is already linked.
- * Mocks fetchProfile to return a profile and useDashboard to provide data.
+ * Tests the connected state where Instagram is already linked.
+ * Mocks fetchProfile to return a profile.
  */
 
 // Mock Clerk before component imports — screens import from @clerk/clerk-expo
@@ -24,6 +24,10 @@ jest.mock('@clerk/clerk-expo', () => ({
   ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+jest.mock('expo-linear-gradient', () => ({
+  LinearGradient: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 jest.mock('@/lib/appwrite', () => ({
   account: { createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }) },
 }));
@@ -33,6 +37,14 @@ jest.mock('@/lib/instagram', () => ({
   fetchMedia: jest.fn(),
   fetchInsights: jest.fn(),
   disconnectInstagram: jest.fn(),
+}));
+
+jest.mock('@/lib/instagram-oauth', () => ({
+  startInstagramOAuth: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('@/lib/auth-bridge', () => ({
+  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
 }));
 
 const mockDashboardData = {
@@ -66,12 +78,11 @@ jest.mock('@/hooks/useDashboard', () => ({
 }));
 
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import HomeScreen from '@/app/(tabs)/(home)/index';
-import { fetchProfile, disconnectInstagram } from '@/lib/instagram';
+import { fetchProfile } from '@/lib/instagram';
 
 const mockFetchProfile = fetchProfile as jest.Mock;
-const mockDisconnectInstagram = disconnectInstagram as jest.Mock;
 
 const mockProfile = {
   id: '12345',
@@ -82,76 +93,66 @@ const mockProfile = {
   media_count: 42,
 };
 
-describe('HomeScreen — Dashboard (connected state)', () => {
+describe('HomeScreen — Connected state', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetchProfile.mockResolvedValue(mockProfile);
   });
 
-  it('shows welcome message with Instagram handle when connected', async () => {
+  it('shows connection chip with Instagram handle when connected', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText(/Welcome, @test_creator/)).toBeTruthy();
+      expect(getByText('@test_creator')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows campaign overview subtitle', async () => {
+  it('shows Connected status', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText(/Here's your campaign overview/)).toBeTruthy();
+      expect(getByText('Connected')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows stat cards (Active Deals, Unread Threads, Pending Content)', async () => {
+  it('shows Instagram DMs module', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('Active Deals')).toBeTruthy();
-      expect(getByText('Unread Threads')).toBeTruthy();
-      expect(getByText('Pending Content')).toBeTruthy();
+      expect(getByText('Instagram DMs')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows quick-link cards (View Messages, View Profile)', async () => {
+  it('shows Latest post performance module', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('View Messages')).toBeTruthy();
-      expect(getByText('View Profile')).toBeTruthy();
+      expect(getByText('Latest post performance')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows recent activity with thread title', async () => {
+  it('shows Open Messages ghost button', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('Test Campaign')).toBeTruthy();
+      expect(getByText('Open Messages')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows Disconnect Instagram button', async () => {
+  it('shows quick action buttons (New post, Reply to DMs)', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('Disconnect Instagram')).toBeTruthy();
+      expect(getByText('New post')).toBeTruthy();
+      expect(getByText('Reply to DMs')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('calls disconnectInstagram when Disconnect is pressed', async () => {
-    mockDisconnectInstagram.mockResolvedValue(undefined);
-
+  it('shows Kaplun wordmark in header', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('Disconnect Instagram')).toBeTruthy();
+      expect(getByText('Kaplun')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
-
-    fireEvent.press(getByText('Disconnect Instagram'));
-
-    await waitFor(() => {
-      expect(mockDisconnectInstagram).toHaveBeenCalledTimes(1);
-    });
   });
 });

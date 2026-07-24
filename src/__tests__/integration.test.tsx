@@ -49,6 +49,10 @@ jest.mock('@clerk/clerk-expo', () => ({
   ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+jest.mock('expo-linear-gradient', () => ({
+  LinearGradient: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 jest.mock('@/lib/appwrite', () => ({
   account: {
     createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }),
@@ -77,6 +81,10 @@ jest.mock('@/lib/instagram-oauth', () => ({
   startInstagramOAuth: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock('@/lib/auth-bridge', () => ({
+  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
+}));
+
 jest.mock('@/hooks/useDashboard', () => ({
   useDashboard: () => ({
     data: { creator: null, threads: [], deals: [] },
@@ -100,15 +108,15 @@ describe('Integration Tests', () => {
     it('renders connected state with username', async () => {
       await render(<Home />);
 
-      expect(screen.getByText('Welcome, @testuser')).toBeTruthy();
-      expect(screen.getByText('Refresh')).toBeTruthy();
+      expect(screen.getByText('@testuser')).toBeTruthy();
+      expect(screen.getByText('Connected')).toBeTruthy();
     });
 
-    it('shows welcome message after successful login', async () => {
+    it('shows connected chip after successful login', async () => {
       await render(<Home />);
 
       await waitFor(() => {
-        expect(screen.getByText('Welcome, @testuser')).toBeTruthy();
+        expect(screen.getByText('@testuser')).toBeTruthy();
       });
     });
 
@@ -123,7 +131,7 @@ describe('Integration Tests', () => {
       await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid credentials')).toBeTruthy();
+        expect(screen.getByText(/Invalid credentials/)).toBeTruthy();
       });
     });
 
@@ -138,7 +146,7 @@ describe('Integration Tests', () => {
       await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
-        expect(screen.getByText('Instagram connect failed')).toBeTruthy();
+        expect(screen.getByText(/Instagram connect failed/)).toBeTruthy();
       });
     });
 
@@ -153,8 +161,8 @@ describe('Integration Tests', () => {
       await fireEvent.press(screen.getByText('Connect Instagram'));
 
       await waitFor(() => {
-        expect(screen.getByText('session_expired')).toBeTruthy();
-        expect(screen.getByText('Connect Instagram')).toBeTruthy();
+        expect(screen.getByText(/session_expired/)).toBeTruthy();
+        expect(screen.getByText('Try again')).toBeTruthy();
       });
     });
   });
