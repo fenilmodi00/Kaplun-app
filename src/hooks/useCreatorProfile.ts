@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-expo';
-import { tablesDB } from '@/lib/appwrite';
-import { DATABASE_ID, TABLES } from '@/lib/constants';
-import { Query } from 'appwrite';
-import type { Creator, DealThread } from '@/lib/types';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { getCreatorByClerkId, listThreads, listPosts } from '@/lib/repository';
 import { fetchMedia, fetchInsights } from '@/lib/instagram';
+import { withFreshSession } from '@/lib/with-fresh-session';
+import type { Creator, DealThread } from '@/lib/types';
 import type { InstagramMediaResponse, InstagramInsightsResponse } from '@/lib/instagram';
 
 export interface PostRow {
@@ -32,121 +32,145 @@ export function useCreatorProfile(): UseCreatorProfileResult {
   const { user } = useUser();
   const { getToken } = useAuth();
   const clerkUserId = user?.id ?? '';
-  const [creator, setCreator] = useState<Creator | null>(null);
-  const [dealThreads, setDealThreads] = useState<DealThread[]>([]);
-  const [recentReels, setRecentReels] = useState<PostRow[]>([]);
-  const [recentMedia, setRecentMedia] = useState<InstagramMediaResponse[]>([]);
-  const [insights, setInsights] = useState<InstagramInsightsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const cancelledRef = useRef(false);
 
-  const fetchProfile = useCallback(async () => {
-    if (!clerkUserId) return;
-    cancelledRef.current = false;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      setRecentMedia([]);
-      setInsights(null);
-
-      const creatorsResult = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.CREATORS,
-        queries: [
-          Query.equal('clerk_user_id', clerkUserId),
-          Query.limit(1),
-        ],
-      });
-
-      if (cancelledRef.current) return;
-
-      const creatorRows = creatorsResult.rows as unknown as Creator[];
-      if (creatorRows.length === 0) {
-        setCreator(null);
-        setIsLoading(false);
-        return;
-      }
-
-      const creatorRow = creatorRows[0];
-      setCreator(creatorRow);
-
-      // 2. Fetch deal threads by ig_user_id
-      const threadsResult = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.DEAL_THREADS,
-        queries: [Query.equal('ig_user_id', creatorRow.ig_user_id)],
-      });
-
-      if (cancelledRef.current) return;
-      setDealThreads(threadsResult.rows as unknown as DealThread[]);
-
-      // 3. Fetch recent reels from posts table
-      const postsResult = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.POSTS,
-        queries: [
-          Query.equal('creator_username', creatorRow.username),
-          Query.equal('is_video', true),
-          Query.orderDesc('$createdAt'),
-          Query.limit(3),
-        ],
-      });
-
-      if (cancelledRef.current) return;
-      setRecentReels(postsResult.rows as unknown as PostRow[]);
-
-      // 4. Fetch media and insights from Appwrite IG proxy
-      try {
-        const media = await fetchMedia();
-        if (!cancelledRef.current) {
-          setRecentMedia(media);
-        }
-      } catch (mediaErr) {
-        console.warn(mediaErr);
-        if (mediaErr instanceof Error && mediaErr.message === 'session_expired') {
-          setError('session_expired');
-          return;
-        }
-        // Non-critical — media fetch failure doesn't block profile
-      }
-
-      try {
-        const insightsData = await fetchInsights();
-        if (!cancelledRef.current) {
-          if (insightsData.error) {
-            // Business account required — not an error, just unavailable
-            setInsights(null);
-          } else {
-            setInsights(insightsData);
-          }
-        }
-      } catch (insightsErr) {
-        console.warn(insightsErr);
-        if (insightsErr instanceof Error && insightsErr.message === 'session_expired') {
-          setError('session_expired');
-          return;
-        }
-        // Non-critical — insights fetch failure doesn't block profile
-      }
-    } catch (err) {
-      if (cancelledRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      if (!cancelledRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [clerkUserId]);
-
   useEffect(() => {
-    fetchProfile();
-
     return () => {
       cancelledRef.current = true;
     };
-  }, [fetchProfile]);
+  }, []);
 
-  return { creator, dealThreads, recentReels, recentMedia, insights, isLoading, error, refresh: fetchProfile };
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: ['creator', clerkUserId],
+        queryFn: async (): Promise<Creator | null> => {
+          if (!clerkUserId) return null;
+          return getCreatorByClerkId(clerkUserId);
+        },
+        enabled: !!clerkUserId,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+      },
+      {
+        queryKey: ['creatorThreads', clerkUserId],
+        queryFn: async (): Promise<DealThread[]> => {
+          if (!clerkUserId) return [];
+          const creator = await getCreatorByClerkId(clerkUserId);
+          if (!creator || !creator.ig_user_id) return [];
+          return listThreads(creator.ig_user_id, { orderDesc: false });
+        },
+        enabled: !!clerkUserId,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+      },
+      {
+        queryKey: ['creatorPosts', clerkUserId],
+        queryFn: async (): Promise<PostRow[]> => {
+          if (!clerkUserId) return [];
+          const creator = await getCreatorByClerkId(clerkUserId);
+          if (!creator || !creator.username) return [];
+          return listPosts(creator.username, 3);
+        },
+        enabled: !!clerkUserId,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+      },
+      {
+        queryKey: ['creatorMedia', clerkUserId],
+        queryFn: async (): Promise<InstagramMediaResponse[]> => {
+          if (!clerkUserId) return [];
+          try {
+            return await withFreshSession(() => fetchMedia(), getToken);
+          } catch (err) {
+            if (err instanceof Error && err.message === 'session_expired') {
+              throw err; // surface to error state
+            }
+            // Non-critical — media fetch failure doesn't block profile
+            return [];
+          }
+        },
+        enabled: !!clerkUserId,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+        retry: false,
+      },
+      {
+        queryKey: ['creatorInsights', clerkUserId],
+        queryFn: async (): Promise<InstagramInsightsResponse | null> => {
+          if (!clerkUserId) return null;
+          try {
+            const data = await withFreshSession(() => fetchInsights(), getToken);
+            if (data.error) return null; // business account required
+            return data;
+          } catch (err) {
+            if (err instanceof Error && err.message === 'session_expired') {
+              throw err; // surface to error state
+            }
+            return null;
+          }
+        },
+        enabled: !!clerkUserId,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+        retry: false,
+      },
+    ],
+  });
+
+  const [
+    creatorQuery,
+    threadsQuery,
+    postsQuery,
+    mediaQuery,
+    insightsQuery,
+  ] = results;
+
+  const creator = creatorQuery.data ?? null;
+  const dealThreads = threadsQuery.data ?? [];
+  const recentReels = postsQuery.data ?? [];
+  const recentMedia = mediaQuery.data ?? [];
+  const insights = insightsQuery.data ?? null;
+
+  const isLoading =
+    creatorQuery.isLoading &&
+    threadsQuery.isLoading &&
+    postsQuery.isLoading;
+
+  const sessionExpiredError =
+    mediaQuery.error instanceof Error && mediaQuery.error.message === 'session_expired'
+      ? 'session_expired'
+      : insightsQuery.error instanceof Error && insightsQuery.error.message === 'session_expired'
+        ? 'session_expired'
+        : null;
+
+  const error = useMemo(() => {
+    if (sessionExpiredError) return sessionExpiredError;
+    if (creatorQuery.isError && creatorQuery.error) {
+      const err = creatorQuery.error;
+      return err instanceof Error ? err.message : 'Failed to load profile';
+    }
+    return null;
+  }, [sessionExpiredError, creatorQuery.isError, creatorQuery.error]);
+
+  const refresh = async () => {
+    if (cancelledRef.current) return;
+    queryClient.invalidateQueries({ queryKey: ['creator', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorThreads', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorPosts', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorMedia', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorInsights', clerkUserId] });
+  };
+
+  return {
+    creator,
+    dealThreads,
+    recentReels,
+    recentMedia,
+    insights,
+    isLoading,
+    error,
+    refresh,
+  };
 }

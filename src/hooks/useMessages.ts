@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { tablesDB } from '@/lib/appwrite';
-import { Query, ID, Channel } from 'appwrite';
+import { useMemo, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Channel } from 'appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
-import type { Message } from '@/lib/types';
+import { listMessages, sendMessage as repositorySendMessage, batchMarkAsRead } from '@/lib/repository';
 import { useRealtimeSubscription } from '@/lib/realtime';
+import type { Message } from '@/lib/types';
 
 interface UseMessagesResult {
   messages: Message[];
@@ -15,104 +16,70 @@ interface UseMessagesResult {
 }
 
 export function useMessages(threadId: string): UseMessagesResult {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchMessages = useCallback(async () => {
-    if (!threadId) {
-      setLoading(false);
-      return;
-    }
+  const {
+    data: messages = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['messages', threadId],
+    queryFn: () => listMessages(threadId),
+    enabled: !!threadId,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 
-    setMessages([]);
-    setLoading(true);
-    setError(null);
+  const sendMessageMutation = useMutation({
+    mutationFn: async ({
+      text,
+      isAskAgent,
+      agentAssigned,
+    }: {
+      text: string;
+      isAskAgent?: boolean;
+      agentAssigned?: string;
+    }) => {
+      return repositorySendMessage(threadId, text, { isAskAgent, agentAssigned });
+    },
+    onSuccess: (newMessage) => {
+      queryClient.setQueryData<Message[]>(['messages', threadId], (prev = []) => [
+        ...prev,
+        newMessage,
+      ]);
+    },
+  });
 
-    try {
-      const result = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.MESSAGES,
-        queries: [
-          Query.equal('thread_id', threadId),
-          Query.orderAsc('timestamp'),
-        ],
-      });
-
-      const rawMessages = result.rows as unknown as Message[];
-      setMessages(rawMessages);
-    } catch (err: unknown) {
-      const apiErr = err as { message?: string };
-      setError(apiErr.message ?? 'Failed to load messages');
-    } finally {
-      setLoading(false);
-    }
-  }, [threadId]);
+  const markAsReadMutation = useMutation({
+    mutationFn: async () => {
+      const unreadIds = messages.filter((msg) => !msg.is_read).map((msg) => msg.$id!);
+      if (unreadIds.length === 0) return;
+      return batchMarkAsRead(threadId, unreadIds);
+    },
+    onSuccess: (succeeded) => {
+      if (!succeeded) return;
+      queryClient.setQueryData<Message[]>(['messages', threadId], (prev = []) =>
+        prev.map((msg) =>
+          msg.$id && succeeded.has(msg.$id) ? { ...msg, is_read: true } : msg,
+        ),
+      );
+    },
+  });
 
   const sendMessage = useCallback(
     async (text: string, isAskAgent = false, agentAssigned?: string) => {
       if (!text.trim()) return;
-
-      try {
-        const newMessage = await tablesDB.createRow({
-          databaseId: DATABASE_ID,
-          tableId: TABLES.MESSAGES,
-          rowId: ID.unique(),
-          data: {
-            thread_id: threadId,
-            sender_type: 'creator',
-            body: text,
-            attachments: '[]',
-            agent_name: isAskAgent && agentAssigned ? agentAssigned : '',
-            is_read: false,
-            timestamp: new Date().toISOString(),
-          },
-        });
-
-        setMessages((prev) => [...prev, newMessage as unknown as Message]);
-      } catch (err: unknown) {
-        const apiErr = err as { message?: string };
-        throw new Error(apiErr.message ?? 'Failed to send message');
-      }
+      await sendMessageMutation.mutateAsync({ text, isAskAgent, agentAssigned });
     },
-    [threadId]
+    [sendMessageMutation],
   );
 
   const markAsRead = useCallback(async () => {
     if (!threadId) return;
-
-    try {
-      const unreadMessages = messages.filter((msg) => !msg.is_read);
-      if (unreadMessages.length === 0) return;
-
-      await Promise.all(
-        unreadMessages.map((msg) =>
-          tablesDB.updateRow({
-            databaseId: DATABASE_ID,
-            tableId: TABLES.MESSAGES,
-            rowId: msg.$id!,
-            data: { is_read: true },
-          })
-        )
-      );
-
-      await tablesDB.updateRow({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.DEAL_THREADS,
-        rowId: threadId,
-        data: { unread_count: 0 },
-      });
-
-      setMessages((prev) => prev.map((msg) => ({ ...msg, is_read: true })));
-    } catch (err: unknown) {
-      const apiErr = err as { message?: string };
-      throw new Error(apiErr.message ?? 'Failed to mark messages as read');
-    }
-  }, [threadId, messages]);
-
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    await markAsReadMutation.mutateAsync();
+  }, [threadId, markAsReadMutation]);
 
   const messagesChannel = Channel.tablesdb(DATABASE_ID)
     .table(TABLES.MESSAGES)
@@ -122,11 +89,23 @@ export function useMessages(threadId: string): UseMessagesResult {
   useRealtimeSubscription(messagesChannel.toString(), (event) => {
     const newMessage = event.payload as unknown as Message;
     if (newMessage.thread_id === threadId) {
-      setMessages((prev) =>
-        prev.some((m) => m.$id === newMessage.$id) ? prev : [...prev, newMessage]
+      queryClient.setQueryData<Message[]>(['messages', threadId], (prev = []) =>
+        prev.some((m) => m.$id === newMessage.$id) ? prev : [...prev, newMessage],
       );
     }
   });
 
-  return { messages, loading, error, sendMessage, markAsRead, refresh: fetchMessages };
+  const errorMessage = useMemo(() => {
+    if (!isError || !error) return null;
+    return error instanceof Error ? error.message : 'Failed to load messages';
+  }, [isError, error]);
+
+  return {
+    messages,
+    loading: isLoading,
+    error: errorMessage,
+    sendMessage,
+    markAsRead,
+    refresh: () => refetch().then(() => {}),
+  };
 }

@@ -12,6 +12,7 @@
  */
 
 import { account } from './appwrite';
+import { executeWithRetry } from './resilient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_PROXY_URL;
 
@@ -101,7 +102,7 @@ export interface InstagramInsightsResponse {
  *
  * @throws Error("session_expired") on 401
  */
-export async function fetchProfile(): Promise<InstagramProfileResponse> {
+export async function _fetchProfile(): Promise<InstagramProfileResponse> {
   const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/profile`, {
     method: 'GET',
@@ -120,12 +121,20 @@ export async function fetchProfile(): Promise<InstagramProfileResponse> {
 }
 
 /**
+ * Public wrapper with retry on transient failures.
+ * `withFreshSession` should be applied by the caller if session recovery is needed.
+ */
+export async function fetchProfile(): Promise<InstagramProfileResponse> {
+  return executeWithRetry(() => _fetchProfile());
+}
+
+/**
  * Fetches the current user's Instagram media from the ig-api-proxy function.
  * Returns up to 25 media items.
  *
  * @throws Error("session_expired") on 401
  */
-export async function fetchMedia(): Promise<InstagramMediaResponse[]> {
+async function _fetchMedia(): Promise<InstagramMediaResponse[]> {
   const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/media?amount=25`, {
     method: 'GET',
@@ -143,6 +152,10 @@ export async function fetchMedia(): Promise<InstagramMediaResponse[]> {
   return body.data ?? [];
 }
 
+export async function fetchMedia(): Promise<InstagramMediaResponse[]> {
+  return executeWithRetry(() => _fetchMedia());
+}
+
 /**
  * Fetches Instagram insights from the ig-api-proxy function.
  * Returns insights data or an error object — callers handle gracefully.
@@ -150,7 +163,7 @@ export async function fetchMedia(): Promise<InstagramMediaResponse[]> {
  * @throws Error("session_expired") on 401
  * @throws Error on other non-200 responses
  */
-export async function fetchInsights(): Promise<InstagramInsightsResponse> {
+async function _fetchInsights(): Promise<InstagramInsightsResponse> {
   const headers = await getAuthHeaders();
   const response = await fetchWithTimeout(`${API_BASE_URL}/insights`, {
     method: 'GET',
@@ -166,6 +179,10 @@ export async function fetchInsights(): Promise<InstagramInsightsResponse> {
 
   const body = await response.json();
   return body.data as InstagramInsightsResponse;
+}
+
+export async function fetchInsights(): Promise<InstagramInsightsResponse> {
+  return executeWithRetry(() => _fetchInsights());
 }
 
 /**

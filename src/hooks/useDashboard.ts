@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useMemo } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import { tablesDB } from '@/lib/appwrite';
-import { Query } from 'appwrite';
-import { DATABASE_ID, TABLES } from '@/lib/constants';
+import { useQuery } from '@tanstack/react-query';
+import { getCreatorByClerkId, listThreads, listDeals } from '@/lib/repository';
 import type { Creator, DealThread, Deal } from '@/lib/types';
 
 interface DashboardData {
@@ -15,94 +14,48 @@ interface UseDashboardResult {
   data: DashboardData;
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<void>; // kept for backward compat — useQuery auto-refetches
 }
 
 export function useDashboard(): UseDashboardResult {
   const { user } = useUser();
   const clerkUserId = user?.id ?? '';
-  const [data, setData] = useState<DashboardData>({
-    creator: null,
-    threads: [],
-    deals: [],
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboard = useCallback(async () => {
-    if (!clerkUserId) return;
-    setLoading(true);
-    setError(null);
+  const {
+    data = { creator: null, threads: [], deals: [] },
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['dashboard', clerkUserId],
+    queryFn: async (): Promise<DashboardData> => {
+      if (!clerkUserId) return { creator: null, threads: [], deals: [] };
 
-    try {
-      const creatorsResult = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.CREATORS,
-        queries: [Query.equal('clerk_user_id', clerkUserId), Query.limit(1)],
-      });
+      const creator = await getCreatorByClerkId(clerkUserId);
+      if (!creator) return { creator: null, threads: [], deals: [] };
 
-      if (creatorsResult.rows.length === 0) {
-        setData({ creator: null, threads: [], deals: [] });
-        setLoading(false);
-        return;
-      }
-
-      const creator = creatorsResult.rows[0] as unknown as Creator;
       const igUserId = creator.ig_user_id;
+      if (!igUserId) return { creator, threads: [], deals: [] };
 
-      if (!igUserId) {
-        setData({ creator, threads: [], deals: [] });
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: Fetch active deal threads (exclude completed and declined)
-      const threadsResult = await tablesDB.listRows({
-        databaseId: DATABASE_ID,
-        tableId: TABLES.DEAL_THREADS,
-        queries: [
-          Query.equal('ig_user_id', igUserId),
-          Query.notEqual('status', 'completed'),
-          Query.notEqual('status', 'declined'),
-          Query.orderDesc('last_message_at'),
-        ],
+      const threads = await listThreads(igUserId, {
+        excludeStatuses: ['completed', 'declined'],
       });
 
-      const threads = threadsResult.rows as unknown as DealThread[];
+      const threadIds = threads.map((t) => t.$id).filter(Boolean) as string[];
+      const deals = threadIds.length > 0 ? await listDeals(threadIds) : [];
 
-      // Step 3: Batch fetch deals for all active threads
-      let deals: Deal[] = [];
-      if (threads.length > 0) {
-        const threadIds = threads
-          .map((t) => t.$id)
-          .filter((id): id is string => id != null);
+      return { creator, threads, deals };
+    },
+    enabled: !!clerkUserId,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 
-        if (threadIds.length > 0) {
-          try {
-            const dealsResult = await tablesDB.listRows({
-              databaseId: DATABASE_ID,
-              tableId: TABLES.DEALS,
-              queries: [Query.equal('thread_id', threadIds)],
-            });
-            deals = dealsResult.rows as unknown as Deal[];
-          } catch {
-            // Deals table may be empty; continue without deals
-          }
-        }
-      }
+  const errorMessage = useMemo(() => {
+    if (!isError || !error) return null;
+    return error instanceof Error ? error.message : 'Failed to load dashboard';
+  }, [isError, error]);
 
-      setData({ creator, threads, deals });
-    } catch (err: unknown) {
-      const apiErr = err as { message?: string };
-      setError(apiErr.message ?? 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }, [clerkUserId]);
-
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
-
-  return { data, loading, error, refresh: fetchDashboard };
+  return { data, loading: isLoading, error: errorMessage, refresh: () => refetch().then(() => {}) };
 }

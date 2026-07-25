@@ -1,4 +1,5 @@
 import { account } from './appwrite';
+import { executeWithRetry } from './resilient';
 import type { Models } from 'appwrite';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
@@ -24,25 +25,29 @@ export async function createAppwriteSession(clerkToken: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}/auth/appwrite-session`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${clerkToken}`,
-      },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const fetchSession = async () => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/auth/appwrite-session`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${clerkToken}`,
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Bridge failed' }));
-    throw new Error(error.message || 'Failed to create Appwrite session');
-  }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Bridge failed' }));
+      throw new Error(error.message || 'Failed to create Appwrite session');
+    }
 
-  return response.json() as Promise<{ userId: string; secret: string }>;
+    return response.json() as Promise<{ userId: string; secret: string }>;
+  };
+
+  return executeWithRetry(fetchSession);
 }
 
 /**
