@@ -8,8 +8,9 @@ import {
   TextInput as RNTextInput, StyleSheet, type ViewStyle,
 } from 'react-native';
 
-export const Link = (props: React.ComponentProps<typeof RouterLink> & { className?: string }) =>
-  useCssElement(RouterLink, props, { className: 'style' });
+export function Link(props: { href: string; className?: string; [key: string]: unknown }): React.ReactElement {
+  return useCssElement(RouterLink as unknown as React.ComponentType<Record<string, unknown>>, props, { className: 'style' });
+}
 Link.Trigger = RouterLink.Trigger;
 Link.Menu = RouterLink.Menu;
 Link.MenuAction = RouterLink.MenuAction;
@@ -22,41 +23,51 @@ export const useCSSVariable =
     : (variable: string) => `var(${variable})`;
 
 export type ViewProps = React.ComponentProps<typeof RNView> & { className?: string };
-export const View = (props: ViewProps) => useCssElement(RNView, props, { className: 'style' });
+export function View(props: ViewProps): React.ReactElement {
+  return useCssElement(RNView, props as Record<string, unknown>, { className: 'style' });
+}
 View.displayName = 'CSS(View)';
 
-export const Text = (props: React.ComponentProps<typeof RNText> & { className?: string }) =>
-  useCssElement(RNText, props, { className: 'style' });
+export function Text(props: React.ComponentProps<typeof RNText> & { className?: string }): React.ReactElement {
+  return useCssElement(RNText as unknown as React.ComponentType<Record<string, unknown>>, props, { className: 'style' });
+}
 Text.displayName = 'CSS(Text)';
 
-export const ScrollView = (
+export function ScrollView(
   props: React.ComponentProps<typeof RNScrollView> & {
     className?: string; contentContainerClassName?: string;
   },
-) => useCssElement(RNScrollView, props, {
-  className: 'style', contentContainerClassName: 'contentContainerStyle',
-});
+): React.ReactElement {
+  return useCssElement(RNScrollView as unknown as React.ComponentType<Record<string, unknown>>, props, {
+    className: 'style',
+    contentContainerClassName: 'contentContainerStyle',
+  });
+}
 ScrollView.displayName = 'CSS(ScrollView)';
 
-export const Pressable = (
+export function Pressable(
   props: React.ComponentProps<typeof RNPressable> & { className?: string },
-) => useCssElement(RNPressable, props, { className: 'style' });
+): React.ReactElement {
+  return useCssElement(RNPressable as unknown as React.ComponentType<Record<string, unknown>>, props, { className: 'style' });
+}
 Pressable.displayName = 'CSS(Pressable)';
 
-export const TextInput = (
+export function TextInput(
   props: React.ComponentProps<typeof RNTextInput> & { className?: string },
-) => useCssElement(RNTextInput, props, { className: 'style' });
+): React.ReactElement {
+  return useCssElement(RNTextInput as unknown as React.ComponentType<Record<string, unknown>>, props, { className: 'style' });
+}
 TextInput.displayName = 'CSS(TextInput)';
 
-/** Alias — prefer Reanimated scroll views from screen files when needed.
- *  Kept as RN ScrollView here so `@/tw` never statically imports reanimated (web #8285). */
 export const AnimatedScrollView = ScrollView;
 
-function XXTouchableHighlight(props: React.ComponentProps<typeof RNTouchableHighlight>) {
-  const { underlayColor, ...style } = (StyleSheet.flatten(props.style) || {}) as ViewStyle & {
-    underlayColor?: React.ComponentProps<typeof RNTouchableHighlight>['underlayColor'];
-  };
-  return <RNTouchableHighlight underlayColor={underlayColor} {...props} style={style} />;
+function XXTouchableHighlight(props: { style?: unknown; underlayColor?: string; [key: string]: unknown }) {
+  const { underlayColor, ...rest } = props;
+  const flattened = (StyleSheet.flatten(rest.style as ViewStyle) || {}) as ViewStyle;
+  return <RNTouchableHighlight underlayColor={underlayColor} {...rest} style={flattened} />;
 }
-export const TouchableHighlight = (props: React.ComponentProps<typeof RNTouchableHighlight>) =>
-  useCssElement(XXTouchableHighlight, props, { className: 'style' });
+export function TouchableHighlight(
+  props: { style?: unknown; underlayColor?: string; className?: string; [key: string]: unknown },
+): React.ReactElement {
+  return useCssElement(XXTouchableHighlight as React.ComponentType<Record<string, unknown>>, props, { className: 'style' });
+}
