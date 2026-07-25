@@ -10,7 +10,7 @@ const mockDisconnectInstagram = disconnectInstagram as jest.Mock;
 const mockStartInstagramOAuth = startInstagramOAuth as jest.Mock;
 const mockFetchProfile = fetchProfile as jest.Mock;
 
-jest.mock('@clerk/clerk-expo', () => ({
+jest.mock('@clerk/expo', () => ({
   useAuth: () => ({
     isSignedIn: true,
     userId: 'test-user-id',

@@ -4,12 +4,12 @@ import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { ClerkProvider, useAuth } from "@clerk/expo";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
-import { secureTokenCache } from '@/lib/tokenCache';
+import { tokenCache } from '@clerk/expo/token-cache';
 import AuthScreen from '@/components/auth/AuthScreen';
 import { useClayFonts } from '@/lib/fonts';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
@@ -42,10 +42,7 @@ async function applyClaySystemChrome() {
 
   if (Platform.OS === 'android') {
     try {
-      await NavigationBar.setBackgroundColorAsync(CANVAS);
-      await NavigationBar.setButtonStyleAsync('dark');
-      // Keep nav bar opaque so it blends with cream canvas (no white flash)
-      await NavigationBar.setBorderColorAsync(CANVAS);
+      await NavigationBar.setStyle('dark');
     } catch {
       // Expo Go / older devices may not support every API
     }
@@ -118,8 +115,8 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
-        <StatusBar style="dark" backgroundColor={CANVAS} />
-        <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={secureTokenCache}>
+        <StatusBar style="dark" />
+        <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
           <QueryClientProvider client={queryClient}>
             <AuthGate />
           </QueryClientProvider>

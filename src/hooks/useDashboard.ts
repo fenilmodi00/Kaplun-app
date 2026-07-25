@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser } from "@clerk/expo";
 import { useQuery } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listDeals } from '@/lib/repository';
 import type { Creator, DealThread, Deal } from '@/lib/types';

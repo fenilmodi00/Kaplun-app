@@ -4,7 +4,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { useUser, useAuth, useClerk } from '@clerk/clerk-expo';
+import { useUser, useAuth, useClerk } from "@clerk/expo";
 import { View, Text, ScrollView } from '@/tw';
 import { Image } from '@/tw/image';
 import { cn } from '@/tw/cn';

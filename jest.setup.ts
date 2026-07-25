@@ -33,33 +33,37 @@ jest.mock('@clerk/expo', () => ({
   }),
   useSignIn: () => ({
     signIn: {
-      __internal_future: {
-        create: jest.fn().mockResolvedValue({ error: null }),
-        emailCode: {
-          sendCode: jest.fn().mockResolvedValue({ error: null }),
-          verifyCode: jest.fn().mockResolvedValue({ error: null }),
-        },
-        finalize: jest.fn().mockResolvedValue({ error: null }),
+      status: 'complete',
+      emailCode: {
+        sendCode: jest.fn().mockResolvedValue({ error: null }),
+        verifyCode: jest.fn().mockResolvedValue({ error: null }),
       },
-      status: 'needs_first_factor',
+      password: jest.fn().mockResolvedValue({ error: null }),
+      finalize: jest.fn().mockResolvedValue({ error: null }),
     },
-    setActive: jest.fn().mockResolvedValue(undefined),
-    isLoaded: true,
+    errors: { fields: {} },
+    fetchStatus: 'idle',
   }),
   useSignUp: () => ({
     signUp: {
-      __internal_future: {
-        password: jest.fn().mockResolvedValue({ error: null }),
-        verifications: {
-          sendEmailCode: jest.fn().mockResolvedValue({ error: null }),
-          verifyEmailCode: jest.fn().mockResolvedValue({ error: null }),
-        },
-        finalize: jest.fn().mockResolvedValue({ error: null }),
-      },
       status: 'missing_requirements',
+      unverifiedFields: ['email_address'],
+      missingFields: [],
+      password: jest.fn().mockResolvedValue({ error: null }),
+      verifications: {
+        sendEmailCode: jest.fn().mockResolvedValue({ error: null }),
+        verifyEmailCode: jest.fn().mockResolvedValue({ error: null }),
+      },
+      finalize: jest.fn().mockResolvedValue({ error: null }),
     },
-    setActive: jest.fn().mockResolvedValue(undefined),
-    isLoaded: true,
+    errors: { fields: {} },
+    fetchStatus: 'idle',
+  }),
+  useSSO: () => ({
+    startSSOFlow: jest.fn().mockResolvedValue({
+      createdSessionId: 'test-session',
+      setActive: jest.fn().mockResolvedValue(undefined),
+    }),
   }),
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,

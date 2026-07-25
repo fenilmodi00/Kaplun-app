@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from 'react';
-import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useUser, useAuth } from "@clerk/expo";
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listPosts } from '@/lib/repository';
 import { fetchMedia, fetchInsights } from '@/lib/instagram';

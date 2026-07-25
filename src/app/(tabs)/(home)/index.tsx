@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useUser, useAuth } from "@clerk/expo";
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, ScrollView, Pressable } from '@/tw';

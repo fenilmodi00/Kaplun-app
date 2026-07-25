@@ -29,7 +29,7 @@ jest.mock('expo-router', () => {
 
 const mockGetToken = jest.fn().mockResolvedValue('fake-token');
 
-jest.mock('@clerk/clerk-expo', () => ({
+jest.mock('@clerk/expo', () => ({
   useAuth: jest.fn(() => ({
     isSignedIn: true,
     isLoaded: true,
@@ -78,7 +78,7 @@ describe('AuthGate — Appwrite session retry', () => {
     mockGetToken.mockReset();
     mockGetToken.mockResolvedValue('fake-token');
     jest.useFakeTimers();
-    mockUseAuth = (jest.requireMock('@clerk/clerk-expo') as { useAuth: jest.Mock }).useAuth;
+    mockUseAuth = (jest.requireMock('@clerk/expo') as { useAuth: jest.Mock }).useAuth;
     mockUseAuth.mockReturnValue({
       isSignedIn: true,
       isLoaded: true,

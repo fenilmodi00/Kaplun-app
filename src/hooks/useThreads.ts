@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser } from "@clerk/expo";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Channel } from 'appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';

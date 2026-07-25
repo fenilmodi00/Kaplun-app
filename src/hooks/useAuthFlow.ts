@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useSignIn, useSignUp, useOAuth } from '@clerk/clerk-expo';
+import { useSignIn, useSignUp, useSSO } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 
 export type AuthMode = 'login' | 'signup';
@@ -40,9 +40,9 @@ function clerkErr(err: any): string {
 
 export function useAuthFlow(): UseAuthFlowReturn {
   const router = useRouter();
-  const { signIn, isLoaded: signInLoaded } = useSignIn();
-  const { signUp, isLoaded: signUpLoaded } = useSignUp();
-  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
+  const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
+  const { startSSOFlow } = useSSO();
 
   const [state, setState] = useState<AuthState>({
     mode: 'login',
@@ -68,15 +68,19 @@ export function useAuthFlow(): UseAuthFlowReturn {
     router.replace('/(tabs)/(home)');
   }, [router]);
 
+  const finalizeNavigate = useCallback(({ session }: { session?: { currentTask?: unknown }; decorateUrl?: (url: string) => string }) => {
+    if (session?.currentTask) return;
+    navigateHome();
+  }, [navigateHome]);
+
   const submitEmailPassword = useCallback(async (email: string, password: string) => {
-    if (!signUpLoaded || !signUp) return;
+    if (signUpFetchStatus === 'fetching') return;
     setLoading(true);
     setState((s) => ({ ...s, error: null }));
     emailRef.current = email;
     passwordRef.current = password;
 
-    const future = signUp.__internal_future;
-    const { error } = await future.password({ emailAddress: email, password });
+    const { error } = await signUp.password({ emailAddress: email, password });
     if (error) {
       setState((s) => ({ ...s, step: 'error', error: clerkErr(error) }));
       setLoading(false);
@@ -84,7 +88,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
     }
 
     if (signUp.status === 'complete') {
-      const { error: finErr } = await future.finalize({ navigate: () => navigateHome() });
+      const { error: finErr } = await signUp.finalize({ navigate: finalizeNavigate });
       if (finErr) {
         setState((s) => ({ ...s, step: 'error', error: clerkErr(finErr) }));
       } else {
@@ -94,7 +98,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
       return;
     }
 
-    const { error: sendErr } = await future.verifications.sendEmailCode();
+    const { error: sendErr } = await signUp.verifications.sendEmailCode();
     if (sendErr) {
       setState((s) => ({ ...s, step: 'error', error: clerkErr(sendErr) }));
       setLoading(false);
@@ -108,16 +112,15 @@ export function useAuthFlow(): UseAuthFlowReturn {
       pendingIdentifier: email,
     }));
     setLoading(false);
-  }, [signUpLoaded, signUp, setLoading, navigateHome]);
+  }, [signUpFetchStatus, signUp, setLoading, finalizeNavigate]);
 
   const submitEmailOTP = useCallback(async (email: string) => {
-    if (!signInLoaded || !signIn) return;
+    if (signInFetchStatus === 'fetching') return;
     setLoading(true);
     setState((s) => ({ ...s, error: null }));
     emailRef.current = email;
 
-    const future = signIn.__internal_future;
-    const { error } = await future.create({ identifier: email, strategy: 'email_code' as any });
+    const { error } = await signIn.emailCode.sendCode({ emailAddress: email });
     if (error) {
       setState((s) => ({ ...s, step: 'error', error: clerkErr(error) }));
       setLoading(false);
@@ -125,19 +128,12 @@ export function useAuthFlow(): UseAuthFlowReturn {
     }
 
     if (signIn.status === 'complete') {
-      const { error: finErr } = await future.finalize({ navigate: () => navigateHome() });
+      const { error: finErr } = await signIn.finalize({ navigate: finalizeNavigate });
       if (finErr) {
         setState((s) => ({ ...s, step: 'error', error: clerkErr(finErr) }));
       } else {
         setState((s) => ({ ...s, step: 'complete' }));
       }
-      setLoading(false);
-      return;
-    }
-
-    const { error: sendErr } = await (future.emailCode as any).sendCode();
-    if (sendErr) {
-      setState((s) => ({ ...s, step: 'error', error: clerkErr(sendErr) }));
       setLoading(false);
       return;
     }
@@ -149,16 +145,15 @@ export function useAuthFlow(): UseAuthFlowReturn {
       pendingIdentifier: email,
     }));
     setLoading(false);
-  }, [signInLoaded, signIn, setLoading, navigateHome]);
+  }, [signInFetchStatus, signIn, setLoading, finalizeNavigate]);
 
   const submitOTP = useCallback(async (code: string) => {
-    if (!signInLoaded && !signUpLoaded) return;
+    if (signInFetchStatus === 'fetching' || signUpFetchStatus === 'fetching') return;
     setLoading(true);
     setState((s) => ({ ...s, error: null }));
 
-    if (state.mode === 'signup' && signUp) {
-      const future = signUp.__internal_future;
-      const { error } = await future.verifications.verifyEmailCode({ code });
+    if (state.mode === 'signup') {
+      const { error } = await signUp.verifications.verifyEmailCode({ code });
       if (error) {
         setState((s) => ({ ...s, step: 'otp-sent', error: clerkErr(error) }));
         setLoading(false);
@@ -175,15 +170,14 @@ export function useAuthFlow(): UseAuthFlowReturn {
         return;
       }
 
-      const { error: finErr } = await future.finalize({ navigate: () => navigateHome() });
+      const { error: finErr } = await signUp.finalize({ navigate: finalizeNavigate });
       if (finErr) {
         setState((s) => ({ ...s, step: 'otp-sent', error: clerkErr(finErr) }));
       } else {
         setState((s) => ({ ...s, step: 'complete' }));
       }
-    } else if (signIn) {
-      const future = signIn.__internal_future;
-      const { error } = await future.emailCode.verifyCode({ code });
+    } else {
+      const { error } = await signIn.emailCode.verifyCode({ code });
       if (error) {
         setState((s) => ({ ...s, step: 'otp-sent', error: clerkErr(error) }));
         setLoading(false);
@@ -200,7 +194,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
         return;
       }
 
-      const { error: finErr } = await future.finalize({ navigate: () => navigateHome() });
+      const { error: finErr } = await signIn.finalize({ navigate: finalizeNavigate });
       if (finErr) {
         setState((s) => ({ ...s, step: 'otp-sent', error: clerkErr(finErr) }));
       } else {
@@ -209,18 +203,18 @@ export function useAuthFlow(): UseAuthFlowReturn {
     }
 
     setLoading(false);
-  }, [state.mode, signInLoaded, signUpLoaded, signIn, signUp, setLoading, navigateHome]);
+  }, [state.mode, signInFetchStatus, signUpFetchStatus, signIn, signUp, setLoading, finalizeNavigate]);
 
   const resendOTP = useCallback(async () => {
     if (!emailRef.current) return;
     setLoading(true);
     setState((s) => ({ ...s, error: null }));
 
-    if (state.mode === 'signup' && signUp) {
-      const { error } = await signUp.__internal_future.verifications.sendEmailCode();
+    if (state.mode === 'signup') {
+      const { error } = await signUp.verifications.sendEmailCode();
       if (error) setState((s) => ({ ...s, error: clerkErr(error) }));
-    } else if (signIn) {
-      const { error } = await (signIn.__internal_future.emailCode as any).sendCode();
+    } else {
+      const { error } = await signIn.emailCode.sendCode({ emailAddress: emailRef.current });
       if (error) setState((s) => ({ ...s, error: clerkErr(error) }));
     }
 
@@ -232,9 +226,12 @@ export function useAuthFlow(): UseAuthFlowReturn {
     setState((s) => ({ ...s, error: null }));
 
     try {
-      const { createdSessionId, setActive } = await startOAuthFlow();
-      if (createdSessionId) {
-        await setActive!({ session: createdSessionId });
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_google',
+        redirectUrl: 'kaplun://callback',
+      });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
         setState((s) => ({ ...s, step: 'complete' }));
         navigateHome();
       } else {
@@ -245,7 +242,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
     } finally {
       setLoading(false);
     }
-  }, [startOAuthFlow, setLoading, navigateHome]);
+  }, [startSSOFlow, setLoading, navigateHome]);
 
   return {
     mode: state.mode,

@@ -35,7 +35,8 @@
       "expo-router",
       "expo-web-browser",
       "expo-font",
-      "expo-system-ui"
+      "expo-system-ui",
+      "expo-status-bar"
     ]
   }
 }

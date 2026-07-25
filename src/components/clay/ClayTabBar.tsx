@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable } from 'react-native';
 import { View, Text } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from "expo-router/js-tabs";
 
 const TABS = [
   { name: '(home)', label: 'Home', icon: 'home-outline' as const, iconActive: 'home' as const },

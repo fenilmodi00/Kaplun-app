@@ -5,8 +5,8 @@
  * Mocks fetchProfile to return a profile.
  */
 
-// Mock Clerk before component imports — screens import from @clerk/clerk-expo
-jest.mock('@clerk/clerk-expo', () => ({
+// Mock Clerk before component imports — screens import from @clerk/expo
+jest.mock('@clerk/expo', () => ({
   useAuth: () => ({
     isSignedIn: true,
     userId: 'test-user-id',
