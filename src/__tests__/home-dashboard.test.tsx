@@ -47,6 +47,21 @@ jest.mock('@/lib/auth-bridge', () => ({
   ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
 }));
 
+jest.mock('@/lib/bridge-context', () => ({
+  BridgeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useBridge: () => ({
+    status: 'ready',
+    isReady: true,
+    retry: jest.fn(),
+    setStatus: jest.fn(),
+    attemptKey: 0,
+  }),
+}));
+
+jest.mock('@/lib/repository', () => ({
+  getCreatorByClerkId: jest.fn().mockResolvedValue(null),
+}));
+
 const mockDashboardData = {
   creator: {
     id: '12345',

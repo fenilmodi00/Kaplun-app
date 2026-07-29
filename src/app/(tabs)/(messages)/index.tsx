@@ -7,7 +7,6 @@ import { cn } from '@/tw/cn';
 import { useThreads } from '@/hooks/useThreads';
 import type { DealThread } from '@/lib/types';
 import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 
@@ -144,11 +143,13 @@ export default function MessagesScreen() {
     []
   );
 
-  // Loading state
+  // Loading state — skeleton list, not a lag spinner wall
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ClaySpinner size={40} label="Loading threads..." />
+      <View className="flex-1 bg-canvas p-4" style={{ gap: 10 }}>
+        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
+        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
+        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
       </View>
     );
   }

@@ -5,7 +5,6 @@ import { useLocalSearchParams } from 'expo-router';
 import { View, Text, TextInput } from '@/tw';
 import { cn, clayInput } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { useMessages } from '@/hooks/useMessages';
 import { tablesDB } from '@/lib/appwrite';
@@ -170,11 +169,13 @@ export default function ThreadDetail() {
     [],
   );
 
-  // Loading state
+  // Loading state — skeleton thread, not a spinner wall
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ClaySpinner size={40} label="Loading messages..." />
+      <View className="flex-1 bg-canvas p-4" style={{ gap: 10 }}>
+        <View className="self-start bg-white border border-hairline" style={{ height: 44, width: '70%', borderRadius: 14 }} />
+        <View className="self-end bg-white border border-hairline" style={{ height: 44, width: '55%', borderRadius: 14 }} />
+        <View className="self-start bg-white border border-hairline" style={{ height: 56, width: '65%', borderRadius: 14 }} />
       </View>
     );
   }

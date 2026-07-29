@@ -4,6 +4,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listPosts } from '@/lib/repository';
 import { fetchMedia, fetchInsights } from '@/lib/instagram';
 import { withFreshSession } from '@/lib/with-fresh-session';
+import { useBridge } from '@/lib/bridge-context';
 import type { Creator, DealThread } from '@/lib/types';
 import type { InstagramMediaResponse, InstagramInsightsResponse } from '@/lib/instagram';
 
@@ -34,12 +35,15 @@ export function useCreatorProfile(): UseCreatorProfileResult {
   const clerkUserId = user?.id ?? '';
   const queryClient = useQueryClient();
   const cancelledRef = useRef(false);
+  const { isReady } = useBridge();
 
   useEffect(() => {
     return () => {
       cancelledRef.current = true;
     };
   }, []);
+
+  const canFetch = !!clerkUserId && isReady;
 
   const results = useQueries({
     queries: [
@@ -49,7 +53,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
           if (!clerkUserId) return null;
           return getCreatorByClerkId(clerkUserId);
         },
-        enabled: !!clerkUserId,
+        enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
       },
@@ -61,7 +65,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
           if (!creator || !creator.ig_user_id) return [];
           return listThreads(creator.ig_user_id, { orderDesc: false });
         },
-        enabled: !!clerkUserId,
+        enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
       },
@@ -73,7 +77,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
           if (!creator || !creator.username) return [];
           return listPosts(creator.username, 3);
         },
-        enabled: !!clerkUserId,
+        enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
       },
@@ -91,7 +95,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
             return [];
           }
         },
-        enabled: !!clerkUserId,
+        enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
         retry: false,
@@ -111,7 +115,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
             return null;
           }
         },
-        enabled: !!clerkUserId,
+        enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
         retry: false,
@@ -134,9 +138,10 @@ export function useCreatorProfile(): UseCreatorProfileResult {
   const insights = insightsQuery.data ?? null;
 
   const isLoading =
-    creatorQuery.isLoading &&
-    threadsQuery.isLoading &&
-    postsQuery.isLoading;
+    !isReady ||
+    (creatorQuery.isLoading &&
+      threadsQuery.isLoading &&
+      postsQuery.isLoading);
 
   const sessionExpiredError =
     mediaQuery.error instanceof Error && mediaQuery.error.message === 'session_expired'

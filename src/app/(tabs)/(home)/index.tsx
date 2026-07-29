@@ -6,10 +6,10 @@ import { View, Text, ScrollView, Pressable } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
+import { useBridge } from '@/lib/bridge-context';
 import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { getCreatorByClerkId } from '@/lib/repository';
@@ -346,6 +346,7 @@ function QuickActions() {
 export default function HomeScreen() {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -356,12 +357,16 @@ export default function HomeScreen() {
   const [showPermissions, setShowPermissions] = useState(false);
   const [skipped, setSkipped] = useState(false);
 
-  // Check Instagram connection on mount
+  // Wait for Appwrite bridge, then check Instagram connection — no race.
   useEffect(() => {
     let cancelled = false;
     async function checkConnection() {
       if (!user) {
         setIsCheckingConnection(false);
+        return;
+      }
+      if (!bridgeReady) {
+        setIsCheckingConnection(true);
         return;
       }
       try {
@@ -387,7 +392,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, bridgeReady]);
 
   const handleConnect = useCallback(async () => {
     if (!user) return;
@@ -430,12 +435,42 @@ export default function HomeScreen() {
   const firstName = user?.firstName || 'Creator';
   const displayName = user?.fullName || firstName;
 
-  // ── Loading state ──
-  if (isCheckingConnection) {
+  // Instant shell: real chrome + soft placeholders — never a full-screen lag spinner.
+  // Once we have a profile (or skip), keep the real page even if bridge status flickers.
+  if ((isCheckingConnection || !bridgeReady) && !profile && !skipped) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ClaySpinner size={40} label="Loading…" />
-      </View>
+      <ScrollView
+        className="flex-1 bg-canvas"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          paddingHorizontal: 18,
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 110,
+        }}
+      >
+        <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
+          <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
+            Kaplun
+          </Text>
+        </View>
+        <View
+          className="bg-white/60 border border-hairline"
+          style={{ height: 28, width: '55%', borderRadius: 8, marginBottom: 18 }}
+        />
+        <View
+          className="bg-white border border-hairline"
+          style={{ height: 120, borderRadius: 16, marginBottom: 14 }}
+        />
+        <View
+          className="bg-white border border-hairline"
+          style={{ height: 88, borderRadius: 16, marginBottom: 14 }}
+        />
+        <View className="flex-row" style={{ gap: 10 }}>
+          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+        </View>
+      </ScrollView>
     );
   }
 

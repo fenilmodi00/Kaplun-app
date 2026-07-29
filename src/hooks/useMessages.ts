@@ -4,6 +4,7 @@ import { Channel } from 'appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
 import { listMessages, sendMessage as repositorySendMessage, batchMarkAsRead } from '@/lib/repository';
 import { useRealtimeSubscription } from '@/lib/realtime';
+import { useBridge } from '@/lib/bridge-context';
 import type { Message } from '@/lib/types';
 
 interface UseMessagesResult {
@@ -17,6 +18,7 @@ interface UseMessagesResult {
 
 export function useMessages(threadId: string): UseMessagesResult {
   const queryClient = useQueryClient();
+  const { isReady } = useBridge();
 
   const {
     data: messages = [],
@@ -27,7 +29,7 @@ export function useMessages(threadId: string): UseMessagesResult {
   } = useQuery({
     queryKey: ['messages', threadId],
     queryFn: () => listMessages(threadId),
-    enabled: !!threadId,
+    enabled: !!threadId && isReady,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
@@ -102,7 +104,7 @@ export function useMessages(threadId: string): UseMessagesResult {
 
   return {
     messages,
-    loading: isLoading,
+    loading: !isReady || isLoading,
     error: errorMessage,
     sendMessage,
     markAsRead,

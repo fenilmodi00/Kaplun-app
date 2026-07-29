@@ -1,7 +1,6 @@
 /**
- * AuthGate — Appwrite session creation retry tests.
+ * AuthGate — Appwrite bridge: instant shell + retry + soft failure banner.
  *
- * Tests the bounded retry-with-backoff behavior when createAppwriteSession fails.
  * Uses fake timers to control setTimeout-based backoff.
  */
 
@@ -63,13 +62,13 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 import React from 'react';
-import { render, act } from '@testing-library/react-native';
+import { render, act, fireEvent } from '@testing-library/react-native';
 import RootLayout from '@/app/_layout';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
 
 const mockEnsureAppwriteSession = ensureAppwriteSession as jest.Mock;
 
-describe('AuthGate — Appwrite session retry', () => {
+describe('AuthGate — Appwrite bridge', () => {
   let mockUseAuth: jest.Mock;
 
   beforeEach(() => {
@@ -90,9 +89,31 @@ describe('AuthGate — Appwrite session retry', () => {
     jest.useRealTimers();
   });
 
+  it('renders Slot immediately while bridge is pending (instant shell)', async () => {
+    let resolveBridge!: (v: unknown) => void;
+    mockEnsureAppwriteSession.mockReturnValue(
+      new Promise((resolve) => {
+        resolveBridge = resolve;
+      }),
+    );
+
+    const { queryByText } = await act(async () => render(<RootLayout />));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(queryByText('Slot')).toBeTruthy();
+    expect(queryByText(/Retry/i)).toBeNull();
+
+    await act(async () => {
+      resolveBridge({});
+    });
+    expect(queryByText('Slot')).toBeTruthy();
+  });
+
   it('retries with 1s backoff on first failure, succeeds on retry, no third call', async () => {
     mockEnsureAppwriteSession
-      .mockRejectedValueOnce(new Error('Network error'))
+      .mockRejectedValueOnce(new Error('bridge_failed'))
       .mockResolvedValueOnce({});
 
     await act(async () => { render(<RootLayout />); });
@@ -107,12 +128,13 @@ describe('AuthGate — Appwrite session retry', () => {
     expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
   });
 
-  it('stops after 4 total attempts (1 initial + 3 retries) when all fail', async () => {
-    mockEnsureAppwriteSession.mockRejectedValue(new Error('Network error'));
+  it('stops after 4 total attempts and shows Retry banner without unmounting Slot', async () => {
+    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
 
-    await act(async () => { render(<RootLayout />); });
+    const { queryByText, getByText } = await act(async () => render(<RootLayout />));
     await act(async () => { await Promise.resolve(); });
     expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
+    expect(queryByText('Slot')).toBeTruthy();
 
     await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
@@ -128,10 +150,65 @@ describe('AuthGate — Appwrite session retry', () => {
 
     await act(async () => { jest.advanceTimersByTime(10000); await Promise.resolve(); });
     expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(4);
+    expect(queryByText('Slot')).toBeTruthy();
+    expect(getByText(/Retry/i)).toBeTruthy();
+  });
+
+  it('Retry button re-runs the bridge', async () => {
+    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
+
+    const { getByText } = await act(async () => render(<RootLayout />));
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { jest.advanceTimersByTime(2000); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(getByText(/Retry/i)).toBeTruthy();
+    const callsBefore = mockEnsureAppwriteSession.mock.calls.length;
+
+    mockEnsureAppwriteSession.mockReset();
+    mockEnsureAppwriteSession.mockResolvedValue({});
+
+    await act(async () => {
+      fireEvent.press(getByText(/Retry/i));
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mockEnsureAppwriteSession.mock.calls.length).toBeGreaterThan(0);
+    expect(callsBefore).toBeGreaterThan(0);
+  });
+
+  it('does not re-bridge when Clerk getToken identity changes', async () => {
+    mockEnsureAppwriteSession.mockResolvedValue({});
+
+    const { rerender } = await act(async () => render(<RootLayout />));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
+
+    // Simulate Clerk returning a new getToken function every render.
+    mockUseAuth.mockReturnValue({
+      isSignedIn: true,
+      isLoaded: true,
+      getToken: jest.fn().mockResolvedValue('fake-token'),
+    });
+    await act(async () => {
+      rerender(<RootLayout />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
   });
 
   it('resets retry state on sign-out then sign-in', async () => {
-    mockEnsureAppwriteSession.mockRejectedValue(new Error('Network error'));
+    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
 
     await act(async () => { render(<RootLayout />); });
     await act(async () => { await Promise.resolve(); });

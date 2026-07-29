@@ -55,25 +55,26 @@ Sign-in (Clerk)
 
 **Rule:** Clerk = who. Appwrite = what data. FastAPI = Instagram + mint the Appwrite ticket.
 
-## 5. Startup gate
+## 5. Startup gate (instant shell)
 
 ### AuthGate states
 
 | State | UI |
 |-------|-----|
-| fonts / Clerk loading | spinner |
+| fonts / Clerk loading | brief spinner (boot only) |
 | not signed in | custom `AuthScreen` |
-| signed in, bridging | spinner (“Connecting…”) — **block tabs** |
-| bridge ready | `<Slot />` |
-| bridge failed after retries | error + Retry |
+| signed in, bridging | **mount tabs immediately** + screen skeletons; hooks wait on `BridgeContext.isReady` |
+| bridge ready | data paints into existing shell |
+| bridge failed after retries | soft banner + Retry (shell stays mounted) |
 
 ### Flow
 
 ```text
 Clerk signed-in
-  → ensureAppwriteSession(getToken)   // existing 24h TTL fast-path
-  → only then render tabs
-  → on failure: Retry (keep 3× exponential backoff)
+  → mount app shell immediately (no Connecting wall)
+  → ensureAppwriteSession(getToken) in parallel  // 24h TTL fast-path
+  → hooks/queries enabled only when bridge ready
+  → on failure: soft Retry banner (3× exponential backoff)
 ```
 
 ### Unchanged
@@ -102,5 +103,6 @@ Clerk signed-in
 ## 8. Success criteria
 
 - Cold open after Clerk sign-in never flashes empty dashboards from a missing Appwrite session.
+- User never waits on a full-screen “Connecting…” / lag spinner after sign-in — shell + skeletons only.
 - One diagram + AuthGate state machine is enough to debug auth.
 - Existing bridge performance characteristics (TTL fast-path) preserved.

@@ -1,7 +1,7 @@
 import '@/global.css';
 import '@/lib/polyfills';
-import { useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Platform, StyleSheet, View, Text, Pressable } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ClerkProvider, useAuth } from "@clerk/expo";
@@ -14,6 +14,7 @@ import AuthScreen from '@/components/auth/AuthScreen';
 import { useClayFonts } from '@/lib/fonts';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
+import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_PUBLISHABLE_KEY) {
@@ -49,33 +50,50 @@ async function applyClaySystemChrome() {
   }
 }
 
+/**
+ * Instant shell: mount tabs immediately after Clerk sign-in.
+ * Bridge runs in parallel; hooks wait on BridgeContext.isReady.
+ * Failure shows a soft Retry banner — never a full-screen lag wall.
+ */
 function AuthGate() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const [fontsLoaded, fontsError] = useClayFonts();
+  const { status, setStatus, retry, attemptKey } = useBridge();
+  // Clerk recreates getToken every render — keep it out of effect deps or the
+  // bridge restarts forever (status flips to bridging → home skeleton stuck).
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   useEffect(() => {
     applyClaySystemChrome();
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded || !isSignedIn) {
+      setStatus('idle');
+      return;
+    }
 
     let cancelled = false;
     let timerId: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
     const maxRetries = 3;
 
+    setStatus('bridging');
+
     async function trySession() {
       attempts++;
       try {
-        if (!cancelled) {
-          await ensureAppwriteSession(getToken);
-        }
-      } catch (_err) {
+        if (cancelled) return;
+        await ensureAppwriteSession(() => getTokenRef.current());
+        if (!cancelled) setStatus('ready');
+      } catch (_err: unknown) {
         if (cancelled) return;
         if (attempts <= maxRetries) {
           const backoff = Math.pow(2, attempts - 1) * 1000;
           timerId = setTimeout(trySession, backoff);
+        } else {
+          setStatus('failed');
         }
       }
     }
@@ -86,7 +104,7 @@ function AuthGate() {
       cancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, setStatus, attemptKey]);
 
   if (!fontsLoaded && !fontsError) {
     return (
@@ -108,7 +126,26 @@ function AuthGate() {
     return <AuthScreen />;
   }
 
-  return <Slot />;
+  return (
+    <View style={styles.shell}>
+      {status === 'failed' ? (
+        <View style={styles.banner} testID="bridge-failed-banner">
+          <Text style={styles.bannerText}>Couldn’t connect to your workspace</Text>
+          <Pressable
+            onPress={retry}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View style={styles.shellBody}>
+        <Slot />
+      </View>
+    </View>
+  );
 }
 
 export default function RootLayout() {
@@ -118,7 +155,9 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
           <QueryClientProvider client={queryClient}>
-            <AuthGate />
+            <BridgeProvider>
+              <AuthGate />
+            </BridgeProvider>
           </QueryClientProvider>
         </ClerkProvider>
       </View>
@@ -131,6 +170,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: CANVAS,
   },
+  shell: {
+    flex: 1,
+    backgroundColor: CANVAS,
+  },
+  shellBody: {
+    flex: 1,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -138,6 +184,33 @@ const styles = StyleSheet.create({
     backgroundColor: CANVAS,
     gap: 16,
     padding: 24,
+  },
+  banner: {
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bannerText: {
+    color: '#fffaf0',
+    fontSize: 14,
+    flex: 1,
+    fontFamily: 'Inter_500Medium',
+  },
+  retryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#fffaf0',
+    borderRadius: 10,
+  },
+  retryText: {
+    color: '#1a1a2e',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
   },
   errorText: {
     color: '#ef4444',

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useUser } from "@clerk/expo";
 import { useQuery } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listDeals } from '@/lib/repository';
+import { useBridge } from '@/lib/bridge-context';
 import type { Creator, DealThread, Deal } from '@/lib/types';
 
 interface DashboardData {
@@ -20,6 +21,7 @@ interface UseDashboardResult {
 export function useDashboard(): UseDashboardResult {
   const { user } = useUser();
   const clerkUserId = user?.id ?? '';
+  const { isReady } = useBridge();
 
   const {
     data = { creator: null, threads: [], deals: [] },
@@ -47,7 +49,7 @@ export function useDashboard(): UseDashboardResult {
 
       return { creator, threads, deals };
     },
-    enabled: !!clerkUserId,
+    enabled: !!clerkUserId && isReady,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
@@ -57,5 +59,11 @@ export function useDashboard(): UseDashboardResult {
     return error instanceof Error ? error.message : 'Failed to load dashboard';
   }, [isError, error]);
 
-  return { data, loading: isLoading, error: errorMessage, refresh: () => refetch().then(() => {}) };
+  // Treat bridge-pending as loading so screens show skeletons, not empty states.
+  return {
+    data,
+    loading: !isReady || isLoading,
+    error: errorMessage,
+    refresh: () => refetch().then(() => {}),
+  };
 }

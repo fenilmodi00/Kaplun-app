@@ -11,9 +11,7 @@ import { cn } from '@/tw/cn';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { useDashboard } from '@/hooks/useDashboard';
 import { disconnectInstagram } from '@/lib/instagram';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
-import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
 import { ClayAvatar } from '@/components/clay/ClayAvatar';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
@@ -91,11 +89,17 @@ export default function ProfileScreen() {
     }
   }
 
-  // Loading state
+  // Loading state — skeleton, not a full-screen spinner
   if (isLoading || dashboardLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas p-4">
-        <ClaySpinner size={40} label="Loading profile..." />
+      <View className="flex-1 bg-canvas p-4" style={{ gap: 12 }}>
+        <View className="items-center" style={{ gap: 10, marginTop: 24 }}>
+          <View className="bg-white border border-hairline" style={{ width: 88, height: 88, borderRadius: 44 }} />
+          <View className="bg-white border border-hairline" style={{ height: 20, width: 140, borderRadius: 8 }} />
+          <View className="bg-white/60 border border-hairline" style={{ height: 14, width: 100, borderRadius: 6 }} />
+        </View>
+        <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16, marginTop: 16 }} />
+        <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16 }} />
       </View>
     );
   }

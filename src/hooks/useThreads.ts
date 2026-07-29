@@ -5,6 +5,7 @@ import { Channel } from 'appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
 import { getCreatorByClerkId, listThreads, getLastMessagePreviews } from '@/lib/repository';
 import { useRealtimeSubscription } from '@/lib/realtime';
+import { useBridge } from '@/lib/bridge-context';
 import type { DealThread } from '@/lib/types';
 
 interface ThreadWithPreview extends DealThread {
@@ -22,6 +23,7 @@ export function useThreads(): UseThreadsResult {
   const { user } = useUser();
   const clerkUserId = user?.id ?? '';
   const queryClient = useQueryClient();
+  const { isReady } = useBridge();
 
   const {
     data: threads = [],
@@ -50,7 +52,7 @@ export function useThreads(): UseThreadsResult {
         lastMessagePreview: previews.get(thread.$id ?? '') ?? '',
       }));
     },
-    enabled: !!clerkUserId,
+    enabled: !!clerkUserId && isReady,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
@@ -65,5 +67,10 @@ export function useThreads(): UseThreadsResult {
     return error instanceof Error ? error.message : 'Failed to load threads';
   }, [isError, error]);
 
-  return { threads, loading: isLoading, error: errorMessage, refresh: () => refetch().then(() => {}) };
+  return {
+    threads,
+    loading: !isReady || isLoading,
+    error: errorMessage,
+    refresh: () => refetch().then(() => {}),
+  };
 }

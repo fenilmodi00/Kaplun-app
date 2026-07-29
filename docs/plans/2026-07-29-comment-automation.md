@@ -6,6 +6,8 @@
 
 **Architecture:** Meta webhooks → FastAPI `POST /webhooks/instagram` (HMAC-verified) → durable Appwrite job rows → BackgroundTasks + 60s sweeper → worker ports openreply's pipeline (match → dedup → rate-limit → public reply → DM → log). Official Graph API v25.0 only (instagrapi untouched for read-only features). The app calls FastAPI for all automation data; automation tables are server-owned. Design doc: `docs/plans/2026-07-29-comment-automation-design.md`.
 
+> **Architecture Decision — Database:** All automation tables live in the existing **Appwrite TablesDB** (`vernacular_saas`). A second database (Supabase) was considered for volume concerns, but at the projected scale (~10k comments/day, 14-day retention → ~140k active rows) the operational overhead of two databases outweighs any benefit. Appwrite Pro handles this comfortably. A nightly retention cron (Task 28) caps table growth by purging logs older than 14 days.
+
 **Tech Stack:** FastAPI + httpx (async) + Appwrite TablesDB (server SDK) + cryptography (AES-256-GCM) + pytest · Expo SDK 54 + @tanstack/react-query v5 + jest-expo · openreply source: MIT (attribution headers required in every ported file).
 
 ## Key facts (verified — read before starting)
@@ -2357,7 +2359,36 @@ One-liner in the POST handler: `store.record_webhook_event(raw.decode())` inside
 
 ---
 
-## Task 28: Worker health surface
+## Task 28: Log retention cron (14-day rolling window)
+
+**Files:**
+- Modify: `api/automation_store.py` (+`delete_logs_older_than(iso)`, `delete_webhook_events_older_than(iso)`)
+- Modify: `api/routes/cron.py` (`POST /cron/retain-logs` — same secret gate)
+- Test: `api/tests/test_cron.py` (+1 case)
+
+**Step 1: Failing test** — wrong/missing `X-Cron-Secret` → 401; fake store with old + new rows → only old rows deleted; empty store → zero error.
+
+**Step 2: Implement**
+
+```python
+@router.post("/retain-logs")
+async def retain_logs(x_cron_secret: str | None = Header(None)):
+    _check_secret(x_cron_secret)
+    store = get_automation_store()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    deleted_logs = await run_in_threadpool(store.delete_logs_older_than, cutoff)
+    deleted_events = await run_in_threadpool(store.delete_webhook_events_older_than, cutoff)
+    logger.info("retention: deleted {} log rows and {} webhook events older than {}", deleted_logs, deleted_events, cutoff)
+    return {"deleted_logs": deleted_logs, "deleted_webhook_events": deleted_events}
+```
+
+Store implementations use `Query.less_than("created_at", cutoff)` with `list_rows` + `delete_row` in batches, or `deleteDocument` if the Appwrite SDK supports range deletes. If batch-deletion is unavailable, paginate through and delete 100 at a time.
+
+**Step 3: Run → pass. Commit** — `feat: 14-day log retention cron`
+
+---
+
+## Task 29: Worker health surface
 
 **Files:**
 - Modify: `api/automation_store.py` (+`count_jobs_by_status()`)
@@ -2374,7 +2405,7 @@ Response: `{"pending": n, "processing": n, "failed": n, "done": n, "last_webhook
 
 # USER TRACK — LAUNCH GATES (owner: user, parallel to all phases)
 
-## Task 29: Meta Developer Portal webhook configuration
+## Task 30: Meta Developer Portal webhook configuration
 
 1. App Dashboard → your app → **Webhooks** (or Instagram → Webhooks).
 2. Callback URL: `https://<deployed-api-host>/webhooks/instagram`.
@@ -2384,7 +2415,7 @@ Response: `{"pending": n, "processing": n, "failed": n, "done": n, "last_webhook
 
 Done-when: Meta's "Test" button for the comments field returns 200 from our endpoint (check server logs for `webhook_events`).
 
-## Task 30: App Review submission
+## Task 31: App Review submission
 
 After Phase 1 exit check passes (record the screencast THEN):
 1. App Review → Permissions and Features → request **Advanced Access** for `instagram_business_manage_comments` and `instagram_business_manage_messages`.
@@ -2393,7 +2424,7 @@ After Phase 1 exit check passes (record the screencast THEN):
 
 Done-when: both permissions show "Approved — Advanced Access". Launch to real users waits on this.
 
-## Task 31: End-to-end dev-mode verification script
+## Task 32: End-to-end dev-mode verification script
 
 Repeatable manual script (keep in `docs/plans/` as an appendix or runbook):
 1. Test Instagram account A (role in Meta app) connects via OAuth in the dev build → webhook subscription logged.
@@ -2407,7 +2438,7 @@ Repeatable manual script (keep in `docs/plans/` as an appendix or runbook):
 
 # Appendix A — Execution notes
 
-- **Order**: Tasks 1→2 (manual Appwrite step can run parallel with 3–4) → 3,4,5,7,8,9 → 10 → 11 → 12 → 6 → app tasks 13–19 → Phase 2 (20–24, any order except 21 before 23's CTR) → Phase 3 (25–28) → user track gates launch.
+- **Order**: Tasks 1→2 (manual Appwrite step can run parallel with 3–4) → 3,4,5,7,8,9 → 10 → 11 → 12 → 6 → app tasks 13–19 → Phase 2 (20–24, any order except 21 before 23's CTR) → Phase 3 (25–28; 28 runs nightly) → 29 → user track gates 30–32 launch.
 - **Every ported file carries the MIT attribution header** (openreply, Copyright (c) 2026 Anish Raj, Diwen Huang).
 - **Commit after every task**; never batch tasks into one commit.
 - If an Appwrite `Query` operator name differs in the installed SDK version, check `appwrite.query` source and adapt — don't bypass with client-side filtering on unbounded tables.
