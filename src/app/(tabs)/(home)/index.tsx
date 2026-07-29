@@ -12,6 +12,8 @@ import { AnimatedView } from '@/tw/animated';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
 import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
+import { getCreatorByClerkId } from '@/lib/repository';
+import type { Creator } from '@/lib/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -20,6 +22,25 @@ function getGreeting(): string {
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+/**
+ * Map a Creator row from Appwrite TablesDB to the InstagramProfileResponse
+ * shape the UI expects. Used as the source-of-truth after OAuth succeeds,
+ * so the UI never blocks on the (sometimes slow / abortable) ig-api-proxy call.
+ */
+function profileFromCreator(creator: Creator): InstagramProfileResponse {
+  return {
+    id: creator.ig_user_id || creator.$id || '',
+    username: creator.username || creator.ig_username || '',
+    name: creator.full_name || '',
+    biography: creator.bio || '',
+    website: creator.external_url,
+    followers_count: creator.follower_count ?? 0,
+    follows_count: creator.following_count ?? 0,
+    media_count: creator.media_count ?? creator.post_count ?? 0,
+    profile_picture_url: creator.profile_pic_url || '',
+  };
 }
 
 function getInitials(name: string): string {
@@ -344,8 +365,18 @@ export default function HomeScreen() {
         return;
       }
       try {
-        const p = await fetchProfile();
-        if (!cancelled) setProfile(p);
+        // Prefer Appwrite TablesDB as source of truth — it's local/fast and
+        // doesn't depend on the ig-api-proxy cloud function (which can cold-start
+        // or abort on the 15s timeout). Only fall back to the proxy if Appwrite
+        // has no row yet.
+        const creator = await getCreatorByClerkId(user.id);
+        if (creator && creator.is_onboarded && creator.username) {
+          if (!cancelled) setProfile(profileFromCreator(creator));
+        } else {
+          // No onboarded creator row — try the proxy as enrichment.
+          const p = await fetchProfile();
+          if (!cancelled) setProfile(p);
+        }
       } catch (_err: unknown) {
         // session_expired or not connected yet — leave profile null
       } finally {
@@ -366,8 +397,24 @@ export default function HomeScreen() {
       const appwriteUser = await ensureAppwriteSession(getToken);
       const success = await startInstagramOAuth(user.id, appwriteUser.$id);
       if (!success) throw new Error('Instagram connection was not successful');
-      const p = await fetchProfile();
-      setProfile(p);
+
+      // Appwrite is the source of truth — the OAuth callback already wrote
+      // the creator row. Load it immediately so the UI shows connected even
+      // if the ig-api-proxy enrichment call below times out or aborts.
+      const creator = await getCreatorByClerkId(user.id);
+      if (creator && creator.is_onboarded && creator.username) {
+        setProfile(profileFromCreator(creator));
+      }
+
+      // Best-effort enrichment from the proxy. If this aborts (15s timeout
+      // on a cold Appwrite Function) or fails, we keep the Appwrite-sourced
+      // profile rather than showing a false "connection failed" error.
+      try {
+        const p = await fetchProfile();
+        setProfile(p);
+      } catch (_enrichErr: unknown) {
+        // Keep the profile from Appwrite — do not surface this as an error.
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to connect';
       if (message === 'Instagram OAuth was cancelled') {
