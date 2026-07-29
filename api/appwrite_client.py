@@ -152,7 +152,7 @@ class AppwriteClient:
             return False
 
     def save_creator_session(self, clerk_user_id: str, session_json: str) -> bool:
-        """Persist the Instagram session JSON to the creator's access_token field.
+        """Persist the Instagram session JSON to the creator's ig_session_json field.
 
         Args:
             clerk_user_id: Clerk user ID.
@@ -179,7 +179,7 @@ class AppwriteClient:
                 database_id=APPWRITE_DATABASE_ID,
                 collection_id=APPWRITE_CREATORS_TABLE_ID,
                 document_id=doc_id,
-                data={"access_token": session_json},
+                data={"ig_session_json": session_json},
             )
             logger.info("Saved IG session for {}", clerk_user_id)
             return True

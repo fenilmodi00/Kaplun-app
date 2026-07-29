@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse
 from loguru import logger
 
 from api.appwrite_client import get_appwrite_client
+from api.token_crypto import get_token_crypto
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -234,6 +235,7 @@ def build_creator_data(
         "account_type": account_type,
         "is_onboarded": True,
         "access_token": access_token,
+        "ig_session_json": None,
         "token_expires_at": token_expires_at,
         "updated_at": now,
     }
@@ -475,7 +477,8 @@ async def instagram_callback(
 
     # ── Step 8: Store in Appwrite ─────────────────────────────────────────
     try:
-        creator_data = build_creator_data(profile, long_token, token_expires_at, clerk_id)
+        encrypted_token = get_token_crypto().encrypt(long_token)
+        creator_data = build_creator_data(profile, encrypted_token, token_expires_at, clerk_id)
         success = get_appwrite_client().store_creator_profile(clerk_id, creator_data)
         if success:
             logger.info("[OAUTH] Creator profile stored in Appwrite for clerk_id={}", clerk_id)
