@@ -493,6 +493,20 @@ async def instagram_callback(
             content=error_page(f"Failed to save your profile: {exc}", redirect_url),
         )
 
+    # ── Step 8.5: Subscribe the account to comment/message webhooks ──────
+    # Failure must NOT fail the OAuth flow — the cron reconciler (Task 25)
+    # still catches comments, and re-subscribe can be retried.
+    try:
+        from api.graph_client import subscribe_to_webhooks
+        await subscribe_to_webhooks(
+            ig_account_id=profile.get("id", ""),
+            access_token=long_token,
+            subscribed_fields=["comments", "messages", "messaging_postbacks"],
+        )
+        logger.info("[OAUTH] Webhook subscription ok for @{}", username)
+    except Exception as exc:
+        logger.error("[OAUTH] Webhook subscription failed for @{}: {}", username, exc)
+
     # ── Step 9: Return success page ───────────────────────────────────────
     logger.info("[OAUTH] OAuth flow completed successfully for @{} (clerk_id={})", username, clerk_id)
     return HTMLResponse(content=success_page(username, redirect_url))
