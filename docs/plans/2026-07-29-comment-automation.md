@@ -56,8 +56,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 os.environ.setdefault("TOKEN_ENCRYPTION_KEY", base64.urlsafe_b64encode(b"k" * 32).decode())
 os.environ.setdefault("WEBHOOK_VERIFY_TOKEN", "test-verify-token")
 os.environ.setdefault("INSTAGRAM_APP_SECRET", "test-ig-secret")
+os.environ.setdefault("FACEBOOK_APP_SECRET", "test-fb-secret")
 os.environ.setdefault("CRON_SECRET", "test-cron-secret")
 os.environ.setdefault("PUBLIC_BASE_URL", "https://api.example.com")
+# Automation store talks to Appwrite; these prevent accidental production use in tests.
+os.environ.setdefault("APPWRITE_ENDPOINT", "https://cloud.appwrite.io/v1")
+os.environ.setdefault("APPWRITE_PROJECT_ID", "test-project")
+os.environ.setdefault("APPWRITE_API_KEY", "test-api-key")
+os.environ.setdefault("APPWRITE_DATABASE_ID", "test-db")
+# Disable the sweeper during TestClient tests (lifespan is never started anyway,
+# but this guards any future test that imports the app at module scope).
+os.environ.setdefault("AUTOMATION_SWEEPER_ENABLED", "false")
 ```
 
 ```ini
@@ -89,7 +98,7 @@ git commit -m "test: pytest scaffolding + cryptography dep for automation engine
 - `button_text` string(64) opt · `reveal_message` string(2000) opt
 - `track_links` bool default false · `public_reply_enabled` bool default false · `public_reply_message` string(2000) opt
 - `status` string(16) req default `active` · `created_at` datetime req · `updated_at` datetime req
-- Indexes: `clerk_user_id` asc · (`ig_user_id`, `status`) asc
+- Indexes: (`clerk_user_id`, `created_at`) asc · (`ig_user_id`, `status`) asc
 
 **`automation_logs`**:
 - `automation_id` string(64) req · `clerk_user_id` string(128) req · `ig_user_id` string(64) req
@@ -97,12 +106,12 @@ git commit -m "test: pytest scaffolding + cryptography dep for automation engine
 - `comment_text` string(1000) opt · `matched_keyword` string(128) opt
 - `action` string(32) req (`pending`|`dm_sent`|`button_dm_sent`|`reveal_sent`|`reply_sent`|`skipped`|`failed`)
 - `reason` string(500) opt · `created_at` datetime req
-- Indexes: (`automation_id`, `comment_id`) · (`automation_id`, `created_at` desc) · (`ig_user_id`, `created_at`)
+- Indexes: (`automation_id`, `comment_id`) UNIQUE · (`automation_id`, `created_at` desc) · (`ig_user_id`, `created_at`) · (`clerk_user_id`, `created_at`)
 
 **`automation_jobs`**:
-- `type` string(32) req · `payload` string(4000) req · `status` string(16) req default `pending`
-- `attempts` integer req default 0 · `run_at` datetime req · `created_at` datetime req
-- Index: (`status`, `run_at`)
+- `type` string(32) req · `payload` string(8000) req · `status` string(16) req default `pending`
+- `attempts` integer req default 0 · `run_at` datetime req · `created_at` datetime req · `updated_at` datetime req
+- Indexes: (`status`, `run_at`) · (`status`, `updated_at`)
 
 **`tracked_links`**: `automation_id` string(64) req · `target_url` string(2000) req · `created_at` datetime req — row `$id` IS the slug (create with custom ID).
 
@@ -110,7 +119,11 @@ git commit -m "test: pytest scaffolding + cryptography dep for automation engine
 
 **`webhook_events`**: `payload` string(16000) req · `received_at` datetime req.
 
-Record table IDs in `api/.env` + `api/.env.example`:
+**Existing `creators` table updates** (manual console step):
+- Add `ig_session_json` string(4000) opt. The instagrapi legacy path currently stores session JSON in `access_token`; OAuth tokens and session JSON must not share the same column. After deploying Task 4, migrate any JSON blobs out of `access_token` into `ig_session_json` and clear `access_token` for those rows.
+- Add index `token_expires_at` asc (Task 24 range-scans creators by expiry).
+
+Record table IDs in `api/.env` (gitignored, real values) and `api/.env.example` (template, blank values):
 ```
 APPWRITE_AUTOMATIONS_TABLE_ID=...
 APPWRITE_AUTOMATION_LOGS_TABLE_ID=...
@@ -120,11 +133,19 @@ APPWRITE_LINK_CLICKS_TABLE_ID=...
 APPWRITE_WEBHOOK_EVENTS_TABLE_ID=...
 WEBHOOK_VERIFY_TOKEN=<random-string>
 TOKEN_ENCRYPTION_KEY=<python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())">
+INSTAGRAM_APP_SECRET=<from Meta Dashboard>
+FACEBOOK_APP_SECRET=<from Meta Dashboard; optional fallback>
 CRON_SECRET=<random-string>
 PUBLIC_BASE_URL=https://<deployed-api-host>
+AUTOMATION_SWEEPER_ENABLED=true
 ```
 
-**Commit:** `git add api/.env.example && git commit -m "chore: automation table env vars"`
+**Commit:** Create `api/.env.example` with the variables above (blank values), then:
+```bash
+git add api/.env.example
+git commit -m "chore: automation table env vars template"
+```
+(Real values go in the gitignored `api/.env`.)
 
 ---
 
@@ -348,6 +369,12 @@ encrypted_token = get_token_crypto().encrypt(long_token)
 creator_data = build_creator_data(profile, encrypted_token, token_expires_at, clerk_id)
 ```
 
+**Step 5b: Resolve `access_token` vs instagrapi-session collision**
+The legacy `api/appwrite_client.py:save_creator_session` stores instagrapi session JSON in `creators.access_token`. OAuth tokens must live in the same column, so:
+1. Update `save_creator_session` to persist the instagrapi session JSON in `creators.ig_session_json` (new column from Task 2) and leave `access_token` untouched.
+2. Update `build_creator_data` in `api/routes/instagram_oauth.py` to set `ig_session_json=None` and `access_token=<encrypted_token>`.
+3. (Optional but recommended) Prefix encrypted values in `TokenCrypto.encrypt` so the plaintext fallback in `decrypt_or_plaintext` is unambiguous: return `"enc1:" + base64url(nonce||ciphertext)`. `decrypt` strips the prefix before decoding.
+
 **Step 6: Verify** — `python -m pytest api/tests/ -v` green + `python -c "import api.main"` no import errors.
 
 **Step 7: Commit** — `git add api/token_crypto.py api/tests/test_token_crypto.py api/routes/instagram_oauth.py && git commit -m "feat: AES-256-GCM token encryption at rest (port from openreply)"`
@@ -480,7 +507,7 @@ def _handle(data: dict, status: int) -> dict:
         trace = err.get("fbtrace_id")
         if code == 190:
             raise TokenExpiredError(code, msg, sub, trace)
-        if code in (368, 4, 17):
+        if code in (368, 4, 17, 613, 32):
             raise GraphRateLimitError(code, msg, sub, trace)
         if code in (10, 100, 200):
             raise MetaPermissionError(code, msg, sub, trace)
@@ -590,9 +617,11 @@ async def refresh_long_lived_token(long_lived_token: str, *, client=None) -> dic
 
 async def subscribe_to_webhooks(ig_account_id: str, *, access_token: str,
                                 subscribed_fields: list[str], client=None) -> dict:
-    return await _request(client, "POST", f"{GRAPH_BASE}/{ig_account_id}/subscribed_apps",
-                          headers=_auth(access_token),
-                          json={"subscribed_fields": subscribed_fields})
+    # Meta documents this as a form/query POST; a JSON array body can silently fail.
+    return await _request(client, "POST",
+                          f"{GRAPH_BASE}/{ig_account_id}/subscribed_apps",
+                          params={"subscribed_fields": ",".join(subscribed_fields),
+                                  "access_token": access_token})
 ```
 
 **Step 4: Run → 4 passed.**
@@ -617,7 +646,7 @@ async def subscribe_to_webhooks(ig_account_id: str, *, access_token: str,
         await subscribe_to_webhooks(
             ig_account_id=profile.get("id", ""),
             access_token=long_token,
-            subscribed_fields=["comments", "messages"],
+            subscribed_fields=["comments", "messages", "messaging_postbacks"],
         )
         logger.info("[OAUTH] Webhook subscription ok for @{}", username)
     except Exception as exc:
@@ -741,6 +770,9 @@ def parse_comment_events(payload: dict) -> list[CommentEvent]:
             if change.get("field") != "comments":
                 continue
             value = change.get("value") or {}
+            # Skip nested thread replies — only top-level comments should trigger automations.
+            if value.get("parent_id"):
+                continue
             comment_id = value.get("id") or value.get("comment_id")
             media_id = (value.get("media") or {}).get("id") or value.get("media_id")
             commenter_id = (value.get("from") or {}).get("id")
@@ -796,6 +828,7 @@ class AutomationStore:
     def update_automation(self, automation_id: str, data: dict) -> dict
     def delete_automation(self, automation_id: str) -> None
     def list_active_for_ig(self, ig_user_id: str) -> list[dict]           # equal ig_user_id + equal status "active"
+    def list_all_active_automations(self) -> list[dict]                   # equal status "active" (Task 25)
     # logs
     def create_log(self, data: dict) -> dict
     def find_log(self, automation_id: str, comment_id: str) -> dict | None  # equal both, limit 1
@@ -812,10 +845,23 @@ class AutomationStore:
     def update_job(self, job_id: str, data: dict) -> dict
     def list_due_jobs(self, now_iso: str, limit: int = 25) -> list[dict]
         # equal status "pending", less_than_equal run_at now_iso, order_asc run_at
-    # creators (read-only, for token lookup)
+    def list_stale_processing_jobs(self, stale_before_iso: str, limit: int = 100) -> list[dict]
+        # equal status "processing", less_than updated_at stale_before_iso
+    # creators
     def get_creator_by_clerk_id(self, clerk_user_id: str) -> dict | None  # creators table, equal clerk_user_id, limit 1
+    def list_creators_with_token_expiring_before(self, iso: str) -> list[dict]
+        # less_than_equal token_expires_at, order_asc token_expires_at (Task 24)
+    def update_creator_token(self, creator_id: str, encrypted_token: str, expires_at_iso: str) -> dict  # Task 24
+    # tracked links (Task 21)
+    def create_tracked_link(self, automation_id: str, target_url: str, slug: str) -> dict
+    def get_tracked_link(self, slug: str) -> dict | None
+    def get_tracked_link_for_automation(self, automation_id: str) -> dict | None
+    def record_click(self, slug: str) -> None
+    def count_clicks(self, slug: str) -> int
 
 
+# The Appwrite Python SDK is synchronous; async callers (worker, webhook, sweeper,
+# cron) must wrap store calls with `await run_in_threadpool(...)`.
 def get_automation_store() -> AutomationStore:  # module-level singleton
     ...
 ```
@@ -955,9 +1001,11 @@ from api.graph_client import GraphRateLimitError, MetaApiError, TokenExpiredErro
 from api.keyword_matcher import match_keywords
 from api.rate_limiter import check_dm_rate
 from api.token_crypto import decrypt_or_plaintext, get_token_crypto
+from starlette.concurrency import run_in_threadpool
 
 BACKOFF_MINUTES = [5, 15, 45]
 MAX_ATTEMPTS = 3
+STALE_PROCESSING_MINUTES = 10
 
 
 def _now() -> datetime:
@@ -966,7 +1014,7 @@ def _now() -> datetime:
 
 def personalize(text: str, commenter_name: str | None) -> str:
     """{username} -> commenter name (or 'there') — port of renderMessage* personalization."""
-    return re.sub(r"\{username\}", commenter_name or "there", text or "", flags=re.IGNORECASE)
+    return re.sub(r"\{username\}", lambda _: commenter_name or "there", text or "", flags=re.IGNORECASE)
 
 
 async def process_comment_event(store, event: dict, requeue_attempt: int = 0) -> str:
@@ -1060,6 +1108,15 @@ async def process_comment_event(store, event: dict, requeue_attempt: int = 0) ->
     return "done"
 
 
+# Implementation note for `process_comment_event`:
+# 1. Every synchronous `store.*` call above must be wrapped with
+#    `await run_in_threadpool(...)` so the async worker never blocks the event loop.
+# 2. Because `automation_logs` has a UNIQUE index on (automation_id, comment_id)
+#    (Task 2), `store.create_log` can raise a duplicate-key error when two
+#    workers/webhooks/reconcilers race. Catch `AppwriteException` with code
+#    409 and treat it as "already handled → skip".
+
+
 def _fail_log(store, existing, auto, event, reason: str) -> None:
     action = "skipped" if reason.startswith("skipped") else "failed"
     if existing:
@@ -1078,35 +1135,41 @@ def _fail_log(store, existing, auto, event, reason: str) -> None:
 
 
 async def run_job(store, job_id: str) -> None:
-    job = store.get_job(job_id)
+    job = await run_in_threadpool(store.get_job, job_id)
     if not job or job.get("status") == "done":
         return
-    store.update_job(job_id, {"status": "processing"})
+    now_iso = _now().isoformat()
+    await run_in_threadpool(store.update_job, job_id, {"status": "processing", "updated_at": now_iso})
     try:
         payload = json.loads(job["payload"])
         result = await process_comment_event(store, payload, payload.get("requeue_attempt", 0))
+        now_iso = _now().isoformat()
         if result == "requeue":
             payload["requeue_attempt"] = payload.get("requeue_attempt", 0) + 1
-            store.update_job(job_id, {
+            await run_in_threadpool(store.update_job, job_id, {
                 "status": "pending",
                 "payload": json.dumps(payload),
                 "run_at": (_now() + timedelta(minutes=30)).isoformat(),
+                "updated_at": now_iso,
             })
         else:
-            store.update_job(job_id, {"status": "done"})
+            await run_in_threadpool(store.update_job, job_id, {"status": "done", "updated_at": now_iso})
     except MetaApiError as exc:
+        now_iso = _now().isoformat()
         attempts = int(job.get("attempts", 0)) + 1
         if attempts >= MAX_ATTEMPTS:
-            store.update_job(job_id, {"status": "failed", "attempts": attempts})
+            await run_in_threadpool(store.update_job, job_id, {"status": "failed", "attempts": attempts, "updated_at": now_iso})
             logger.error("job {} dead-lettered after {} attempts: {}", job_id, attempts, exc)
         else:
-            store.update_job(job_id, {
+            await run_in_threadpool(store.update_job, job_id, {
                 "status": "pending",
                 "attempts": attempts,
                 "run_at": (_now() + timedelta(minutes=BACKOFF_MINUTES[attempts - 1])).isoformat(),
+                "updated_at": now_iso,
             })
     except Exception:
-        store.update_job(job_id, {"status": "failed", "attempts": int(job.get("attempts", 0)) + 1})
+        now_iso = _now().isoformat()
+        await run_in_threadpool(store.update_job, job_id, {"status": "failed", "attempts": int(job.get("attempts", 0)) + 1, "updated_at": now_iso})
         logger.exception("job {} failed unexpectedly", job_id)
 
 
@@ -1119,11 +1182,24 @@ async def run_job_safe(store, job_id: str) -> None:
 
 
 async def sweeper_loop(store, interval_seconds: int = 60) -> None:
-    """Lifespan task: pick up due pending jobs (crash recovery + requeues)."""
+    """Lifespan task: pick up due pending jobs and recover crashed processing jobs."""
     while True:
         try:
-            for job in store.list_due_jobs(_now().isoformat()):
+            now = _now()
+            for job in await run_in_threadpool(store.list_due_jobs, now.isoformat()):
                 await run_job_safe(store, job["$id"])
+            stale_before = (now - timedelta(minutes=STALE_PROCESSING_MINUTES)).isoformat()
+            for job in await run_in_threadpool(store.list_stale_processing_jobs, stale_before):
+                attempts = int(job.get("attempts", 0)) + 1
+                if attempts >= MAX_ATTEMPTS:
+                    await run_in_threadpool(store.update_job, job["$id"], {"status": "failed", "attempts": attempts, "updated_at": _now().isoformat()})
+                else:
+                    await run_in_threadpool(store.update_job, job["$id"], {
+                        "status": "pending",
+                        "attempts": attempts,
+                        "run_at": _now().isoformat(),
+                        "updated_at": _now().isoformat(),
+                    })
         except Exception:
             logger.exception("sweeper iteration failed")
         await asyncio.sleep(interval_seconds)
@@ -1214,6 +1290,7 @@ from loguru import logger
 from api.automation_store import get_automation_store
 from api.automation_worker import run_job_safe
 from api.webhook_security import parse_comment_events, parse_postback_events, verify_signature
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(tags=["webhooks"])
 
@@ -1236,18 +1313,31 @@ async def webhook_events(request: Request, background_tasks: BackgroundTasks):
     if not verify_signature(raw, request.headers.get("x-hub-signature-256"), secrets):
         raise HTTPException(status_code=401)
 
-    payload = json.loads(raw.decode() or "{}")
+    # Always return 200 after a valid signature — Meta retries non-200s.
+    # Any parse/storage failure is logged and handled by the reconciler (Task 25).
+    try:
+        payload = json.loads(raw.decode() or "{}")
+    except Exception as exc:
+        logger.warning("webhook payload is not valid JSON: {}", exc)
+        return {"status": "ok"}
+
     store = get_automation_store()
+    try:
+        for event in parse_comment_events(payload):
+            # Keep job payload small; the worker re-fetches comment text if needed.
+            small_event = {**asdict(event), "comment_text": event.comment_text[:1500]}
+            job = await run_in_threadpool(store.create_job, "process_comment", small_event)
+            background_tasks.add_task(run_job_safe, store, job["$id"])
+            logger.info("queued process_comment job {} for comment {}", job["$id"], event.comment_id)
 
-    for event in parse_comment_events(payload):
-        job = store.create_job("process_comment", asdict(event))
-        background_tasks.add_task(run_job_safe, store, job["$id"])
-        logger.info("queued process_comment job {} for comment {}", job["$id"], event.comment_id)
-
-    # Phase 2 (Task 20): postback events get parsed here and queued as
-    # "send_reveal" jobs. parse_postback_events is already imported/ready.
-    if parse_postback_events(payload):
-        logger.info("postback events received (handler lands in Task 20)")
+        # Phase 2 (Task 20): postback events get parsed here and queued as
+        # "send_reveal" jobs.
+        for event in parse_postback_events(payload):
+            job = await run_in_threadpool(store.create_job, "send_reveal", asdict(event))
+            background_tasks.add_task(run_job_safe, store, job["$id"])
+            logger.info("queued send_reveal job {} for user {}", job["$id"], event.user_id)
+    except Exception as exc:
+        logger.exception("webhook enqueue failed: {}", exc)
 
     return {"status": "ok"}
 ```
@@ -1266,9 +1356,12 @@ app.include_router(webhooks_router)          # add right after
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("API server starting up")
-    sweeper = asyncio.create_task(sweeper_loop(get_automation_store()))
+    sweeper = None
+    if os.getenv("AUTOMATION_SWEEPER_ENABLED", "true").lower() == "true":
+        sweeper = asyncio.create_task(sweeper_loop(get_automation_store()))
     yield
-    sweeper.cancel()
+    if sweeper:
+        sweeper.cancel()
     sm = get_session_manager()
     logged_out = sm.logout_all()
     logger.info("API server shutting down (logged out {} sessions)", logged_out)
@@ -1297,11 +1390,18 @@ async def lifespan(app: FastAPI):
 
 Auth override pattern for tests:
 ```python
+import pytest
 from api.main import app
-from api.auth import get_clerk_user_id
-app.dependency_overrides[get_clerk_user_id] = lambda: "clerk_test_1"
+from api.routes.automations import require_clerk
+
+app.dependency_overrides[require_clerk] = lambda: "clerk_test_1"
+
+@pytest.fixture(autouse=True)
+def _clear_overrides():
+    yield
+    app.dependency_overrides.clear()
 ```
-(In the router, use `Depends(require_clerk)` where `require_clerk` is a tiny local Header wrapper delegating to `get_clerk_user_id` — same shape as `main.py`'s `require_clerk_user_id`, defined in the router file to avoid the circular import.)
+(In the router, use `Depends(require_clerk)` where `require_clerk` is a tiny local Header wrapper delegating to `get_clerk_user_id` — same shape as `main.py`'s `require_clerk_user_id`, defined in the router file to avoid the circular import. FastAPI `dependency_overrides` keys on the exact callable passed to `Depends`, so the override must target `require_clerk`, not `get_clerk_user_id`.)
 
 **Step 2: Run → FAIL (404).**
 
@@ -1451,15 +1551,19 @@ def list_logs(automation_id: str, clerk_user_id: str = Depends(require_clerk)):
 
 **Step 2: Run** — `bun test src/__tests__/automations-client.test.ts` → FAIL (module missing).
 
-**Step 3: Implement** — follow `src/lib/instagram.ts` exactly: same `API_BASE_URL` env, `getAuthHeaders()` (import it from `./instagram` — export it there if it isn't already), `fetchWithTimeout`, 401→`'session_expired'`, `executeWithRetry` for GETs:
+**Step 3: Implement** — this client talks to the FastAPI backend (`EXPO_PUBLIC_IG_API_BASE_URL`), not the Appwrite JWT proxy in `instagram.ts`. It must use **Clerk Bearer tokens** (same auth contract as `auth-bridge.ts`). Because Clerk JWTs are short-lived, `getToken` is threaded into every call and fetched per request.
 
 ```typescript
 // src/lib/automations.ts
-/** FastAPI client for the comment-automation engine. Mirrors instagram.ts conventions. */
+/** FastAPI client for the comment-automation engine. Uses Clerk Bearer auth. */
 import { executeWithRetry } from './resilient';
-import { getAuthHeaders, fetchWithTimeout } from './instagram';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
+const FETCH_TIMEOUT_MS = 15_000;
+
+if (!API_BASE_URL) {
+  throw new Error('EXPO_PUBLIC_IG_API_BASE_URL is not set. Add it to your .env file.');
+}
 
 export type TargetType = 'all_posts' | 'specific_posts' | 'next_reel';
 export type MatchMode = 'whole_word' | 'partial';
@@ -1512,13 +1616,34 @@ export interface CreateAutomationInput {
 }
 
 export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;
+export type GetToken = () => Promise<string | null>;
 
-async function request<T>(path: string, init: RequestInit, retry: boolean): Promise<T> {
-  if (!API_BASE_URL) throw new Error('EXPO_PUBLIC_IG_API_BASE_URL is not set');
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function authHeaders(getToken: GetToken): Promise<HeadersInit> {
+  const token = await getToken();
+  if (!token) throw new Error('session_expired');
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+async function request<T>(
+  getToken: GetToken,
+  path: string,
+  init: RequestInit,
+  retry: boolean,
+): Promise<T> {
   const call = async (): Promise<T> => {
     const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: await getAuthHeaders(),
+      headers: await authHeaders(getToken),
     });
     if (res.status === 401) throw new Error('session_expired');
     if (!res.ok) {
@@ -1530,39 +1655,37 @@ async function request<T>(path: string, init: RequestInit, retry: boolean): Prom
   return retry ? executeWithRetry(call) : call();
 }
 
-export async function listAutomations(): Promise<Automation[]> {
-  const data = await request<{ automations: Automation[] }>('/automations', { method: 'GET' }, true);
+export async function listAutomations(getToken: GetToken): Promise<Automation[]> {
+  const data = await request<{ automations: Automation[] }>(getToken, '/automations', { method: 'GET' }, true);
   return data.automations;
 }
 
-export async function createAutomation(input: CreateAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>('/automations', {
+export async function createAutomation(getToken: GetToken, input: CreateAutomationInput): Promise<Automation> {
+  const data = await request<{ automation: Automation }>(getToken, '/automations', {
     method: 'POST', body: JSON.stringify(input),
   }, false);
   return data.automation;
 }
 
-export async function updateAutomation(id: string, patch: PatchAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>(`/automations/${id}`, {
+export async function updateAutomation(getToken: GetToken, id: string, patch: PatchAutomationInput): Promise<Automation> {
+  const data = await request<{ automation: Automation }>(getToken, `/automations/${id}`, {
     method: 'PATCH', body: JSON.stringify(patch),
   }, false);
   return data.automation;
 }
 
-export async function deleteAutomation(id: string): Promise<void> {
-  await request<null>(`/automations/${id}`, { method: 'DELETE' }, false);
+export async function deleteAutomation(getToken: GetToken, id: string): Promise<void> {
+  await request<null>(getToken, `/automations/${id}`, { method: 'DELETE' }, false);
 }
 
-export async function listAutomationLogs(id: string): Promise<AutomationLog[]> {
-  const data = await request<{ logs: AutomationLog[] }>(`/automations/${id}/logs`, { method: 'GET' }, true);
+export async function listAutomationLogs(getToken: GetToken, id: string): Promise<AutomationLog[]> {
+  const data = await request<{ logs: AutomationLog[] }>(getToken, `/automations/${id}/logs`, { method: 'GET' }, true);
   return data.logs;
 }
 ```
 
-(If `getAuthHeaders`/`fetchWithTimeout` aren't exported from `instagram.ts` today, add `export` to their declarations — no behavior change.)
-
-**Step 4: Run → pass.**
-**Step 5: Commit** — `git add src/lib/automations.ts src/__tests__/automations-client.test.ts src/lib/instagram.ts && git commit -m "feat: automations FastAPI client"`
+**Step 4: Run → pass.** (The 401 test now asserts the header is `Bearer <mock-token>` rather than `x-appwrite-user-jwt`.)
+**Step 5: Commit** — `git add src/lib/automations.ts src/__tests__/automations-client.test.ts && git commit -m "feat: automations FastAPI client (Clerk Bearer auth)"`
 
 ---
 
@@ -1576,7 +1699,7 @@ export async function listAutomationLogs(id: string): Promise<AutomationLog[]> {
 
 **Step 2: Run → FAIL.**
 
-**Step 3: Implement** — react-query pattern from `useMessages.ts`, `withFreshSession` wrapper from `useCreatorProfile.ts`:
+**Step 3: Implement** — react-query pattern from `useMessages.ts`. Pass `getToken` from `useAuth()` directly into the client functions (Clerk Bearer tokens are short-lived; `withFreshSession` is for the Appwrite-JWT proxy in `instagram.ts` and is not needed here).
 
 ```typescript
 // src/hooks/useAutomations.ts
@@ -1592,9 +1715,7 @@ import {
   type Automation,
   type AutomationLog,
   type CreateAutomationInput,
-  type PatchAutomationInput,
 } from '@/lib/automations';
-import { withFreshSession } from '@/lib/with-fresh-session';
 
 export function useAutomations() {
   const { user } = useUser();
@@ -1604,30 +1725,26 @@ export function useAutomations() {
   const query = useQuery({
     queryKey: ['automations', user?.id],
     enabled: !!user,
-    queryFn: () => withFreshSession(() => listAutomations(), getToken),
+    queryFn: () => listAutomations(getToken),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['automations'] });
 
   const toggle = useMutation({
     mutationFn: (automation: Automation) =>
-      withFreshSession(
-        () => updateAutomation(automation.$id, {
-          status: automation.status === 'active' ? 'paused' : 'active',
-        }),
-        getToken,
-      ),
+      updateAutomation(getToken, automation.$id, {
+        status: automation.status === 'active' ? 'paused' : 'active',
+      }),
     onSuccess: invalidate,
   });
 
   const create = useMutation({
-    mutationFn: (input: CreateAutomationInput) =>
-      withFreshSession(() => createAutomation(input), getToken),
+    mutationFn: (input: CreateAutomationInput) => createAutomation(getToken, input),
     onSuccess: invalidate,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => withFreshSession(() => deleteAutomation(id), getToken),
+    mutationFn: (id: string) => deleteAutomation(getToken, id),
     onSuccess: invalidate,
   });
 
@@ -1648,7 +1765,7 @@ export function useAutomationLogs(automationId: string) {
   const query = useQuery({
     queryKey: ['automationLogs', automationId],
     enabled: !!automationId,
-    queryFn: () => withFreshSession(() => listAutomationLogs(automationId), getToken),
+    queryFn: () => listAutomationLogs(getToken, automationId),
   });
   return {
     logs: query.data ?? [] as AutomationLog[],
@@ -1659,7 +1776,7 @@ export function useAutomationLogs(automationId: string) {
 }
 ```
 
-**Step 4: Run → pass.**
+**Step 4: Run → pass.** (Hook tests need a `renderHook` wrapper with `QueryClientProvider`; add a `src/__tests__/test-utils.tsx` helper if one does not exist by then.)
 **Step 5: Commit** — `git add src/hooks/useAutomations.ts src/__tests__/useAutomations.test.tsx && git commit -m "feat: useAutomations + useAutomationLogs hooks"`
 
 ---
@@ -1709,9 +1826,9 @@ export default function AutomateScreen() {
 <Tabs.Screen name="(automate)" />
 ```
 
-In `src/components/clay/ClayTabBar.tsx` add to the tab config (mirror existing entries' shape):
+In `src/components/clay/ClayTabBar.tsx` add to the tab config (the actual component uses `label`/`iconActive`, not `title`/`activeIcon`):
 ```tsx
-{ name: '(automate)', title: 'Automate', icon: 'flash-outline', activeIcon: 'flash' },
+{ name: '(automate)', label: 'Automate', icon: 'flash-outline' as const, iconActive: 'flash' as const },
 ```
 (If ClayTabBar keys off route names, place the entry so order is Home, Automate, Messages, Publish, Insights, Profile. Verify `Ionicons` has `flash`/`flash-outline` — it does.)
 
@@ -1761,7 +1878,7 @@ Use `@/tw` primitives (`View`, `Text`, `ScrollView`/`FlatList`, `Pressable`), `c
 **Step 3: Implement** — single-scroll form (pattern: AuthScreen field styling, `clayInput`/`clayCard` from `@/tw/cn`). Sections in order:
 
 1. **Name** — `TextInput` (clayInput).
-2. **Target** — 3-option segmented control: "All posts" / "Specific posts" / "Next reel". "Specific posts" opens a multi-select list of the creator's posts (`listPosts` from `@/lib/repository` via the existing `POSTS` table pattern used by `useCreatorProfile`). "Next reel" shows an explainer caption ("Automatically applies to every new reel you post").
+2. **Target** — 3-option segmented control: "All posts" / "Specific posts" / "Next reel". "Specific posts" opens a multi-select list of the creator's **Graph media** (`fetchMedia()` from `@/lib/instagram`). The picker must store the Graph `media.id` (not the `POSTS` table `shortcode`) because the worker matches `event["media_id"]` against `media_ids`. "Next reel" shows an explainer caption ("Automatically applies to every new reel you post").
 3. **Keywords** — chip input: `TextInput` + "Add" button; chips with remove ×. Match-mode toggle: "Whole word" (default, explainer: '"link" won't match "linking"') vs "Contains".
 4. **Opening DM** — Phase 1: direct message only (mode selector is hidden until Task 20). `TextInput` multiline with `{username}` hint ("We'll replace {username} with the commenter's name") and live character count (2000 cap).
 5. **Public reply** — toggle + multiline input (optional, same personalization hint).
@@ -1944,7 +2061,11 @@ URL_PATTERN = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
 
 
 def new_slug() -> str:
-    return secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8]
+    for _ in range(3):
+        slug = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8]
+        if slug:
+            return slug
+    raise RuntimeError("failed to generate tracked-link slug")
 
 
 def extract_first_url(message: str) -> str | None:
@@ -1954,11 +2075,11 @@ def extract_first_url(message: str) -> str | None:
 
 def render_message_with_tracking(message: str, commenter_name: str | None,
                                  tracked_url: str | None, destination_url: str | None) -> str:
-    rendered = re.sub(r"\{username\}", commenter_name or "there", message or "", flags=re.IGNORECASE)
+    rendered = re.sub(r"\{username\}", lambda _: commenter_name or "there", message or "", flags=re.IGNORECASE)
     if not tracked_url or not destination_url:
         return rendered
     if re.search(r"\{link\}", rendered, re.IGNORECASE):
-        return re.sub(r"\{link\}", tracked_url, rendered, flags=re.IGNORECASE)
+        return re.sub(r"\{link\}", lambda _: tracked_url, rendered, flags=re.IGNORECASE)
     if destination_url in rendered:
         return rendered.replace(destination_url, tracked_url)
     return rendered.replace(destination_url.rstrip("/"), tracked_url)
@@ -2074,6 +2195,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Header, HTTPException
 from loguru import logger
+from starlette.concurrency import run_in_threadpool
 
 from api.automation_store import get_automation_store
 from api.graph_client import refresh_long_lived_token
@@ -2094,13 +2216,17 @@ async def refresh_tokens(x_cron_secret: str | None = Header(None)):
     store = get_automation_store()
     threshold = (datetime.now(timezone.utc) + timedelta(days=REFRESH_WINDOW_DAYS)).isoformat()
     refreshed, failed = 0, 0
-    for creator in store.list_creators_with_token_expiring_before(threshold):
+    creators = await run_in_threadpool(store.list_creators_with_token_expiring_before, threshold)
+    for creator in creators:
+        # Only refresh OAuth-connected creators. Rows that hold only an
+        # instagrapi session JSON have it in `ig_session_json`, not `access_token`.
         if not creator.get("access_token"):
             continue
         try:
             token = decrypt_or_plaintext(creator["access_token"], get_token_crypto())
             out = await refresh_long_lived_token(token)
-            store.update_creator_token(
+            await run_in_threadpool(
+                store.update_creator_token,
                 creator["$id"],
                 get_token_crypto().encrypt(out["access_token"]),
                 (datetime.now(timezone.utc) + timedelta(seconds=out["expires_in"])).isoformat(),
@@ -2111,6 +2237,8 @@ async def refresh_tokens(x_cron_secret: str | None = Header(None)):
             logger.error("token refresh failed for creator {}: {}", creator.get("$id"), exc)
     return {"refreshed": refreshed, "failed": failed}
 ```
+
+_Note: the `creators` table must have an index on `token_expires_at` (Task 2); without it the range query + sort will throw an Appwrite 400._
 
 (`update_creator_token` on the store wraps the creators-table row update. Scheduling itself is infra: document `curl -X POST -H "X-Cron-Secret: $CRON_SECRET" $PUBLIC_BASE_URL/cron/refresh-tokens` daily in the route docstring.)
 
@@ -2149,6 +2277,7 @@ from api import graph_client
 from api.keyword_matcher import match_keywords
 from api.token_crypto import decrypt_or_plaintext, get_token_crypto
 from api.webhook_security import CommentEvent
+from starlette.concurrency import run_in_threadpool
 
 LOOKBACK_HOURS = 72
 MAX_MEDIA_PER_AUTOMATION = 10
@@ -2157,8 +2286,9 @@ MAX_MEDIA_PER_AUTOMATION = 10
 async def reconcile_once(store) -> dict:
     since_ms = int((datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).timestamp() * 1000)
     enqueued = 0
-    for auto in store.list_all_active_automations():
-        creator = store.get_creator_by_clerk_id(auto["clerk_user_id"])
+    autos = await run_in_threadpool(store.list_all_active_automations)
+    for auto in autos:
+        creator = await run_in_threadpool(store.get_creator_by_clerk_id, auto["clerk_user_id"])
         if not creator or not creator.get("access_token"):
             continue
         token = decrypt_or_plaintext(creator["access_token"], get_token_crypto())
@@ -2176,12 +2306,12 @@ async def reconcile_once(store) -> dict:
                 commenter = c.get("from") or {}
                 if commenter.get("id") == auto["ig_user_id"]:
                     continue
-                if store.find_log(auto["$id"], c["id"]):
+                if await run_in_threadpool(store.find_log, auto["$id"], c["id"]):
                     continue
                 if not match_keywords(c.get("text") or "", auto.get("keywords") or [],
                                       auto.get("match_mode", "whole_word") == "whole_word").matched:
                     continue
-                store.create_job("process_comment", asdict(CommentEvent(
+                await run_in_threadpool(store.create_job, "process_comment", asdict(CommentEvent(
                     instagram_account_id=auto["ig_user_id"],
                     comment_id=c["id"],
                     comment_text=c.get("text") or "",
@@ -2192,6 +2322,8 @@ async def reconcile_once(store) -> dict:
                 enqueued += 1
     return {"enqueued": enqueued}
 ```
+
+_Race safety: the `automation_logs (automation_id, comment_id)` index is UNIQUE (Task 2). If the webhook and reconciler both enqueue the same comment, the worker's `create_log` will hit a duplicate-key error; it should treat that as "already handled → skip" rather than fail the job._
 
 Cron route addition: `POST /cron/reconcile` (same `_check_secret`) → `await reconcile_once(store)`. Document daily/hourly scheduling in the docstring.
 
@@ -2247,7 +2379,7 @@ Response: `{"pending": n, "processing": n, "failed": n, "done": n, "last_webhook
 1. App Dashboard → your app → **Webhooks** (or Instagram → Webhooks).
 2. Callback URL: `https://<deployed-api-host>/webhooks/instagram`.
 3. Verify token: the `WEBHOOK_VERIFY_TOKEN` value from `api/.env`.
-4. Subscribe to fields: **`comments`** and **`messages`** (messaging postbacks ride the messages field).
+4. Subscribe to fields: **`comments`**, **`messages`**, and **`messaging_postbacks`**. Button-tap postbacks are a separate webhook field, not part of `messages`.
 5. Confirm the deployed backend has the same `INSTAGRAM_APP_SECRET` / `WEBHOOK_VERIFY_TOKEN` env values as `api/.env`.
 
 Done-when: Meta's "Test" button for the comments field returns 200 from our endpoint (check server logs for `webhook_events`).
