@@ -42,6 +42,7 @@ from api.automation_store import get_automation_store
 from api.automation_worker import sweeper_loop
 from api.routes.instagram_oauth import router as instagram_oauth_router
 from api.routes.webhooks import router as webhooks_router
+from api.routes.automations import router as automations_router
 
 
 class LoginRequest(BaseModel):
@@ -127,6 +128,7 @@ def require_clerk_user_id(authorization: str | None = Header(None)) -> str:
 
 app.include_router(instagram_oauth_router)
 app.include_router(webhooks_router)
+app.include_router(automations_router)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
