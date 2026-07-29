@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 # Load api/.env before any module reads os.environ (auth, appwrite, CORS).
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+import asyncio
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -37,7 +38,10 @@ from instagrapi.exceptions import (
 from api.auth import get_clerk_user_id
 from api.session_manager import StaleSessionError, get_session_manager
 from api.appwrite_client import get_appwrite_client
+from api.automation_store import get_automation_store
+from api.automation_worker import sweeper_loop
 from api.routes.instagram_oauth import router as instagram_oauth_router
+from api.routes.webhooks import router as webhooks_router
 
 
 class LoginRequest(BaseModel):
@@ -59,7 +63,12 @@ class CreateSessionResponse(BaseModel):
 async def lifespan(app: FastAPI):
     """Startup/shutdown context for the FastAPI app."""
     logger.info("API server starting up")
+    sweeper = None
+    if os.getenv("AUTOMATION_SWEEPER_ENABLED", "true").lower() == "true":
+        sweeper = asyncio.create_task(sweeper_loop(get_automation_store()))
     yield
+    if sweeper:
+        sweeper.cancel()
     # Graceful shutdown: logout all active Instagram sessions
     sm = get_session_manager()
     logged_out = sm.logout_all()
@@ -117,6 +126,7 @@ def require_clerk_user_id(authorization: str | None = Header(None)) -> str:
 # ── Instagram OAuth ───────────────────────────────────────────────────────────
 
 app.include_router(instagram_oauth_router)
+app.include_router(webhooks_router)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
