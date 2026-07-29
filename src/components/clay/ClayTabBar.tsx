@@ -6,6 +6,7 @@ import type { BottomTabBarProps } from "expo-router/js-tabs";
 
 const TABS = [
   { name: '(home)', label: 'Home', icon: 'home-outline' as const, iconActive: 'home' as const },
+  { name: '(automate)', label: 'Automate', icon: 'flash-outline' as const, iconActive: 'flash' as const },
   { name: '(messages)', label: 'Messages', icon: 'chatbubble-outline' as const, iconActive: 'chatbubble' as const },
   { name: '(publish)', label: 'Publish', icon: 'add-circle-outline' as const, iconActive: 'add-circle' as const },
   { name: '(insights)', label: 'Insights', icon: 'stats-chart-outline' as const, iconActive: 'stats-chart' as const },
