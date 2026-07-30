@@ -1,18 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FlatList, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useUser, useAuth } from '@clerk/expo';
 import { View, Text, Pressable } from '@/tw';
 import { cn } from '@/tw/cn';
 import { useAutomations } from '@/hooks/useAutomations';
+import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
-import { startInstagramOAuth } from '@/lib/instagram-oauth';
-import { getCreatorByClerkId } from '@/lib/repository';
-import { useBridge } from '@/lib/bridge-context';
-import { ensureAppwriteSession } from '@/lib/auth-bridge';
 import type { Automation } from '@/lib/automations';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -250,10 +246,9 @@ function SkeletonRow() {
 // ── Main screen ──────────────────────────────────────────────────────
 
 export default function AutomateScreen() {
-  const { user } = useUser();
-  const { getToken } = useAuth();
-  const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
+  const { connected, loading: gateLoading, connect } = useAutomationGate();
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const {
     automations,
@@ -263,58 +258,16 @@ export default function AutomateScreen() {
     toggleStatus,
   } = useAutomations();
 
-  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-
-  // Check Instagram connection
-  useEffect(() => {
-    let cancelled = false;
-    async function checkConnection() {
-      if (!user) {
-        setIsCheckingConnection(false);
-        return;
-      }
-      if (!bridgeReady) {
-        setIsCheckingConnection(true);
-        return;
-      }
-      try {
-        const creator = await getCreatorByClerkId(user.id);
-        if (creator?.access_token) {
-          if (!cancelled) setIsConnected(true);
-        }
-      } catch (_err: unknown) {
-        // Leave disconnected
-      } finally {
-        if (!cancelled) setIsCheckingConnection(false);
-      }
-    }
-    checkConnection();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, bridgeReady]);
-
   const handleConnect = useCallback(async () => {
-    if (!user) return;
     setIsConnecting(true);
     try {
-      const appwriteUser = await ensureAppwriteSession(getToken);
-      await startInstagramOAuth(user.id, appwriteUser.$id);
-      const creator = await getCreatorByClerkId(user.id);
-      if (creator?.access_token) {
-        setIsConnected(true);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (message !== 'Instagram OAuth was cancelled') {
-        // Could surface error UI here in future
-      }
+      await connect();
+    } catch {
+      // OAuth cancellation is expected — ignore
     } finally {
       setIsConnecting(false);
     }
-  }, [user, getToken]);
+  }, [connect]);
 
   const handlePress = useCallback(
     (automation: Automation) => {
@@ -349,7 +302,7 @@ export default function AutomateScreen() {
   const keyExtractor = useCallback((item: Automation) => item.$id, []);
 
   // Connection-check loading state
-  if (isCheckingConnection) {
+  if (gateLoading) {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
@@ -364,7 +317,7 @@ export default function AutomateScreen() {
   }
 
   // Not connected
-  if (!isConnected) {
+  if (!connected) {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />

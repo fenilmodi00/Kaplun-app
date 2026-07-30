@@ -8,6 +8,10 @@ jest.mock('@/hooks/useAutomations', () => ({
   useAutomations: jest.fn(),
 }));
 
+jest.mock('@/hooks/useAutomationGate', () => ({
+  useAutomationGate: jest.fn(),
+}));
+
 jest.mock('@/lib/instagram', () => ({
   fetchMedia: jest.fn(),
 }));
@@ -20,11 +24,13 @@ import React from 'react';
 import { render, waitFor, fireEvent, cleanup, act } from '@testing-library/react-native';
 import NewAutomationScreen from '@/app/(tabs)/(automate)/new';
 import { useAutomations } from '@/hooks/useAutomations';
+import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia } from '@/lib/instagram';
 import { validateAutomationDraft } from '@/lib/automation-validation';
 import type { AutomationDraft } from '@/lib/automation-validation';
 
 const mockUseAutomations = useAutomations as jest.Mock;
+const mockUseAutomationGate = useAutomationGate as jest.Mock;
 const mockFetchMedia = fetchMedia as jest.Mock;
 
 function makeDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft {
@@ -144,6 +150,11 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
     mockFetchMedia.mockResolvedValue([]);
+    jest.mocked(useAutomationGate).mockReturnValue({
+      connected: true,
+      loading: false,
+      connect: jest.fn().mockResolvedValue(undefined),
+    });
   });
 
   it('renders all form sections', async () => {

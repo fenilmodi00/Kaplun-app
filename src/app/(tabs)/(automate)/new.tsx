@@ -12,6 +12,7 @@ import { View, Text, ScrollView, TextInput, Pressable } from '@/tw';
 import { cn, clayInput, clayCard } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations } from '@/hooks/useAutomations';
+import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia, type InstagramMediaResponse } from '@/lib/instagram';
 import { withFreshSession } from '@/lib/with-fresh-session';
 import {
@@ -169,6 +170,8 @@ export default function NewAutomationScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { media, loading: mediaLoading, error: mediaError, loadMedia } = useMediaPicker();
+  const { connect: connectInstagram } = useAutomationGate();
+  const [isConnectingIg, setIsConnectingIg] = useState(false);
 
   // Load media when target switches to specific_posts
   useEffect(() => {
@@ -433,10 +436,29 @@ export default function NewAutomationScreen() {
       {/* ── 7. Activate ── */}
       <View style={{ gap: 12, paddingBottom: 32 }}>
         {submitError === 'instagram_not_connected' && (
-          <View className={cn(clayCard, 'bg-brand-coral/10 border-brand-coral/30')}>
-            <Text className="text-body-sm text-brand-coral">
-              Instagram account not connected. Connect your account in Profile to enable automations.
-            </Text>
+          <View style={{ gap: 8 }}>
+            <View className={cn(clayCard, 'bg-brand-coral/10 border-brand-coral/30')}>
+              <Text className="text-body-sm text-brand-coral">
+                Instagram account not connected. Connect your account to enable automations.
+              </Text>
+            </View>
+            <ClayAnimatedButton
+              variant="primary"
+              fullWidth
+              loading={isConnectingIg}
+              onPress={async () => {
+                setIsConnectingIg(true);
+                try {
+                  await connectInstagram();
+                } catch {
+                  // OAuth cancellation is expected
+                } finally {
+                  setIsConnectingIg(false);
+                }
+              }}
+            >
+              Connect Instagram
+            </ClayAnimatedButton>
           </View>
         )}
         {submitError && submitError !== 'instagram_not_connected' && (

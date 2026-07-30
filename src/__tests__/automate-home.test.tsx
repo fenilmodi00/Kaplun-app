@@ -9,6 +9,10 @@ jest.mock('@/hooks/useAutomations', () => ({
   useAutomations: jest.fn(),
 }));
 
+jest.mock('@/hooks/useAutomationGate', () => ({
+  useAutomationGate: jest.fn(),
+}));
+
 jest.mock('@/lib/repository', () => ({
   getCreatorByClerkId: jest.fn(),
 }));
@@ -29,10 +33,10 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import AutomateScreen from '@/app/(tabs)/(automate)/index';
 import { useAutomations } from '@/hooks/useAutomations';
-import { getCreatorByClerkId } from '@/lib/repository';
+import { useAutomationGate } from '@/hooks/useAutomationGate';
 
 const mockUseAutomations = useAutomations as jest.Mock;
-const mockGetCreatorByClerkId = getCreatorByClerkId as jest.Mock;
+const mockUseAutomationGate = useAutomationGate as jest.Mock;
 
 const defaultMockReturn = {
   automations: [],
@@ -95,20 +99,20 @@ describe('AutomateScreen', () => {
     jest.clearAllMocks();
     mockUseAutomations.mockReturnValue(defaultMockReturn);
     // Default: connected creator
-    mockGetCreatorByClerkId.mockResolvedValue({
-      $id: 'creator-1',
-      access_token: 'token-123',
-      username: 'test_creator',
+    mockUseAutomationGate.mockReturnValue({
+      connected: true,
+      loading: false,
+      connect: jest.fn().mockResolvedValue(undefined),
     });
   });
 
   // ── Connection gate ──
 
   it('shows connect CTA when Instagram is not connected', async () => {
-    mockGetCreatorByClerkId.mockResolvedValue({
-      $id: 'creator-1',
-      access_token: '',
-      username: 'test_creator',
+    mockUseAutomationGate.mockReturnValue({
+      connected: false,
+      loading: false,
+      connect: jest.fn().mockResolvedValue(undefined),
     });
 
     const { getByText } = await render(<AutomateScreen />);
