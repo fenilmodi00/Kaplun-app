@@ -44,6 +44,7 @@ from api.routes.instagram_oauth import router as instagram_oauth_router
 from api.routes.webhooks import router as webhooks_router
 from api.routes.automations import router as automations_router
 from api.routes.cron import router as cron_router
+from api.routes.tracked_links import router as tracked_links_router
 
 
 class LoginRequest(BaseModel):
@@ -131,6 +132,7 @@ app.include_router(instagram_oauth_router)
 app.include_router(webhooks_router)
 app.include_router(automations_router)
 app.include_router(cron_router)
+app.include_router(tracked_links_router)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 

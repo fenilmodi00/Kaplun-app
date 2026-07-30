@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from api.auth import get_clerk_user_id
 from api.automation_store import get_automation_store
 from api.campaign_templates import CAMPAIGN_TEMPLATES
+from api.tracked_links import extract_first_url, new_slug
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
@@ -39,6 +40,7 @@ class AutomationCreate(BaseModel):
     reveal_message: str | None = Field(default=None, max_length=2000)
     public_reply_enabled: bool = False
     public_reply_message: str | None = Field(default=None, max_length=2000)
+    track_links: bool = False
 
     @field_validator("keywords")
     @classmethod
@@ -73,6 +75,7 @@ class AutomationPatch(BaseModel):
     reveal_message: str | None = None
     public_reply_enabled: bool | None = None
     public_reply_message: str | None = None
+    track_links: bool | None = None
     status: str | None = Field(default=None, pattern="^(active|paused)$")
     target_type: str | None = Field(default=None, pattern="^(all_posts|specific_posts|next_reel)$")
     media_ids: list[str] | None = None
@@ -108,9 +111,17 @@ def create_automation(body: AutomationCreate, clerk_user_id: str = Depends(requi
     row = store.create_automation({
         **body.model_dump(), "clerk_user_id": clerk_user_id,
         "ig_user_id": creator.get("ig_user_id", ""),
-        "opening_dm_mode": "direct", "track_links": False, "bound_media_ids": [],
+        "opening_dm_mode": "direct", "bound_media_ids": [],
         "status": "active", "created_at": now, "updated_at": now,
     })
+
+    # Mint a tracked-link slug when track_links is enabled
+    if body.track_links:
+        target_url = extract_first_url(body.dm_message) or extract_first_url(body.reveal_message or "")
+        if target_url:
+            slug = new_slug()
+            store.create_tracked_link(row["$id"], target_url, slug)
+
     return {"automation": row}
 
 

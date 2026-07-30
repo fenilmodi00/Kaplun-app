@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,9 @@ from api.graph_client import GraphRateLimitError, MetaApiError, TokenExpiredErro
 from api.keyword_matcher import match_keywords
 from api.rate_limiter import check_dm_rate
 from api.token_crypto import decrypt_or_plaintext, get_token_crypto
+from api.tracked_links import render_message_with_tracking
+
+PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "https://api.example.com")
 
 BACKOFF_MINUTES = [5, 15, 45]
 MAX_ATTEMPTS = 3
@@ -137,10 +141,25 @@ async def process_comment_event(store, event: dict, requeue_attempt: int = 0) ->
                     logger.warning("public reply failed for automation {}: {}", auto["$id"], exc)
 
             # STEP 8: DM — direct or button mode
-            if auto.get("opening_dm_mode") == "button" and auto.get("button_text") and auto.get("reveal_message"):
+            dm_text = auto["dm_message"]
+            reveal_text = auto.get("reveal_message")
+            if auto.get("track_links"):
+                link = await run_in_threadpool(store.get_tracked_link_for_automation, auto["$id"])
+                if link:
+                    tracked_url = f"{PUBLIC_BASE_URL}/r/{link['$id']}"
+                    target_url = link["target_url"]
+                    dm_text = render_message_with_tracking(
+                        dm_text, event.get("commenter_name"), tracked_url, target_url,
+                    )
+                    if reveal_text:
+                        reveal_text = render_message_with_tracking(
+                            reveal_text, event.get("commenter_name"), tracked_url, target_url,
+                        )
+
+            if auto.get("opening_dm_mode") == "button" and auto.get("button_text") and reveal_text:
                 await graph_client.send_private_reply_with_button(
                     ig_id, event["comment_id"],
-                    personalize(auto["dm_message"], event.get("commenter_name")),
+                    personalize(dm_text, event.get("commenter_name")),
                     auto["button_text"], f"reveal:{auto['$id']}",
                     access_token=token)
                 await run_in_threadpool(store.update_log, log["$id"], {"action": "button_dm_sent", "reason": None})
@@ -148,7 +167,7 @@ async def process_comment_event(store, event: dict, requeue_attempt: int = 0) ->
                 await graph_client.send_private_reply(
                     ig_id,
                     event["comment_id"],
-                    personalize(auto["dm_message"], event.get("commenter_name")),
+                    personalize(dm_text, event.get("commenter_name")),
                     access_token=token,
                 )
                 await run_in_threadpool(store.update_log, log["$id"], {"action": "dm_sent", "reason": None})
@@ -212,6 +231,15 @@ async def _run_send_reveal(store, payload: dict) -> None:
 
     token = decrypt_or_plaintext(creator["access_token"], get_token_crypto())
     reveal_message = auto.get("reveal_message") or "Here's the link you requested!"
+
+    if auto.get("track_links"):
+        link = await run_in_threadpool(store.get_tracked_link_for_automation, automation_id)
+        if link:
+            tracked_url = f"{PUBLIC_BASE_URL}/r/{link['$id']}"
+            target_url = link["target_url"]
+            reveal_message = render_message_with_tracking(
+                reveal_message, None, tracked_url, target_url,
+            )
 
     await graph_client.send_direct_message(
         ig_id, user_id,
