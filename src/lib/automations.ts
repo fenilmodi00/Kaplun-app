@@ -54,6 +54,9 @@ export interface CreateAutomationInput {
   keywords: string[];
   match_mode: MatchMode;
   dm_message: string;
+  opening_dm_mode?: OpeningDmMode;
+  button_text?: string | null;
+  reveal_message?: string | null;
   public_reply_enabled: boolean;
   public_reply_message?: string | null;
 }

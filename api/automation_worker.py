@@ -136,14 +136,22 @@ async def process_comment_event(store, event: dict, requeue_attempt: int = 0) ->
                 except MetaApiError as exc:
                     logger.warning("public reply failed for automation {}: {}", auto["$id"], exc)
 
-            # STEP 8: DM — direct mode in Phase 1; button mode lands in Task 20
-            await graph_client.send_private_reply(
-                ig_id,
-                event["comment_id"],
-                personalize(auto["dm_message"], event.get("commenter_name")),
-                access_token=token,
-            )
-            await run_in_threadpool(store.update_log, log["$id"], {"action": "dm_sent", "reason": None})
+            # STEP 8: DM — direct or button mode
+            if auto.get("opening_dm_mode") == "button" and auto.get("button_text") and auto.get("reveal_message"):
+                await graph_client.send_private_reply_with_button(
+                    ig_id, event["comment_id"],
+                    personalize(auto["dm_message"], event.get("commenter_name")),
+                    auto["button_text"], f"reveal:{auto['$id']}",
+                    access_token=token)
+                await run_in_threadpool(store.update_log, log["$id"], {"action": "button_dm_sent", "reason": None})
+            else:
+                await graph_client.send_private_reply(
+                    ig_id,
+                    event["comment_id"],
+                    personalize(auto["dm_message"], event.get("commenter_name")),
+                    access_token=token,
+                )
+                await run_in_threadpool(store.update_log, log["$id"], {"action": "dm_sent", "reason": None})
 
         except TokenExpiredError:
             await run_in_threadpool(
@@ -183,6 +191,47 @@ async def _fail_log(store, existing, auto, event, reason: str) -> None:
         raise
 
 
+async def _run_send_reveal(store, payload: dict) -> None:
+    """Execute a send_reveal job: load automation, decrypt token, send DM, log."""
+    automation_id = payload.get("automation_id")
+    user_id = payload.get("user_id")
+    ig_id = payload.get("instagram_account_id")
+    if not automation_id or not user_id or not ig_id:
+        raise ValueError("send_reveal job missing required fields")
+
+    auto = await run_in_threadpool(store.get_automation, automation_id)
+    if not auto:
+        raise ValueError(f"automation {automation_id} not found")
+
+    if auto.get("ig_user_id") != ig_id:
+        raise ValueError(f"automation {automation_id} ig_user_id mismatch")
+
+    creator = await run_in_threadpool(store.get_creator_by_clerk_id, auto["clerk_user_id"])
+    if not creator or not creator.get("access_token"):
+        raise ValueError(f"no access_token for automation {automation_id}")
+
+    token = decrypt_or_plaintext(creator["access_token"], get_token_crypto())
+    reveal_message = auto.get("reveal_message") or "Here's the link you requested!"
+
+    await graph_client.send_direct_message(
+        ig_id, user_id,
+        personalize(reveal_message, None),
+        access_token=token)
+
+    await run_in_threadpool(store.create_log, {
+        "automation_id": automation_id,
+        "clerk_user_id": auto["clerk_user_id"],
+        "ig_user_id": ig_id,
+        "media_id": "",
+        "comment_id": f"postback:{user_id}",
+        "commenter_username": None,
+        "comment_text": None,
+        "matched_keyword": None,
+        "action": "reveal_sent",
+        "created_at": _now().isoformat(),
+    })
+
+
 async def run_job(store, job_id: str) -> None:
     job = await run_in_threadpool(store.get_job, job_id)
     if not job or job.get("status") == "done":
@@ -191,6 +240,13 @@ async def run_job(store, job_id: str) -> None:
     await run_in_threadpool(store.update_job, job_id, {"status": "processing", "updated_at": now_iso})
     try:
         payload = json.loads(job["payload"])
+
+        if job.get("type") == "send_reveal":
+            await _run_send_reveal(store, payload)
+            now_iso = _now().isoformat()
+            await run_in_threadpool(store.update_job, job_id, {"status": "done", "updated_at": now_iso})
+            return
+
         result = await process_comment_event(store, payload, payload.get("requeue_attempt", 0))
         now_iso = _now().isoformat()
         if result == "requeue":

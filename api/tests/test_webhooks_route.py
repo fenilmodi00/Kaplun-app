@@ -43,3 +43,31 @@ def test_post_creates_job(monkeypatch):
     assert r.status_code == 200
     assert created and created[0][0] == "process_comment"
     assert created[0][1]["comment_id"] == "c1"
+
+
+def test_postback_creates_send_reveal_job(monkeypatch):
+    created = []
+
+    class FakeStore:
+        def create_job(self, type_, payload, run_at_iso=None):
+            created.append((type_, payload))
+            return {"$id": "j1"}
+
+    monkeypatch.setattr("api.routes.webhooks.get_automation_store", lambda: FakeStore())
+    body = json.dumps({"object": "instagram", "entry": [{
+        "id": "ig1",
+        "messaging": [{
+            "sender": {"id": "u42"},
+            "recipient": {"id": "ig1"},
+            "postback": {"payload": "reveal:a1", "mid": "mid.123"},
+        }],
+    }]}).encode()
+    sig = "sha256=" + hmac.new(b"test-ig-secret", body, hashlib.sha256).hexdigest()
+    r = TestClient(app).post("/webhooks/instagram", content=body,
+                             headers={"x-hub-signature-256": sig})
+    assert r.status_code == 200
+    assert len(created) == 1
+    assert created[0][0] == "send_reveal"
+    assert created[0][1]["instagram_account_id"] == "ig1"
+    assert created[0][1]["user_id"] == "u42"
+    assert created[0][1]["automation_id"] == "a1"

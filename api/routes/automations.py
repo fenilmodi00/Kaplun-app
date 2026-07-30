@@ -34,6 +34,9 @@ class AutomationCreate(BaseModel):
     keywords: list[str] = Field(min_length=1)
     match_mode: str = Field(default="whole_word", pattern="^(whole_word|partial)$")
     dm_message: str = Field(min_length=1, max_length=2000)
+    opening_dm_mode: str = Field(default="direct", pattern="^(direct|button)$")
+    button_text: str | None = Field(default=None, max_length=20)
+    reveal_message: str | None = Field(default=None, max_length=2000)
     public_reply_enabled: bool = False
     public_reply_message: str | None = Field(default=None, max_length=2000)
 
@@ -45,12 +48,29 @@ class AutomationCreate(BaseModel):
             raise ValueError("at least one non-empty keyword is required")
         return cleaned
 
+    @field_validator("button_text")
+    @classmethod
+    def _button_text_required_in_button_mode(cls, v: str | None, info):
+        if info.data.get("opening_dm_mode") == "button" and not (v or "").strip():
+            raise ValueError("button_text is required when opening_dm_mode is 'button'")
+        return v
+
+    @field_validator("reveal_message")
+    @classmethod
+    def _reveal_message_required_in_button_mode(cls, v: str | None, info):
+        if info.data.get("opening_dm_mode") == "button" and not (v or "").strip():
+            raise ValueError("reveal_message is required when opening_dm_mode is 'button'")
+        return v
+
 
 class AutomationPatch(BaseModel):
     name: str | None = None
     keywords: list[str] | None = None
     match_mode: str | None = Field(default=None, pattern="^(whole_word|partial)$")
     dm_message: str | None = None
+    opening_dm_mode: str | None = Field(default=None, pattern="^(direct|button)$")
+    button_text: str | None = None
+    reveal_message: str | None = None
     public_reply_enabled: bool | None = None
     public_reply_message: str | None = None
     status: str | None = Field(default=None, pattern="^(active|paused)$")

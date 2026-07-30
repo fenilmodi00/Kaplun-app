@@ -59,12 +59,16 @@ async def webhook_events(request: Request, background_tasks: BackgroundTasks):
             background_tasks.add_task(run_job_safe, store, job["$id"])
             logger.info("queued process_comment job {} for comment {}", job["$id"], event.comment_id)
 
-        # Phase 2 (Task 20): postback events get parsed here and queued as
-        # "send_reveal" jobs.
         for event in parse_postback_events(payload):
-            job = await run_in_threadpool(store.create_job, "send_reveal", asdict(event))
-            background_tasks.add_task(run_job_safe, store, job["$id"])
-            logger.info("queued send_reveal job {} for user {}", job["$id"], event.user_id)
+            if event.payload.startswith("reveal:"):
+                automation_id = event.payload.removeprefix("reveal:")
+                job = await run_in_threadpool(store.create_job, "send_reveal", {
+                    "instagram_account_id": event.instagram_account_id,
+                    "user_id": event.user_id,
+                    "automation_id": automation_id,
+                })
+                background_tasks.add_task(run_job_safe, store, job["$id"])
+                logger.info("queued send_reveal job {} for user {}", job["$id"], event.user_id)
     except Exception as exc:
         logger.exception("webhook enqueue failed: {}", exc)
 

@@ -88,11 +88,11 @@ class FakeStore:
         return self.creators.get(clerk_id)
 
     # jobs
-    def add_job(self, job_id, payload, status="pending", attempts=0, run_at=None):
+    def add_job(self, job_id, payload, status="pending", attempts=0, run_at=None, type_="comment"):
         now = datetime.now(timezone.utc).isoformat()
         job = {
             "$id": job_id,
-            "type": "comment",
+            "type": type_,
             "payload": json.dumps(payload),
             "status": status,
             "attempts": attempts,
@@ -109,6 +109,12 @@ class FakeStore:
     def update_job(self, job_id, data):
         self.jobs[job_id].update(data)
         return self.jobs[job_id]
+
+    def get_automation(self, automation_id):
+        for a in self.automations:
+            if a["$id"] == automation_id:
+                return a
+        return None
 
 
 @pytest.fixture
@@ -127,8 +133,18 @@ def graph_ok(monkeypatch, calls):
         calls.append(("dm", ig, comment_id, text, access_token))
         return {}
 
+    async def fake_button_dm(ig, comment_id, text, button_title, payload, *, access_token, client=None):
+        calls.append(("button_dm", ig, comment_id, text, button_title, payload, access_token))
+        return {}
+
+    async def fake_direct_dm(ig, user_id, text, *, access_token, client=None):
+        calls.append(("direct_dm", ig, user_id, text, access_token))
+        return {}
+
     monkeypatch.setattr(graph_client, "send_comment_reply", fake_reply)
     monkeypatch.setattr(graph_client, "send_private_reply", fake_dm)
+    monkeypatch.setattr(graph_client, "send_private_reply_with_button", fake_button_dm)
+    monkeypatch.setattr(graph_client, "send_direct_message", fake_direct_dm)
     return calls
 
 
@@ -271,3 +287,61 @@ async def test_duplicate_log_create_race_is_skipped(graph_ok):
     assert result == "done"
     assert graph_ok == []
     assert store.logs == {}
+
+
+async def test_button_mode_calls_send_private_reply_with_button(graph_ok):
+    """opening_dm_mode='button' → send_private_reply_with_button, log button_dm_sent."""
+    store = FakeStore(
+        automations=[make_automation(
+            opening_dm_mode="button",
+            button_text="Get link",
+            reveal_message="Here's the secret link!",
+        )],
+        creators={"user1": CREATOR},
+    )
+    result = await process_comment_event(store, EVENT)
+    assert result == "done"
+
+    # Public reply first, then button DM
+    assert [kind for kind, *_ in graph_ok] == ["reply", "button_dm"]
+
+    _, dm_ig, dm_comment, dm_text, dm_button, dm_payload, dm_token = graph_ok[1]
+    assert dm_ig == "ig1"
+    assert dm_comment == "c1"
+    assert dm_text == "Hi alice, here is your link"
+    assert dm_button == "Get link"
+    assert dm_payload == "reveal:a1"
+    assert dm_token == "plain-token"
+
+    log = next(iter(store.logs.values()))
+    assert log["action"] == "button_dm_sent"
+    assert log["reason"] is None
+
+
+async def test_send_reveal_job_sends_direct_message(graph_ok):
+    """send_reveal job → send_direct_message, log reveal_sent."""
+    store = FakeStore(
+        automations=[make_automation(reveal_message="Secret link: example.com")],
+        creators={"user1": CREATOR},
+    )
+    store.add_job("j_reveal", {
+        "instagram_account_id": "ig1",
+        "user_id": "u42",
+        "automation_id": "a1",
+    }, type_="send_reveal")
+
+    await run_job(store, "j_reveal")
+
+    assert [kind for kind, *_ in graph_ok] == ["direct_dm"]
+    _, ig, uid, text, token = graph_ok[0]
+    assert ig == "ig1"
+    assert uid == "u42"
+    assert text == "Secret link: example.com"
+    assert token == "plain-token"
+
+    logs = [l for l in store.logs.values() if l["action"] == "reveal_sent"]
+    assert len(logs) == 1
+    assert logs[0]["comment_id"] == "postback:u42"
+    assert logs[0]["automation_id"] == "a1"
+
+    assert store.jobs["j_reveal"]["status"] == "done"

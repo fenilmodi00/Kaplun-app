@@ -19,7 +19,7 @@ import {
   validateAutomationDraft,
   type AutomationDraft,
 } from '@/lib/automation-validation';
-import type { CreateAutomationInput, TargetType, MatchMode, CampaignTemplate } from '@/lib/automations';
+import type { CreateAutomationInput, TargetType, MatchMode, OpeningDmMode, CampaignTemplate } from '@/lib/automations';
 import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
 
@@ -35,6 +35,13 @@ const MATCH_OPTIONS: { value: MatchMode; label: string }[] = [
 ];
 
 const DM_MAX_LENGTH = 2000;
+const BUTTON_TEXT_MAX_LENGTH = 20;
+const REVEAL_MAX_LENGTH = 2000;
+
+const DM_MODE_OPTIONS: { value: OpeningDmMode; label: string }[] = [
+  { value: 'direct', label: 'Direct message' },
+  { value: 'button', label: 'Button reveal' },
+];
 
 function useMediaPicker() {
   const { getToken } = useAuth();
@@ -166,6 +173,9 @@ export default function NewAutomationScreen() {
   const [keywordInput, setKeywordInput] = useState('');
   const [matchMode, setMatchMode] = useState<MatchMode>('whole_word');
   const [dmMessage, setDmMessage] = useState('');
+  const [openingDmMode, setOpeningDmMode] = useState<OpeningDmMode>('direct');
+  const [buttonText, setButtonText] = useState('');
+  const [revealMessage, setRevealMessage] = useState('');
   const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
   const [publicReplyMessage, setPublicReplyMessage] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -226,10 +236,13 @@ export default function NewAutomationScreen() {
       keywords,
       matchMode,
       dmMessage,
+      openingDmMode,
+      buttonText,
+      revealMessage,
       publicReplyEnabled,
       publicReplyMessage,
     }),
-    [name, targetType, selectedMediaIds, keywords, matchMode, dmMessage, publicReplyEnabled, publicReplyMessage]
+    [name, targetType, selectedMediaIds, keywords, matchMode, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage]
   );
 
   const validationErrors = useMemo(() => validateAutomationDraft(draft), [draft]);
@@ -263,6 +276,10 @@ export default function NewAutomationScreen() {
       keywords,
       match_mode: matchMode,
       dm_message: dmMessage.trim(),
+      opening_dm_mode: openingDmMode,
+      ...(openingDmMode === 'button'
+        ? { button_text: buttonText.trim(), reveal_message: revealMessage.trim() }
+        : { button_text: null, reveal_message: null }),
       public_reply_enabled: publicReplyEnabled,
       ...(targetType === 'specific_posts' ? { media_ids: selectedMediaIds } : {}),
       ...(publicReplyEnabled ? { public_reply_message: publicReplyMessage.trim() } : { public_reply_message: null }),
@@ -282,6 +299,7 @@ export default function NewAutomationScreen() {
     }
   }, [
     isValid, creating, name, targetType, keywords, matchMode, dmMessage,
+    openingDmMode, buttonText, revealMessage,
     publicReplyEnabled, publicReplyMessage, selectedMediaIds,
     createAutomation, router,
   ]);
@@ -455,6 +473,11 @@ export default function NewAutomationScreen() {
       {/* ── 4. Opening DM ── */}
       <View style={{ gap: 8 }}>
         <SectionLabel>Opening DM</SectionLabel>
+        <SegmentedControl
+          options={DM_MODE_OPTIONS}
+          value={openingDmMode}
+          onChange={setOpeningDmMode}
+        />
         <Text className="text-caption text-muted-soft">
           We'll replace {'{username}'} with the commenter's name
         </Text>
@@ -476,6 +499,52 @@ export default function NewAutomationScreen() {
         >
           {dmMessage.length}/{DM_MAX_LENGTH}
         </Text>
+
+        {openingDmMode === 'button' && (
+          <>
+            <Text className="text-caption text-muted-soft" style={{ marginTop: 4 }}>
+              Button text (max 20 characters)
+            </Text>
+            <TextInput
+              className={cn(clayInput)}
+              placeholder="e.g. Get the link"
+              value={buttonText}
+              onChangeText={setButtonText}
+              maxLength={BUTTON_TEXT_MAX_LENGTH}
+              accessibilityLabel="Button text"
+            />
+            <Text
+              className={cn(
+                'text-right text-caption',
+                buttonText.length >= BUTTON_TEXT_MAX_LENGTH ? 'text-error' : 'text-muted-soft'
+              )}
+            >
+              {buttonText.length}/{BUTTON_TEXT_MAX_LENGTH}
+            </Text>
+
+            <Text className="text-caption text-muted-soft" style={{ marginTop: 4 }}>
+              Reveal message (sent after button tap)
+            </Text>
+            <TextInput
+              className={cn(clayInput, 'h-auto py-3')}
+              style={{ minHeight: 80, textAlignVertical: 'top' }}
+              placeholder="Write the message to reveal after button tap…"
+              value={revealMessage}
+              onChangeText={setRevealMessage}
+              multiline
+              maxLength={REVEAL_MAX_LENGTH}
+              accessibilityLabel="Reveal message"
+            />
+            <Text
+              className={cn(
+                'text-right text-caption',
+                revealMessage.length >= REVEAL_MAX_LENGTH ? 'text-error' : 'text-muted-soft'
+              )}
+            >
+              {revealMessage.length}/{REVEAL_MAX_LENGTH}
+            </Text>
+          </>
+        )}
       </View>
 
       {/* ── 5. Public reply ── */}
@@ -513,6 +582,13 @@ export default function NewAutomationScreen() {
           <Text className="text-body-sm text-muted" selectable>
             {previewMessage || 'Your message will appear here'}
           </Text>
+          {openingDmMode === 'button' && buttonText.trim() && (
+            <View className="mt-3 self-start rounded-lg bg-primary px-4 py-2">
+              <Text className="text-button font-semibold text-on-primary">
+                {buttonText}
+              </Text>
+            </View>
+          )}
           {keywords.length > 0 && (
             <View className="mt-3 flex-row flex-wrap" style={{ gap: 6 }}>
               {keywords.map((kw) => (

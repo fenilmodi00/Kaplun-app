@@ -11,6 +11,9 @@ export interface AutomationDraft {
   keywords: string[];
   matchMode: 'whole_word' | 'partial';
   dmMessage: string;
+  openingDmMode: 'direct' | 'button';
+  buttonText: string;
+  revealMessage: string;
   publicReplyEnabled: boolean;
   publicReplyMessage: string;
 }
@@ -40,6 +43,15 @@ export function validateAutomationDraft(draft: AutomationDraft): string[] {
 
   if (draft.publicReplyEnabled && !draft.publicReplyMessage.trim()) {
     errors.push('Public reply text is required when enabled');
+  }
+
+  if (draft.openingDmMode === 'button') {
+    if (!draft.buttonText.trim()) {
+      errors.push('Button text is required in button mode');
+    }
+    if (!draft.revealMessage.trim()) {
+      errors.push('Reveal message is required in button mode');
+    }
   }
 
   return errors;
