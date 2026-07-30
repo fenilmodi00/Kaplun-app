@@ -46,6 +46,10 @@ type Config struct {
 	CronSecret               string
 	PublicBaseURL            string
 	AutomationSweeperEnabled bool
+
+	// Local tunnel (until production deploy)
+	NgrokEnabled bool
+	NgrokDomain  string
 }
 
 // Load reads configuration from the process environment.
@@ -114,6 +118,14 @@ func FromMap(values map[string]string) (Config, error) {
 	}
 	cfg.AutomationSweeperEnabled = sweeper
 
+	// Default on for local Meta webhooks/OAuth until the API is deployed.
+	ngrokOn, err := parseBoolDefault(values["NGROK_ENABLED"], true)
+	if err != nil {
+		return Config{}, fmt.Errorf("NGROK_ENABLED: %w", err)
+	}
+	cfg.NgrokEnabled = ngrokOn
+	cfg.NgrokDomain = strings.TrimSpace(values["NGROK_DOMAIN"])
+
 	return cfg, nil
 }
 
@@ -164,6 +176,8 @@ func envMap() map[string]string {
 		"CRON_SECRET",
 		"PUBLIC_BASE_URL",
 		"AUTOMATION_SWEEPER_ENABLED",
+		"NGROK_ENABLED",
+		"NGROK_DOMAIN",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {

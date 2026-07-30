@@ -16,22 +16,22 @@ import (
 func TestQueryBuilders(t *testing.T) {
 	t.Parallel()
 
-	if got := appwrite.QueryEqual("clerk_user_id", "u1"); got != `equal("clerk_user_id", ["u1"])` {
+	if got := appwrite.QueryEqual("clerk_user_id", "u1"); got != `{"method":"equal","attribute":"clerk_user_id","values":["u1"]}` {
 		t.Fatalf("QueryEqual: %q", got)
 	}
-	if got := appwrite.QueryEqual("action", "pending", "dm_sent"); got != `equal("action", ["pending","dm_sent"])` {
+	if got := appwrite.QueryEqual("action", "pending", "dm_sent"); got != `{"method":"equal","attribute":"action","values":["pending","dm_sent"]}` {
 		t.Fatalf("QueryEqual multi: %q", got)
 	}
-	if got := appwrite.QueryGreaterThan("created_at", "2024-01-01"); got != `greaterThan("created_at", "2024-01-01")` {
+	if got := appwrite.QueryGreaterThan("created_at", "2024-01-01"); got != `{"method":"greaterThan","attribute":"created_at","values":["2024-01-01"]}` {
 		t.Fatalf("QueryGreaterThan: %q", got)
 	}
-	if got := appwrite.QueryLessThanEqual("run_at", "now"); got != `lessThanEqual("run_at", "now")` {
+	if got := appwrite.QueryLessThanEqual("run_at", "now"); got != `{"method":"lessThanEqual","attribute":"run_at","values":["now"]}` {
 		t.Fatalf("QueryLessThanEqual: %q", got)
 	}
-	if got := appwrite.QueryOrderDesc("created_at"); got != `orderDesc("created_at")` {
+	if got := appwrite.QueryOrderDesc("created_at"); got != `{"method":"orderDesc","attribute":"created_at"}` {
 		t.Fatalf("QueryOrderDesc: %q", got)
 	}
-	if got := appwrite.QueryLimit(25); got != "limit(25)" {
+	if got := appwrite.QueryLimit(25); got != `{"method":"limit","values":[25]}` {
 		t.Fatalf("QueryLimit: %q", got)
 	}
 }

@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
 
 	"kaplun/api-go/internal/config"
 	"kaplun/api-go/internal/handlers"
@@ -18,6 +21,7 @@ import (
 	"kaplun/api-go/internal/platform/clerk"
 	"kaplun/api-go/internal/platform/crypto"
 	"kaplun/api-go/internal/platform/meta"
+	"kaplun/api-go/internal/platform/ngrok"
 	"kaplun/api-go/internal/router"
 	"kaplun/api-go/internal/services/automations"
 	"kaplun/api-go/internal/services/bridge"
@@ -30,6 +34,10 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// Match FastAPI: load api-go/.env into the process env before config.Load().
+	// Existing process env vars win over .env values.
+	loadDotEnv(logger)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -51,6 +59,31 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.NgrokEnabled {
+		tunnelURL := ngrok.ResolveURL(cfg.NgrokDomain, cfg.PublicBaseURL)
+		tunnel, err := ngrok.Start(ctx, ngrok.Options{
+			Port:   cfg.Port,
+			URL:    tunnelURL,
+			Logger: logger,
+		})
+		if err != nil {
+			logger.Warn("ngrok start failed (server continues locally)", "error", err)
+		} else {
+			defer func() {
+				if stopErr := tunnel.Stop(); stopErr != nil {
+					logger.Warn("ngrok stop", "error", stopErr)
+				}
+			}()
+			logger.Info("ngrok public URL",
+				"url", tunnel.PublicURL,
+				"oauth_callback", strings.TrimRight(tunnel.PublicURL, "/")+"/instagram/callback",
+				"webhook", strings.TrimRight(tunnel.PublicURL, "/")+"/webhooks/instagram",
+			)
+		}
+	} else {
+		logger.Info("ngrok disabled (set NGROK_ENABLED=true for local HTTPS tunnel)")
+	}
+
 	go func() {
 		logger.Info("server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -66,6 +99,24 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", "error", err)
+	}
+}
+
+func loadDotEnv(logger *slog.Logger) {
+	candidates := []string{".env"}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), ".env"))
+	}
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		if err := godotenv.Load(path); err != nil {
+			logger.Warn("failed to load env file", "path", path, "error", err)
+			return
+		}
+		logger.Info("loaded env file", "path", path)
+		return
 	}
 }
 

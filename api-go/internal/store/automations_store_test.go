@@ -14,8 +14,8 @@ func TestListAutomationsQueries(t *testing.T) {
 
 	got := store.ListAutomationsQueries("clerk_1")
 	want := []string{
-		`equal("clerk_user_id", ["clerk_1"])`,
-		`orderDesc("created_at")`,
+		`{"method":"equal","attribute":"clerk_user_id","values":["clerk_1"]}`,
+		`{"method":"orderDesc","attribute":"created_at"}`,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("len=%d want %d", len(got), len(want))
@@ -31,7 +31,7 @@ func TestCountClicksQueries(t *testing.T) {
 	t.Parallel()
 
 	got := store.CountClicksQueries("slug1")
-	if got[0] != `equal("slug", ["slug1"])` || got[1] != "limit(1)" {
+	if got[0] != `{"method":"equal","attribute":"slug","values":["slug1"]}` || got[1] != `{"method":"limit","values":[1]}` {
 		t.Fatalf("got=%#v", got)
 	}
 }
@@ -132,7 +132,7 @@ func TestAutomationsStoreListAndCreateShapes(t *testing.T) {
 	if len(list) != 1 || list[0].ID != "a1" || list[0].Name != "N" {
 		t.Fatalf("list=%#v", list)
 	}
-	if len(fake.listCalls) != 1 || fake.listCalls[0].queries[0] != `equal("clerk_user_id", ["c1"])` {
+	if len(fake.listCalls) != 1 || fake.listCalls[0].queries[0] != `{"method":"equal","attribute":"clerk_user_id","values":["c1"]}` {
 		t.Fatalf("listCalls=%#v", fake.listCalls)
 	}
 
@@ -171,7 +171,7 @@ func TestAutomationsStoreCountClicksUsesSlugQuery(t *testing.T) {
 	if n != 7 {
 		t.Fatalf("n=%d", n)
 	}
-	if fake.listCalls[0].queries[0] != `equal("slug", ["slug99"])` {
+	if fake.listCalls[0].queries[0] != `{"method":"equal","attribute":"slug","values":["slug99"]}` {
 		t.Fatalf("queries=%#v", fake.listCalls[0].queries)
 	}
 }

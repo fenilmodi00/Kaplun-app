@@ -10,7 +10,11 @@ cp .env.example .env   # fill secrets (same names as api/.env)
 go run ./cmd/server
 ```
 
-Default listen: `:8000` (`IG_API_PORT`).
+`cmd/server` loads `api-go/.env` automatically (like FastAPI's dotenv). Process env vars override `.env`.
+
+By default it also starts an **ngrok** HTTPS tunnel to `IG_API_PORT` (same reserved URL as `PUBLIC_BASE_URL` when that host contains `ngrok`). Disable with `NGROK_ENABLED=false` once the API is deployed. Requires the `ngrok` CLI on PATH.
+
+Default listen: `:8000` (`IG_API_PORT`). You should see JSON logs including `"msg":"loaded env file"`, `"msg":"ngrok tunnel ready"`, then `"msg":"server listening"`.
 
 ## Test
 
