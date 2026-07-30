@@ -50,3 +50,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.log
+# Go build artifacts
+api-go/server.exe
+*.exe

@@ -8,15 +8,17 @@
 
 ## OVERVIEW
 
-Expo SDK 57 mobile app ("creator-workspace") for Instagram creators. React Query + Appwrite TablesDB (CRUD + Realtime) + FastAPI backend (Instagram proxy + auth bridge). Clay design system via Tailwind v4 + `react-native-css`. expo-router file-based routing. Bun (not npm).
+Expo SDK 57 mobile app ("creator-workspace") for Instagram creators. React Query + Appwrite TablesDB (CRUD + Realtime) + backend API (auth bridge + automations). Clay design system via Tailwind v4 + `react-native-css`. expo-router file-based routing. Bun (not npm).
+
+**API migration:** Gin/Go server lives in `api-go/` (replacing FastAPI `api/`). Contracts: `docs/fastapi-to-gin-inventory.md`. Cutover: `docs/plans/2026-07-30-fastapi-to-gin-cutover.md`.
 
 ## STACK
 
 - **Framework**: Expo SDK 57, React Native 0.86, React 19.2
 - **Routing**: expo-router file-based
 - **Data**: `@tanstack/react-query` (useQuery/useMutation/useQueries) → `@/lib/repository` (typed Appwrite calls with retry) → `tablesDB` (Appwrite TablesDB, not Databases)
-- **Auth**: Clerk (`@clerk/expo`) → FastAPI bridge → Appwrite session (24h TTL fast path)
-- **Instagram proxy**: App → Appwrite ig-api-proxy cloud function (Appwrite JWT auth, not Clerk Bearer)
+- **Auth**: Clerk (`@clerk/expo`) → API `POST /auth/appwrite-session` (Gin or FastAPI) → Appwrite session (24h TTL fast path)
+- **Instagram proxy**: App → Appwrite ig-api-proxy cloud function (Appwrite JWT auth, not Clerk Bearer). Gin also exposes Clerk-authed `/profile|/media|/insights|/disconnect` for FastAPI parity.
 - **Styling**: NativeWind v5 + Tailwind CSS v4 + `react-native-css` (`useCssElement` bridge, not `styled()`)
 - **Reanimated web workaround**: Metro aliases + platform wrappers for #8285 (Reanimated crashes on web)
 
