@@ -22,6 +22,7 @@ class FakeStore:
 
     def __init__(self):
         self.creators: dict[str, dict] = {}
+        self.jobs: dict[str, dict] = {}
         self.logs: dict[str, dict] = {}
         self.webhook_events: dict[str, dict] = {}
         self.calls: list[tuple[str, tuple, dict]] = []
@@ -58,6 +59,29 @@ class FakeStore:
         for rid in to_delete:
             del self.webhook_events[rid]
         return len(to_delete)
+
+    # ── health ─────────────────────────────────────────────────────────────────
+
+    def count_jobs_by_status(self) -> dict[str, int]:
+        self._record("count_jobs_by_status")
+        counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0, "done": 0}
+        for row in self.jobs.values():
+            status = row.get("status", "unknown")
+            if status in counts:
+                counts[status] += 1
+        return counts
+
+    def get_last_webhook_event_time(self) -> str | None:
+        self._record("get_last_webhook_event_time")
+        if not self.webhook_events:
+            return None
+        # Find the row with the latest received_at
+        best: str | None = None
+        for row in self.webhook_events.values():
+            ts = row.get("received_at")
+            if ts and (best is None or ts > best):
+                best = ts
+        return best
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -258,3 +282,52 @@ class TestRetainLogs:
         r = client.post("/cron/retain-logs", headers={"X-Cron-Secret": "test-cron-secret"})
         assert r.status_code == 200
         assert r.json() == {"deleted_logs": 0, "deleted_webhook_events": 0}
+
+
+# ── Health endpoint tests ──────────────────────────────────────────────────────
+
+
+class TestAutomationHealth:
+    def test_missing_secret_401(self, client):
+        r = client.get("/cron/health")
+        assert r.status_code == 401
+
+    def test_wrong_secret_401(self, client):
+        r = client.get("/cron/health", headers={"X-Cron-Secret": "wrong-secret"})
+        assert r.status_code == 401
+
+    def test_correct_secret_200_empty(self, client, store):
+        """Returns zero counts and null last_webhook_event_at with empty store."""
+        r = client.get("/cron/health", headers={"X-Cron-Secret": "test-cron-secret"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+            "done": 0,
+            "last_webhook_event_at": None,
+        }
+
+    def test_response_shape_with_data(self, client, store):
+        """Returns correct counts and last webhook time when data exists."""
+        store.jobs = {
+            "job_1": {"$id": "job_1", "status": "pending"},
+            "job_2": {"$id": "job_2", "status": "processing"},
+            "job_3": {"$id": "job_3", "status": "failed"},
+            "job_4": {"$id": "job_4", "status": "done"},
+            "job_5": {"$id": "job_5", "status": "done"},
+        }
+        store.webhook_events = {
+            "evt_1": {"$id": "evt_1", "received_at": "2026-07-29T10:00:00+00:00"},
+            "evt_2": {"$id": "evt_2", "received_at": "2026-07-29T12:00:00+00:00"},
+        }
+
+        r = client.get("/cron/health", headers={"X-Cron-Secret": "test-cron-secret"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pending"] == 1
+        assert body["processing"] == 1
+        assert body["failed"] == 1
+        assert body["done"] == 2
+        assert body["last_webhook_event_at"] == "2026-07-29T12:00:00+00:00"

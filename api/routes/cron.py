@@ -75,3 +75,23 @@ async def retain_logs(x_cron_secret: str | None = Header(None)):
     deleted_events = await run_in_threadpool(store.delete_webhook_events_older_than, cutoff)
     logger.info("retention: deleted {} log rows and {} webhook events older than {}", deleted_logs, deleted_events, cutoff)
     return {"deleted_logs": deleted_logs, "deleted_webhook_events": deleted_events}
+
+
+@router.get("/health")
+async def automation_health(x_cron_secret: str | None = Header(None)):
+    """Worker health surface: job counts by status + last webhook event time.
+
+    Intended for uptime monitoring — alert when `failed` grows or `pending`
+    stays above 50 for an extended period.
+    """
+    _check_secret(x_cron_secret)
+    store = get_automation_store()
+    counts = await run_in_threadpool(store.count_jobs_by_status)
+    last_webhook = await run_in_threadpool(store.get_last_webhook_event_time)
+    return {
+        "pending": counts.get("pending", 0),
+        "processing": counts.get("processing", 0),
+        "failed": counts.get("failed", 0),
+        "done": counts.get("done", 0),
+        "last_webhook_event_at": last_webhook,
+    }

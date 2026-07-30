@@ -520,6 +520,41 @@ class AutomationStore:
             offset += batch_size
         return total_deleted
 
+    # ── health ─────────────────────────────────────────────────────────────────
+
+    def count_jobs_by_status(self) -> dict[str, int]:
+        """Count automation_jobs rows by status field.
+
+        Returns {"pending": n, "processing": n, "failed": n, "done": n}.
+        """
+        counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0, "done": 0}
+        result = self._tables.list_rows(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_AUTOMATION_JOBS_TABLE_ID,
+            queries=[Query.limit(10000)],
+        )
+        rows, _ = _rows_and_total(result)
+        for row in rows:
+            status = row.get("status", "unknown")
+            if status in counts:
+                counts[status] += 1
+        return counts
+
+    def get_last_webhook_event_time(self) -> str | None:
+        """Return the ISO timestamp of the most recent webhook event, or None."""
+        result = self._tables.list_rows(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_WEBHOOK_EVENTS_TABLE_ID,
+            queries=[
+                Query.order_desc("received_at"),
+                Query.limit(1),
+            ],
+        )
+        rows, _ = _rows_and_total(result)
+        if rows:
+            return rows[0].get("received_at")
+        return None
+
     # ── stats ──────────────────────────────────────────────────────────────────
 
     def count_logs_by_action(self, automation_id: str) -> dict[str, int]:
