@@ -43,9 +43,13 @@ yarn-error.*
 
 # agent metadata
 .omo/
+.worktrees/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.log
+# Go build artifacts
+api-go/server.exe
+*.exe
