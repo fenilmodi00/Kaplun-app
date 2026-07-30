@@ -8,6 +8,7 @@
 jest.mock('@/hooks/useAutomations', () => ({
   useAutomations: jest.fn(),
   useAutomationLogs: jest.fn(),
+  useAutomationStats: jest.fn(),
 }));
 
 // Override the expo-router mock to provide an automationId
@@ -25,10 +26,11 @@ import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import AutomationDetail from '@/app/(tabs)/(automate)/[automationId]';
-import { useAutomations, useAutomationLogs } from '@/hooks/useAutomations';
+import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 
 const mockUseAutomations = useAutomations as jest.Mock;
 const mockUseAutomationLogs = useAutomationLogs as jest.Mock;
+const mockUseAutomationStats = useAutomationStats as jest.Mock;
 
 const mockAutomation = {
   $id: 'auto-1',
@@ -111,6 +113,12 @@ describe('AutomationDetail', () => {
     jest.clearAllMocks();
     mockUseAutomations.mockReturnValue(defaultAutomationsReturn);
     mockUseAutomationLogs.mockReturnValue(defaultLogsReturn);
+    mockUseAutomationStats.mockReturnValue({
+      stats: { sent: 1, skipped: 1, failed: 1, clicks: 2, ctr: 0.67, top_keywords: [['collab', 1]], daily: [] },
+      loading: false,
+      error: null,
+      refresh: jest.fn(),
+    });
   });
 
   // ── Rendering ──

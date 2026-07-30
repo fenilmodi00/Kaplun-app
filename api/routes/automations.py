@@ -4,7 +4,7 @@ Ownership: every read/mutation verifies the row's clerk_user_id matches the
 caller's; mismatches return 404."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -131,6 +131,39 @@ def list_templates():
     return {"templates": CAMPAIGN_TEMPLATES}
 
 
+@router.get("/stats/overview")
+def overview_stats(clerk_user_id: str = Depends(require_clerk)):
+    """Aggregated stats across all automations for the trailing 7 days."""
+    store = get_automation_store()
+    since_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    action_counts = store.count_logs_by_action_since(clerk_user_id, since_7d)
+    sent = (action_counts.get("dm_sent", 0) + action_counts.get("button_dm_sent", 0)
+            + action_counts.get("reveal_sent", 0) + action_counts.get("reply_sent", 0))
+
+    # Count clicks across all tracked links for user's automations
+    automations = store.list_automations(clerk_user_id)
+    active_count = sum(1 for a in automations if a.get("status") == "active")
+    clicks_7d = 0
+    for a in automations:
+        link = store.get_tracked_link_for_automation(a["$id"])
+        if link:
+            clicks_7d += store.count_clicks_since(link["$id"], since_7d)
+
+    ctr = round(clicks_7d / sent, 2) if sent > 0 else 0
+
+    top_kws = store.top_keywords(clerk_user_id, since_7d, limit=1)
+    top_kw = top_kws[0][0] if top_kws else ""
+
+    return {
+        "sent_7d": sent,
+        "clicks_7d": clicks_7d,
+        "ctr_7d": ctr,
+        "top_keyword_7d": top_kw,
+        "active_automations": active_count,
+    }
+
+
 @router.get("/{automation_id}")
 def get_automation(automation_id: str, clerk_user_id: str = Depends(require_clerk)):
     return {"automation": _owned(get_automation_store(), automation_id, clerk_user_id)}
@@ -158,3 +191,59 @@ def list_logs(automation_id: str, clerk_user_id: str = Depends(require_clerk)):
     store = get_automation_store()
     _owned(store, automation_id, clerk_user_id)
     return {"logs": store.list_logs(automation_id)}
+
+
+@router.get("/{automation_id}/stats")
+def automation_stats(automation_id: str, clerk_user_id: str = Depends(require_clerk)):
+    """Per-automation stats: totals, top keywords, daily sent counts (7d)."""
+    store = get_automation_store()
+    _owned(store, automation_id, clerk_user_id)
+
+    action_counts = store.count_logs_by_action(automation_id)
+    sent = (action_counts.get("dm_sent", 0) + action_counts.get("button_dm_sent", 0)
+            + action_counts.get("reveal_sent", 0) + action_counts.get("reply_sent", 0))
+    skipped = action_counts.get("skipped", 0)
+    failed = action_counts.get("failed", 0)
+
+    # Clicks
+    link = store.get_tracked_link_for_automation(automation_id)
+    clicks = store.count_clicks(link["$id"]) if link else 0
+    ctr = round(clicks / sent, 2) if sent > 0 else 0
+
+    # Top keywords (all time)
+    logs = store.list_logs(automation_id, limit=10000)
+    kw_counts: dict[str, int] = {}
+    for log in logs:
+        kw = log.get("matched_keyword")
+        if kw:
+            kw_counts[kw] = kw_counts.get(kw, 0) + 1
+    sorted_kws = sorted(kw_counts.items(), key=lambda x: -x[1])
+    top_keywords = [[kw, count] for kw, count in sorted_kws[:10]]
+
+    # Daily sent counts for trailing 7 days
+    today = datetime.now(timezone.utc).date()
+    daily_map: dict[str, int] = {}
+    for i in range(7):
+        d = (today - timedelta(days=i)).isoformat()
+        daily_map[d] = 0
+
+    for log in logs:
+        action = log.get("action", "")
+        if action in ("dm_sent", "button_dm_sent"):
+            created = log.get("created_at", "")
+            if created:
+                log_date = created[:10]
+                if log_date in daily_map:
+                    daily_map[log_date] += 1
+
+    daily = [{"date": d, "sent": daily_map[d]} for d in sorted(daily_map.keys())]
+
+    return {
+        "sent": sent,
+        "skipped": skipped,
+        "failed": failed,
+        "clicks": clicks,
+        "ctr": ctr,
+        "top_keywords": top_keywords,
+        "daily": daily,
+    }

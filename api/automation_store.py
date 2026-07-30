@@ -417,6 +417,72 @@ class AutomationStore:
         _, total = _rows_and_total(result)
         return total
 
+    def count_clicks_since(self, slug: str, since_iso: str) -> int:
+        """Count link clicks for a slug created after a given timestamp."""
+        result = self._tables.list_rows(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_LINK_CLICKS_TABLE_ID,
+            queries=[
+                Query.equal("slug", slug),
+                Query.greater_than("clicked_at", since_iso),
+                Query.limit(1),
+            ],
+        )
+        _, total = _rows_and_total(result)
+        return total
+
+    # ── stats ──────────────────────────────────────────────────────────────────
+
+    def count_logs_by_action(self, automation_id: str) -> dict[str, int]:
+        """Count automation logs by action type. Returns {action: count}."""
+        logs = self.list_logs(automation_id, limit=10000)
+        counts: dict[str, int] = {}
+        for log in logs:
+            action = log.get("action", "unknown")
+            counts[action] = counts.get(action, 0) + 1
+        return counts
+
+    def count_logs_by_action_since(self, clerk_user_id: str, since_iso: str) -> dict[str, int]:
+        """Count logs by action type for a user since a date. Returns {action: count}."""
+        result = self._tables.list_rows(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_AUTOMATION_LOGS_TABLE_ID,
+            queries=[
+                Query.equal("clerk_user_id", clerk_user_id),
+                Query.greater_than("created_at", since_iso),
+                Query.limit(10000),
+            ],
+        )
+        rows, _ = _rows_and_total(result)
+        counts: dict[str, int] = {}
+        for log in rows:
+            action = log.get("action", "unknown")
+            counts[action] = counts.get(action, 0) + 1
+        return counts
+
+    def top_keywords(self, clerk_user_id: str, since_iso: str, limit: int = 5) -> list[list]:
+        """Get top matched keywords for a user since a date.
+
+        Returns list of [keyword, count] pairs sorted descending by count.
+        """
+        result = self._tables.list_rows(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_AUTOMATION_LOGS_TABLE_ID,
+            queries=[
+                Query.equal("clerk_user_id", clerk_user_id),
+                Query.greater_than("created_at", since_iso),
+                Query.limit(10000),
+            ],
+        )
+        rows, _ = _rows_and_total(result)
+        kw_counts: dict[str, int] = {}
+        for log in rows:
+            kw = log.get("matched_keyword")
+            if kw:
+                kw_counts[kw] = kw_counts.get(kw, 0) + 1
+        sorted_kws = sorted(kw_counts.items(), key=lambda x: -x[1])
+        return [[kw, count] for kw, count in sorted_kws[:limit]]
+
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 

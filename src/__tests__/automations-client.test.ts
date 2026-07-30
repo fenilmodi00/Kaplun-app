@@ -13,6 +13,8 @@ global.fetch = mockFetch;
 
 import {
   createAutomation,
+  getAutomationStats,
+  getOverviewStats,
   listAutomations,
   updateAutomation,
   deleteAutomation,
@@ -306,5 +308,90 @@ describe('listCampaignTemplates', () => {
 
     const result = await listCampaignTemplates(mockGetToken);
     expect(result).toEqual([]);
+  });
+});
+
+describe('getAutomationStats', () => {
+  const mockStats = {
+    sent: 41,
+    skipped: 3,
+    failed: 1,
+    clicks: 12,
+    ctr: 0.29,
+    top_keywords: [['LINK', 30], ['SHOP', 11]] as [string, number][],
+    daily: [
+      { date: '2026-07-23', sent: 5 },
+      { date: '2026-07-24', sent: 8 },
+    ],
+  };
+
+  it('happy: GETs /automations/:id/stats and returns stats', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => mockStats,
+    } as Response);
+
+    const result = await getAutomationStats(mockGetToken, 'auto_1');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toBe('http://localhost:8000/automations/auto_1/stats');
+    expect(options.method).toBe('GET');
+    expect(options.headers).toEqual({
+      Authorization: 'Bearer mock-clerk-token',
+      'Content-Type': 'application/json',
+    });
+    expect(result).toEqual(mockStats);
+  });
+
+  it('session_expired: throws on 401', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => 'Unauthorized',
+    } as Response);
+
+    await expect(getAutomationStats(mockGetToken, 'auto_1')).rejects.toThrow('session_expired');
+  });
+});
+
+describe('getOverviewStats', () => {
+  const mockOverview = {
+    sent_7d: 128,
+    clicks_7d: 31,
+    ctr_7d: 0.24,
+    top_keyword_7d: 'LINK',
+    active_automations: 3,
+  };
+
+  it('happy: GETs /automations/stats/overview and returns overview', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => mockOverview,
+    } as Response);
+
+    const result = await getOverviewStats(mockGetToken);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toBe('http://localhost:8000/automations/stats/overview');
+    expect(options.method).toBe('GET');
+    expect(options.headers).toEqual({
+      Authorization: 'Bearer mock-clerk-token',
+      'Content-Type': 'application/json',
+    });
+    expect(result).toEqual(mockOverview);
+  });
+
+  it('session_expired: throws on 401', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => 'Unauthorized',
+    } as Response);
+
+    await expect(getOverviewStats(mockGetToken)).rejects.toThrow('session_expired');
   });
 });

@@ -3,7 +3,7 @@ import { FlatList, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
 import { cn } from '@/tw/cn';
-import { useAutomations } from '@/hooks/useAutomations';
+import { useAutomations, useOverviewStats } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
@@ -58,31 +58,35 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 }
 
 function StatsCard() {
+  const { stats, loading } = useOverviewStats();
+
   return (
     <View className="mx-4 mb-3">
       <ClayAnimatedCard delay={0}>
         <View className="flex-row justify-around">
           <View className="items-center">
             <Text className="font-semibold text-ink" style={{ fontSize: 24 }}>
-              --
+              {loading ? '--' : stats?.sent_7d ?? 0}
             </Text>
-            <Text className="text-caption text-muted">Sent</Text>
+            <Text className="text-caption text-muted">DMs sent (7d)</Text>
           </View>
           <View className="items-center">
             <Text className="font-semibold text-ink" style={{ fontSize: 24 }}>
-              --
+              {loading ? '--' : stats?.clicks_7d ?? 0}
             </Text>
-            <Text className="text-caption text-muted">Replies</Text>
+            <Text className="text-caption text-muted">Link clicks (7d)</Text>
           </View>
           <View className="items-center">
             <Text className="font-semibold text-ink" style={{ fontSize: 24 }}>
-              --
+              {loading ? '--' : stats?.top_keyword_7d || '—'}
             </Text>
-            <Text className="text-caption text-muted">Conversions</Text>
+            <Text className="text-caption text-muted">Top keyword</Text>
           </View>
         </View>
         <Text className="mt-2 text-center text-caption text-muted-soft">
-          Stats arrive after your first sends
+          {loading
+            ? 'Loading stats...'
+            : `${stats?.active_automations ?? 0} active automation${(stats?.active_automations ?? 0) !== 1 ? 's' : ''}`}
         </Text>
       </ClayAnimatedCard>
     </View>

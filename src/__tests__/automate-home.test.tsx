@@ -7,6 +7,7 @@
 
 jest.mock('@/hooks/useAutomations', () => ({
   useAutomations: jest.fn(),
+  useOverviewStats: jest.fn(),
 }));
 
 jest.mock('@/hooks/useAutomationGate', () => ({
@@ -32,11 +33,12 @@ jest.mock('@/lib/bridge-context', () => ({
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import AutomateScreen from '@/app/(tabs)/(automate)/index';
-import { useAutomations } from '@/hooks/useAutomations';
+import { useAutomations, useOverviewStats } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 
 const mockUseAutomations = useAutomations as jest.Mock;
 const mockUseAutomationGate = useAutomationGate as jest.Mock;
+const mockUseOverviewStats = useOverviewStats as jest.Mock;
 
 const defaultMockReturn = {
   automations: [],
@@ -98,6 +100,12 @@ describe('AutomateScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseAutomations.mockReturnValue(defaultMockReturn);
+    mockUseOverviewStats.mockReturnValue({
+      stats: { sent_7d: 128, clicks_7d: 31, ctr_7d: 0.24, top_keyword_7d: 'LINK', active_automations: 3 },
+      loading: false,
+      error: null,
+      refresh: jest.fn(),
+    });
     // Default: connected creator
     mockUseAutomationGate.mockReturnValue({
       connected: true,

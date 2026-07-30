@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text } from '@/tw';
 import { cn } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { useAutomations, useAutomationLogs } from '@/hooks/useAutomations';
+import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 import type { Automation, AutomationLog } from '@/lib/automations';
 
 /** Action badge colors per DESIGN.md §3.3 */
@@ -115,6 +115,7 @@ export default function AutomationDetail() {
   const router = useRouter();
   const { automations, toggleStatus, deleteAutomation } = useAutomations();
   const { logs, loading, error, refresh } = useAutomationLogs(automationId ?? '');
+  const { stats: apiStats, loading: statsLoading } = useAutomationStats(automationId ?? '');
 
   const automation = useMemo(
     () => automations.find((a) => a.$id === automationId) ?? null,
@@ -214,16 +215,34 @@ export default function AutomationDetail() {
       {/* Stats strip */}
       <View className="flex-row items-center justify-around border-b border-hairline bg-canvas px-4 py-3">
         <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">{stats.sent}</Text>
+          <Text className="text-title-sm font-semibold text-ink">
+            {statsLoading ? '--' : apiStats?.sent ?? stats.sent}
+          </Text>
           <Text className="text-caption text-muted">Sent</Text>
         </View>
         <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">{stats.skipped}</Text>
+          <Text className="text-title-sm font-semibold text-ink">
+            {statsLoading ? '--' : apiStats?.skipped ?? stats.skipped}
+          </Text>
           <Text className="text-caption text-muted">Skipped</Text>
         </View>
         <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">{stats.failed}</Text>
+          <Text className="text-title-sm font-semibold text-ink">
+            {statsLoading ? '--' : apiStats?.failed ?? stats.failed}
+          </Text>
           <Text className="text-caption text-muted">Failed</Text>
+        </View>
+        <View className="items-center gap-1">
+          <Text className="text-title-sm font-semibold text-ink">
+            {statsLoading ? '--' : apiStats?.clicks ?? 0}
+          </Text>
+          <Text className="text-caption text-muted">Clicks</Text>
+        </View>
+        <View className="items-center gap-1">
+          <Text className="text-title-sm font-semibold text-ink">
+            {statsLoading ? '--' : apiStats ? `${(apiStats.ctr * 100).toFixed(0)}%` : '0%'}
+          </Text>
+          <Text className="text-caption text-muted">CTR</Text>
         </View>
       </View>
 

@@ -140,3 +140,31 @@ export async function listCampaignTemplates(getToken: GetToken): Promise<Campaig
   const data = await request<{ templates: CampaignTemplate[] }>(getToken, '/automations/templates', { method: 'GET' }, true);
   return data.templates;
 }
+
+// ── Stats ──────────────────────────────────────────────────────────────────────
+
+export interface AutomationStats {
+  sent: number;
+  skipped: number;
+  failed: number;
+  clicks: number;
+  ctr: number;
+  top_keywords: [string, number][];
+  daily: { date: string; sent: number }[];
+}
+
+export interface OverviewStats {
+  sent_7d: number;
+  clicks_7d: number;
+  ctr_7d: number;
+  top_keyword_7d: string;
+  active_automations: number;
+}
+
+export async function getAutomationStats(getToken: GetToken, automationId: string): Promise<AutomationStats> {
+  return request<AutomationStats>(getToken, `/automations/${automationId}/stats`, { method: 'GET' }, true);
+}
+
+export async function getOverviewStats(getToken: GetToken): Promise<OverviewStats> {
+  return request<OverviewStats>(getToken, '/automations/stats/overview', { method: 'GET' }, true);
+}

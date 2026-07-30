@@ -5,12 +5,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAutomation,
   deleteAutomation,
+  getAutomationStats,
+  getOverviewStats,
   listAutomationLogs,
   listAutomations,
   updateAutomation,
   type Automation,
   type AutomationLog,
+  type AutomationStats,
   type CreateAutomationInput,
+  type OverviewStats,
 } from '@/lib/automations';
 
 export function useAutomations() {
@@ -65,6 +69,41 @@ export function useAutomationLogs(automationId: string) {
   });
   return {
     logs: query.data ?? [] as AutomationLog[],
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
+    refresh: query.refetch,
+  };
+}
+
+export function useOverviewStats() {
+  const { getToken } = useAuth();
+  const query = useQuery({
+    queryKey: ['overviewStats'],
+    queryFn: () => getOverviewStats(getToken),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: false,
+  });
+  return {
+    stats: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
+    refresh: query.refetch,
+  };
+}
+
+export function useAutomationStats(automationId: string) {
+  const { getToken } = useAuth();
+  const query = useQuery({
+    queryKey: ['automationStats', automationId],
+    enabled: !!automationId,
+    queryFn: () => getAutomationStats(getToken, automationId),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: false,
+  });
+  return {
+    stats: query.data ?? null,
     loading: query.isLoading,
     error: query.error?.message ?? null,
     refresh: query.refetch,

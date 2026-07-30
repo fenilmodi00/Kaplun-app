@@ -28,12 +28,6 @@ def _auth_override():
 class FakeStore:
     """In-memory AutomationStore fake. Records calls and returns canned data."""
 
-    def __init__(self):
-        self.automations: dict[str, dict] = {}
-        self.logs: dict[str, list[dict]] = {}
-        self.creators: dict[str, dict] = {}
-        self.calls: list[tuple[str, tuple, dict]] = []
-
     def _record(self, method: str, *args, **kwargs):
         self.calls.append((method, args, kwargs))
 
@@ -71,6 +65,66 @@ class FakeStore:
     def list_logs(self, automation_id: str, limit: int = 100) -> list[dict]:
         self._record("list_logs", automation_id, limit)
         return self.logs.get(automation_id, [])
+
+    # ── stats ──────────────────────────────────────────────────────────────
+
+    def count_logs_by_action(self, automation_id: str) -> dict[str, int]:
+        self._record("count_logs_by_action", automation_id)
+        logs = self.logs.get(automation_id, [])
+        counts: dict[str, int] = {}
+        for log in logs:
+            action = log.get("action", "unknown")
+            counts[action] = counts.get(action, 0) + 1
+        return counts
+
+    def count_logs_by_action_since(self, clerk_user_id: str, since_iso: str) -> dict[str, int]:
+        self._record("count_logs_by_action_since", clerk_user_id, since_iso)
+        # Aggregate across all logs for this user
+        counts: dict[str, int] = {}
+        for logs_list in self.logs.values():
+            for log in logs_list:
+                if log.get("clerk_user_id") == clerk_user_id and log.get("created_at", "") >= since_iso:
+                    action = log.get("action", "unknown")
+                    counts[action] = counts.get(action, 0) + 1
+        return counts
+
+    def top_keywords(self, clerk_user_id: str, since_iso: str, limit: int = 5) -> list[list]:
+        self._record("top_keywords", clerk_user_id, since_iso, limit)
+        kw_counts: dict[str, int] = {}
+        for logs_list in self.logs.values():
+            for log in logs_list:
+                if log.get("clerk_user_id") == clerk_user_id and log.get("created_at", "") >= since_iso:
+                    kw = log.get("matched_keyword")
+                    if kw:
+                        kw_counts[kw] = kw_counts.get(kw, 0) + 1
+        sorted_kws = sorted(kw_counts.items(), key=lambda x: -x[1])
+        return [[kw, count] for kw, count in sorted_kws[:limit]]
+
+    # ── tracked links ──────────────────────────────────────────────────────
+
+    def __init__(self):
+        self.automations: dict[str, dict] = {}
+        self.logs: dict[str, list[dict]] = {}
+        self.creators: dict[str, dict] = {}
+        self.tracked_links: dict[str, dict] = {}
+        self.link_clicks: dict[str, list[dict]] = {}
+        self.calls: list[tuple[str, tuple, dict]] = []
+
+    def get_tracked_link_for_automation(self, automation_id: str) -> dict | None:
+        self._record("get_tracked_link_for_automation", automation_id)
+        for slug, link in self.tracked_links.items():
+            if link.get("automation_id") == automation_id:
+                return link
+        return None
+
+    def count_clicks(self, slug: str) -> int:
+        self._record("count_clicks", slug)
+        return len(self.link_clicks.get(slug, []))
+
+    def count_clicks_since(self, slug: str, since_iso: str) -> int:
+        self._record("count_clicks_since", slug, since_iso)
+        return sum(1 for c in self.link_clicks.get(slug, [])
+                   if c.get("clicked_at", "") >= since_iso)
 
     # ── creators ───────────────────────────────────────────────────────────
 
@@ -254,3 +308,113 @@ class TestTemplates:
         r = client.get("/automations/templates")
         assert r.status_code == 200
         assert "templates" in r.json()
+
+
+class TestAutomationStats:
+    def test_automation_stats_shape(self, client, store):
+        store.automations["auto_1"] = {
+            "$id": "auto_1", "clerk_user_id": "clerk_test_1", "name": "Mine"}
+        store.logs["auto_1"] = [
+            {"$id": "l1", "automation_id": "auto_1", "action": "dm_sent",
+             "matched_keyword": "LINK", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l2", "automation_id": "auto_1", "action": "dm_sent",
+             "matched_keyword": "LINK", "created_at": "2026-07-28T00:00:00Z"},
+            {"$id": "l3", "automation_id": "auto_1", "action": "skipped",
+             "matched_keyword": None, "created_at": "2026-07-27T00:00:00Z"},
+            {"$id": "l4", "automation_id": "auto_1", "action": "failed",
+             "matched_keyword": "SHOP", "created_at": "2026-07-26T00:00:00Z"},
+            {"$id": "l5", "automation_id": "auto_1", "action": "button_dm_sent",
+             "matched_keyword": "LINK", "created_at": "2026-07-25T00:00:00Z"},
+        ]
+        store.tracked_links["s1"] = {
+            "$id": "s1", "automation_id": "auto_1", "target_url": "https://example.com"}
+        store.link_clicks["s1"] = [
+            {"slug": "s1", "clicked_at": "2026-07-29T00:00:00Z"},
+            {"slug": "s1", "clicked_at": "2026-07-28T00:00:00Z"},
+        ]
+
+        r = client.get("/automations/auto_1/stats")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["sent"] == 3  # dm_sent(2) + button_dm_sent(1)
+        assert body["skipped"] == 1
+        assert body["failed"] == 1
+        assert body["clicks"] == 2
+        assert body["ctr"] == round(2 / 3, 2)
+        assert body["top_keywords"] == [["LINK", 3], ["SHOP", 1]]
+        assert len(body["daily"]) == 7
+        # Verify daily has the right shape
+        for entry in body["daily"]:
+            assert "date" in entry
+            assert "sent" in entry
+
+    def test_automation_stats_no_tracked_link(self, client, store):
+        store.automations["auto_1"] = {
+            "$id": "auto_1", "clerk_user_id": "clerk_test_1", "name": "Mine"}
+        r = client.get("/automations/auto_1/stats")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["clicks"] == 0
+        assert body["ctr"] == 0
+
+    def test_automation_stats_other_user_404(self, client, store):
+        store.automations["auto_other"] = {
+            "$id": "auto_other", "clerk_user_id": "other_user", "name": "Theirs"}
+        r = client.get("/automations/auto_other/stats")
+        assert r.status_code == 404
+
+
+class TestOverviewStats:
+    def test_overview_stats_shape(self, client, store):
+        store.automations["auto_1"] = {
+            "$id": "auto_1", "clerk_user_id": "clerk_test_1", "name": "Active 1",
+            "status": "active"}
+        store.automations["auto_2"] = {
+            "$id": "auto_2", "clerk_user_id": "clerk_test_1", "name": "Active 2",
+            "status": "active"}
+        store.automations["auto_3"] = {
+            "$id": "auto_3", "clerk_user_id": "clerk_test_1", "name": "Paused",
+            "status": "paused"}
+        store.logs["auto_1"] = [
+            {"$id": "l1", "automation_id": "auto_1", "action": "dm_sent",
+             "clerk_user_id": "clerk_test_1", "matched_keyword": "LINK",
+             "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l2", "automation_id": "auto_1", "action": "dm_sent",
+             "clerk_user_id": "clerk_test_1", "matched_keyword": "LINK",
+             "created_at": "2026-07-28T00:00:00Z"},
+        ]
+        store.logs["auto_2"] = [
+            {"$id": "l3", "automation_id": "auto_2", "action": "button_dm_sent",
+             "clerk_user_id": "clerk_test_1", "matched_keyword": "SHOP",
+             "created_at": "2026-07-27T00:00:00Z"},
+        ]
+        store.tracked_links["s1"] = {
+            "$id": "s1", "automation_id": "auto_1", "target_url": "https://example.com"}
+        store.link_clicks["s1"] = [
+            {"slug": "s1", "clicked_at": "2026-07-29T00:00:00Z"},
+        ]
+
+        r = client.get("/automations/stats/overview")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["sent_7d"] == 3
+        assert body["clicks_7d"] == 1
+        assert body["ctr_7d"] == round(1 / 3, 2)
+        assert body["top_keyword_7d"] == "LINK"
+        assert body["active_automations"] == 2
+
+    def test_overview_stats_empty(self, client, store):
+        r = client.get("/automations/stats/overview")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["sent_7d"] == 0
+        assert body["clicks_7d"] == 0
+        assert body["ctr_7d"] == 0
+        assert body["top_keyword_7d"] == ""
+        assert body["active_automations"] == 0
+
+    def test_overview_route_before_automation_id(self, client):
+        """Verify /automations/stats/overview is not swallowed by /{automation_id}."""
+        r = client.get("/automations/stats/overview")
+        assert r.status_code == 200
+        assert "sent_7d" in r.json()

@@ -279,6 +279,97 @@ def test_record_click_creates_link_click_row_and_count_reads_total():
     assert equals == [{"method": "equal", "attribute": "slug", "values": ["abc12345"]}]
 
 
+# ── stats ──────────────────────────────────────────────────────────────────────
+
+
+def test_count_logs_by_action_aggregates_correctly():
+    fake = FakeTables()
+    fake.list_responses["automation_logs"] = {
+        "rows": [
+            {"$id": "l1", "automation_id": "auto1", "action": "dm_sent"},
+            {"$id": "l2", "automation_id": "auto1", "action": "dm_sent"},
+            {"$id": "l3", "automation_id": "auto1", "action": "skipped"},
+            {"$id": "l4", "automation_id": "auto1", "action": "failed"},
+            {"$id": "l5", "automation_id": "auto1", "action": "button_dm_sent"},
+        ],
+        "total": 5,
+    }
+    store = AutomationStore(tables=fake)
+    counts = store.count_logs_by_action("auto1")
+    assert counts == {"dm_sent": 2, "skipped": 1, "failed": 1, "button_dm_sent": 1}
+
+
+def test_count_logs_by_action_empty_when_no_logs():
+    fake = FakeTables()
+    store = AutomationStore(tables=fake)
+    assert store.count_logs_by_action("auto1") == {}
+
+
+def test_count_logs_by_action_since_filters_by_date():
+    fake = FakeTables()
+    fake.list_responses["automation_logs"] = {
+        "rows": [
+            {"$id": "l1", "clerk_user_id": "u1", "action": "dm_sent", "created_at": "2026-07-28T00:00:00Z"},
+            {"$id": "l2", "clerk_user_id": "u1", "action": "skipped", "created_at": "2026-07-29T00:00:00Z"},
+        ],
+        "total": 2,
+    }
+    store = AutomationStore(tables=fake)
+    counts = store.count_logs_by_action_since("u1", "2026-07-28T12:00:00Z")
+    # Both rows are returned by the fake; filtering by date is done server-side
+    # so the fake returns all rows. The method counts whatever it receives.
+    assert counts == {"dm_sent": 1, "skipped": 1}
+
+
+def test_count_logs_by_action_since_queries_correctly():
+    fake = FakeTables()
+    store = AutomationStore(tables=fake)
+    store.count_logs_by_action_since("u1", "2026-07-28T00:00:00Z")
+    call = _list_calls(fake, "automation_logs")[0]
+    queries = _queries(call)
+    equals = {q["attribute"]: q["values"] for q in queries if q["method"] == "equal"}
+    assert equals["clerk_user_id"] == ["u1"]
+    greater = [q for q in queries if q["method"] == "greaterThan"]
+    assert greater and greater[0]["attribute"] == "created_at"
+
+
+def test_top_keywords_returns_sorted():
+    fake = FakeTables()
+    fake.list_responses["automation_logs"] = {
+        "rows": [
+            {"$id": "l1", "clerk_user_id": "u1", "matched_keyword": "LINK", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l2", "clerk_user_id": "u1", "matched_keyword": "SHOP", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l3", "clerk_user_id": "u1", "matched_keyword": "LINK", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l4", "clerk_user_id": "u1", "matched_keyword": "LINK", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l5", "clerk_user_id": "u1", "matched_keyword": "HELLO", "created_at": "2026-07-29T00:00:00Z"},
+            {"$id": "l6", "clerk_user_id": "u1", "matched_keyword": None, "created_at": "2026-07-29T00:00:00Z"},
+        ],
+        "total": 6,
+    }
+    store = AutomationStore(tables=fake)
+    kws = store.top_keywords("u1", "2026-07-28T00:00:00Z", limit=3)
+    assert kws == [["LINK", 3], ["SHOP", 1], ["HELLO", 1]]
+
+
+def test_top_keywords_empty_when_no_logs():
+    fake = FakeTables()
+    store = AutomationStore(tables=fake)
+    assert store.top_keywords("u1", "2026-07-28T00:00:00Z") == []
+
+
+def test_count_clicks_since_returns_total_and_filters():
+    fake = FakeTables()
+    fake.list_responses["link_clicks"] = {"rows": [], "total": 5}
+    store = AutomationStore(tables=fake)
+    assert store.count_clicks_since("abc123", "2026-07-28T00:00:00Z") == 5
+    call = _list_calls(fake, "link_clicks")[0]
+    queries = _queries(call)
+    equals = [q for q in queries if q["method"] == "equal"]
+    assert equals == [{"method": "equal", "attribute": "slug", "values": ["abc123"]}]
+    greater = [q for q in queries if q["method"] == "greaterThan"]
+    assert greater and greater[0]["attribute"] == "clicked_at"
+
+
 # ── singleton ─────────────────────────────────────────────────────────────────
 
 
