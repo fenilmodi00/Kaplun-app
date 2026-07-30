@@ -17,6 +17,7 @@ import {
   updateAutomation,
   deleteAutomation,
   listAutomationLogs,
+  listCampaignTemplates,
   type CreateAutomationInput,
 } from '@/lib/automations';
 
@@ -257,5 +258,53 @@ describe('listAutomationLogs', () => {
     } as Response);
 
     await expect(listAutomationLogs(mockGetToken, 'auto_1')).rejects.toThrow('session_expired');
+  });
+});
+
+describe('listCampaignTemplates', () => {
+  const mockTemplates = [
+    { slug: 'dtc-product-link', title: 'DTC Product Link Drop', keywords: ['LINK', 'SHOP', 'BUY'], dm_message: 'Hey {username}, here is the link' },
+    { slug: 'creator-media-kit', title: 'Creator Media Kit Reply', keywords: ['COLLAB', 'KIT', 'RATES'], dm_message: 'Hey {username}, here is my media kit' },
+  ];
+
+  it('happy: GETs /automations/templates and returns array', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ templates: mockTemplates }),
+    } as Response);
+
+    const result = await listCampaignTemplates(mockGetToken);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toBe('http://localhost:8000/automations/templates');
+    expect(options.method).toBe('GET');
+    expect(options.headers).toEqual({
+      Authorization: 'Bearer mock-clerk-token',
+      'Content-Type': 'application/json',
+    });
+    expect(result).toEqual(mockTemplates);
+  });
+
+  it('session_expired: throws on 401', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => 'Unauthorized',
+    } as Response);
+
+    await expect(listCampaignTemplates(mockGetToken)).rejects.toThrow('session_expired');
+  });
+
+  it('empty: returns empty array when no templates', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ templates: [] }),
+    } as Response);
+
+    const result = await listCampaignTemplates(mockGetToken);
+    expect(result).toEqual([]);
   });
 });

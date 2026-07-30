@@ -61,6 +61,13 @@ export interface CreateAutomationInput {
 export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;
 export type GetToken = () => Promise<string | null>;
 
+export interface CampaignTemplate {
+  slug: string;
+  title: string;
+  keywords: string[];
+  dm_message: string;
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -124,4 +131,9 @@ export async function deleteAutomation(getToken: GetToken, id: string): Promise<
 export async function listAutomationLogs(getToken: GetToken, id: string): Promise<AutomationLog[]> {
   const data = await request<{ logs: AutomationLog[] }>(getToken, `/automations/${id}/logs`, { method: 'GET' }, true);
   return data.logs;
+}
+
+export async function listCampaignTemplates(getToken: GetToken): Promise<CampaignTemplate[]> {
+  const data = await request<{ templates: CampaignTemplate[] }>(getToken, '/automations/templates', { method: 'GET' }, true);
+  return data.templates;
 }

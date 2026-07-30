@@ -225,3 +225,32 @@ class TestAuth:
         r = client.get("/automations")
         assert r.status_code == 401
         assert r.json()["error"] == "unauthorized"
+
+
+class TestTemplates:
+    def test_list_templates_returns_8(self, client):
+        r = client.get("/automations/templates")
+        assert r.status_code == 200
+        body = r.json()
+        templates = body["templates"]
+        assert len(templates) == 8
+        slugs = {t["slug"] for t in templates}
+        expected = {
+            "dtc-product-link", "real-estate-lead-form", "fitness-plan",
+            "course-webinar", "beauty-price-list", "restaurant-menu",
+            "event-rsvp", "creator-media-kit",
+        }
+        assert slugs == expected
+        # Verify shape of first template
+        t0 = templates[0]
+        assert "title" in t0
+        assert "keywords" in t0
+        assert "dm_message" in t0
+        assert isinstance(t0["keywords"], list)
+        assert len(t0["keywords"]) >= 1
+
+    def test_templates_route_before_automation_id(self, client):
+        """Verify /automations/templates is not swallowed by /{automation_id}."""
+        r = client.get("/automations/templates")
+        assert r.status_code == 200
+        assert "templates" in r.json()

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from api.auth import get_clerk_user_id
 from api.automation_store import get_automation_store
+from api.campaign_templates import CAMPAIGN_TEMPLATES
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
@@ -91,6 +92,12 @@ def create_automation(body: AutomationCreate, clerk_user_id: str = Depends(requi
         "status": "active", "created_at": now, "updated_at": now,
     })
     return {"automation": row}
+
+
+@router.get("/templates")
+def list_templates():
+    """Return static campaign templates (no auth required — they're public)."""
+    return {"templates": CAMPAIGN_TEMPLATES}
 
 
 @router.get("/{automation_id}")

@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Switch } from 'react-native';
+import { Switch, ScrollView as RNScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import { View, Text, ScrollView, TextInput, Pressable } from '@/tw';
@@ -19,7 +19,8 @@ import {
   validateAutomationDraft,
   type AutomationDraft,
 } from '@/lib/automation-validation';
-import type { CreateAutomationInput, TargetType, MatchMode } from '@/lib/automations';
+import type { CreateAutomationInput, TargetType, MatchMode, CampaignTemplate } from '@/lib/automations';
+import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
 
 const TARGET_OPTIONS: { value: TargetType; label: string }[] = [
@@ -169,6 +170,12 @@ export default function NewAutomationScreen() {
   const [publicReplyMessage, setPublicReplyMessage] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // ── Template picker state ──────────────────────────────────────────────
+  const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [selectedTemplateSlug, setSelectedTemplateSlug] = useState<string | null>(null);
+  const { getToken } = useAuth();
+
   const { media, loading: mediaLoading, error: mediaError, loadMedia } = useMediaPicker();
   const { connect: connectInstagram } = useAutomationGate();
   const [isConnectingIg, setIsConnectingIg] = useState(false);
@@ -179,6 +186,37 @@ export default function NewAutomationScreen() {
       loadMedia();
     }
   }, [targetType, media.length, mediaLoading, loadMedia]);
+
+  // Fetch templates on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await listCampaignTemplates(getToken);
+        if (!cancelled) setTemplates(data);
+      } catch (err) {
+        addLog(`Failed to load templates: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  const applyTemplate = useCallback((slug: string | null) => {
+    setSelectedTemplateSlug(slug);
+    if (slug === null) {
+      setName('');
+      setKeywords([]);
+      setDmMessage('');
+      return;
+    }
+    const tmpl = templates.find((t) => t.slug === slug);
+    if (!tmpl) return;
+    setName(tmpl.title);
+    setKeywords(tmpl.keywords.map((k) => k.toLowerCase()));
+    setDmMessage(tmpl.dm_message);
+  }, [templates]);
 
   const draft: AutomationDraft = useMemo(
     () => ({
@@ -252,6 +290,65 @@ export default function NewAutomationScreen() {
 
   return (
     <ScrollView className="flex-1 bg-canvas" contentContainerStyle={{ padding: 16, gap: 24 }}>
+      {/* ── 0. Template picker ── */}
+      <View style={{ gap: 8 }}>
+        <SectionLabel>Start from a template</SectionLabel>
+        {templatesLoading ? (
+          <Text className="text-body-sm text-muted">Loading templates…</Text>
+        ) : (
+          <RNScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+          >
+            {/* Blank card */}
+            <Pressable
+              onPress={() => applyTemplate(null)}
+              className={cn(
+                'h-20 w-32 items-center justify-center rounded-xl border-2',
+                selectedTemplateSlug === null
+                  ? 'border-primary bg-primary/10'
+                  : 'border-hairline bg-surface-soft'
+              )}
+            >
+              <Text
+                className={cn(
+                  'text-body-sm font-semibold text-center',
+                  selectedTemplateSlug === null ? 'text-primary' : 'text-muted'
+                )}
+              >
+                Blank
+              </Text>
+            </Pressable>
+            {templates.map((tmpl) => {
+              const active = selectedTemplateSlug === tmpl.slug;
+              return (
+                <Pressable
+                  key={tmpl.slug}
+                  onPress={() => applyTemplate(tmpl.slug)}
+                  className={cn(
+                    'h-20 w-40 items-center justify-center rounded-xl border-2 px-3',
+                    active
+                      ? 'border-primary bg-primary/10'
+                      : 'border-hairline bg-surface-soft'
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      'text-caption font-semibold text-center',
+                      active ? 'text-primary' : 'text-ink'
+                    )}
+                    numberOfLines={2}
+                  >
+                    {tmpl.title}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </RNScrollView>
+        )}
+      </View>
+
       {/* ── 1. Name ── */}
       <View style={{ gap: 8 }}>
         <SectionLabel>Campaign name</SectionLabel>
