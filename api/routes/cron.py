@@ -9,6 +9,7 @@ from loguru import logger
 from starlette.concurrency import run_in_threadpool
 
 from api.automation_store import get_automation_store
+from api.comment_reconciler import attach_next_reels, reconcile_once
 from api.graph_client import refresh_long_lived_token
 from api.token_crypto import decrypt_or_plaintext, get_token_crypto
 
@@ -47,3 +48,19 @@ async def refresh_tokens(x_cron_secret: str | None = Header(None)):
             failed += 1
             logger.error("token refresh failed for creator {}: {}", creator.get("$id"), exc)
     return {"refreshed": refreshed, "failed": failed}
+
+
+@router.post("/reconcile")
+async def reconcile(x_cron_secret: str | None = Header(None)):
+    """Polling safety net: scan active automations for unmatched comments
+    (72h lookback) and auto-attach new reels for next_reel targets.
+
+    Schedule: run every hour (or every 30 min during peak hours). The 72h
+    lookback window overlaps with the webhook's real-time coverage, so a
+    missed webhook is caught within at most one polling cycle.
+    """
+    _check_secret(x_cron_secret)
+    store = get_automation_store()
+    result = await reconcile_once(store)
+    attached = await attach_next_reels(store)
+    return {**result, "attached": attached}
