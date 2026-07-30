@@ -2407,11 +2407,31 @@ Response: `{"pending": n, "processing": n, "failed": n, "done": n, "last_webhook
 
 ## Task 30: Meta Developer Portal webhook configuration
 
-1. App Dashboard → your app → **Webhooks** (or Instagram → Webhooks).
+> **Status: BLOCKED — backend not deployed yet.** Meta requires a live HTTPS callback URL for the webhook handshake. The verify token has been generated and added to `api/.env`; complete the steps below once the FastAPI backend is deployed to a public host.
+
+**Target Meta app:** `Kaplun` · app ID `1329847562597814` (confirmed via Meta Developer Tools MCP).
+
+**Generated verify token (already in `api/.env`):**
+```
+LdQ_Nys5dHt8HPPy-QNZtn7dQSszsYcA3976ekxuVn4=
+```
+
+**Remaining manual steps after deployment:**
+1. App Dashboard → `Kaplun` (`1329847562597814`) → **Webhooks** (or Instagram → Webhooks).
 2. Callback URL: `https://<deployed-api-host>/webhooks/instagram`.
-3. Verify token: the `WEBHOOK_VERIFY_TOKEN` value from `api/.env`.
+3. Verify token: `LdQ_Nys5dHt8HPPy-QNZtn7dQSszsYcA3976ekxuVn4=` (must match `WEBHOOK_VERIFY_TOKEN` in deployed `api/.env`).
 4. Subscribe to fields: **`comments`**, **`messages`**, and **`messaging_postbacks`**. Button-tap postbacks are a separate webhook field, not part of `messages`.
 5. Confirm the deployed backend has the same `INSTAGRAM_APP_SECRET` / `WEBHOOK_VERIFY_TOKEN` env values as `api/.env`.
+
+**One-shot MCP command to run once deployed:**
+```
+devtools_webhook_manage subscribe
+  app_id=1329847562597814
+  topic=instagram
+  callback_url=https://<deployed-api-host>/webhooks/instagram
+  verify_token=LdQ_Nys5dHt8HPPy-QNZtn7dQSszsYcA3976ekxuVn4=
+  fields=["comments","messages","messaging_postbacks"]
+```
 
 Done-when: Meta's "Test" button for the comments field returns 200 from our endpoint (check server logs for `webhook_events`).
 
