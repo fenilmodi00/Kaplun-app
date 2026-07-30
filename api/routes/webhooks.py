@@ -44,6 +44,15 @@ async def webhook_events(request: Request, background_tasks: BackgroundTasks):
 
     # Always return 200 after a valid signature — Meta retries non-200s.
     # Any parse/storage failure is logged and handled by the reconciler (Task 25).
+
+    # Record raw payload for debugging (never fails the webhook).
+    raw_str = raw.decode()
+    try:
+        store = get_automation_store()
+        await run_in_threadpool(store.record_webhook_event, raw_str)
+    except Exception as exc:
+        logger.warning("failed to record webhook event: {}", exc)
+
     try:
         payload = json.loads(raw.decode() or "{}")
     except Exception as exc:

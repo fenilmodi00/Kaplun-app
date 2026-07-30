@@ -26,9 +26,13 @@ def test_post_bad_signature_401():
 
 
 def test_post_creates_job(monkeypatch):
+    recorded = []
     created = []
 
     class FakeStore:
+        def record_webhook_event(self, payload):
+            recorded.append(payload)
+
         def create_job(self, type_, payload, run_at_iso=None):
             created.append((type_, payload))
             return {"$id": "j1"}
@@ -49,6 +53,9 @@ def test_postback_creates_send_reveal_job(monkeypatch):
     created = []
 
     class FakeStore:
+        def record_webhook_event(self, payload):
+            pass
+
         def create_job(self, type_, payload, run_at_iso=None):
             created.append((type_, payload))
             return {"$id": "j1"}
@@ -71,3 +78,25 @@ def test_postback_creates_send_reveal_job(monkeypatch):
     assert created[0][1]["instagram_account_id"] == "ig1"
     assert created[0][1]["user_id"] == "u42"
     assert created[0][1]["automation_id"] == "a1"
+
+
+def test_post_records_raw_payload(monkeypatch):
+    recorded = []
+
+    class FakeStore:
+        def record_webhook_event(self, payload):
+            recorded.append(payload)
+
+        def create_job(self, type_, payload, run_at_iso=None):
+            return {"$id": "j1"}
+
+    monkeypatch.setattr("api.routes.webhooks.get_automation_store", lambda: FakeStore())
+    body = json.dumps({"object": "instagram", "entry": [{"id": "ig1", "changes": [
+        {"field": "comments", "value": {"id": "c1", "text": "hello",
+                                        "from": {"id": "u2"}, "media": {"id": "m1"}}}]}]}).encode()
+    sig = "sha256=" + hmac.new(b"test-ig-secret", body, hashlib.sha256).hexdigest()
+    r = TestClient(app).post("/webhooks/instagram", content=body,
+                             headers={"x-hub-signature-256": sig})
+    assert r.status_code == 200
+    assert len(recorded) == 1
+    assert json.loads(recorded[0])["object"] == "instagram"

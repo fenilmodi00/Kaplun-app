@@ -431,6 +431,25 @@ class AutomationStore:
         _, total = _rows_and_total(result)
         return total
 
+    # ── webhook events ─────────────────────────────────────────────────────────
+
+    def record_webhook_event(self, payload: str) -> None:
+        """Persist a raw webhook payload for debugging.
+
+        Payloads longer than 16 000 characters are truncated before insert.
+        """
+        if len(payload) > 16000:
+            payload = payload[:16000]
+        self._tables.create_row(
+            database_id=APPWRITE_DATABASE_ID,
+            table_id=APPWRITE_WEBHOOK_EVENTS_TABLE_ID,
+            row_id=ID.unique(),
+            data={
+                "payload": payload,
+                "received_at": _utc_now_iso(),
+            },
+        )
+
     # ── stats ──────────────────────────────────────────────────────────────────
 
     def count_logs_by_action(self, automation_id: str) -> dict[str, int]:
