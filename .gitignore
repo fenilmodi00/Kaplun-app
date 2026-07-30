@@ -43,6 +43,7 @@ yarn-error.*
 
 # agent metadata
 .omo/
+.worktrees/
 
 # Python
 __pycache__/
