@@ -64,3 +64,14 @@ async def reconcile(x_cron_secret: str | None = Header(None)):
     result = await reconcile_once(store)
     attached = await attach_next_reels(store)
     return {**result, "attached": attached}
+
+
+@router.post("/retain-logs")
+async def retain_logs(x_cron_secret: str | None = Header(None)):
+    _check_secret(x_cron_secret)
+    store = get_automation_store()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    deleted_logs = await run_in_threadpool(store.delete_logs_older_than, cutoff)
+    deleted_events = await run_in_threadpool(store.delete_webhook_events_older_than, cutoff)
+    logger.info("retention: deleted {} log rows and {} webhook events older than {}", deleted_logs, deleted_events, cutoff)
+    return {"deleted_logs": deleted_logs, "deleted_webhook_events": deleted_events}

@@ -22,6 +22,8 @@ class FakeStore:
 
     def __init__(self):
         self.creators: dict[str, dict] = {}
+        self.logs: dict[str, dict] = {}
+        self.webhook_events: dict[str, dict] = {}
         self.calls: list[tuple[str, tuple, dict]] = []
 
     def _record(self, method: str, *args, **kwargs):
@@ -40,6 +42,22 @@ class FakeStore:
             self.creators[creator_id]["access_token"] = encrypted_token
             self.creators[creator_id]["token_expires_at"] = expires_at_iso
         return self.creators.get(creator_id, {})
+
+    def delete_logs_older_than(self, cutoff_iso: str) -> int:
+        self._record("delete_logs_older_than", cutoff_iso)
+        to_delete = [rid for rid, row in self.logs.items()
+                     if row.get("created_at", "") < cutoff_iso]
+        for rid in to_delete:
+            del self.logs[rid]
+        return len(to_delete)
+
+    def delete_webhook_events_older_than(self, cutoff_iso: str) -> int:
+        self._record("delete_webhook_events_older_than", cutoff_iso)
+        to_delete = [rid for rid, row in self.webhook_events.items()
+                     if row.get("received_at", "") < cutoff_iso]
+        for rid in to_delete:
+            del self.webhook_events[rid]
+        return len(to_delete)
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -186,3 +204,57 @@ class TestRefreshFailure:
         # No update_creator_token call should have been made
         update_calls = [c for c in store.calls if c[0] == "update_creator_token"]
         assert len(update_calls) == 0
+
+
+# ── Retention tests ────────────────────────────────────────────────────────────
+
+
+class TestRetainLogs:
+    def test_missing_secret_401(self, client):
+        r = client.post("/cron/retain-logs")
+        assert r.status_code == 401
+
+    def test_wrong_secret_401(self, client):
+        r = client.post("/cron/retain-logs", headers={"X-Cron-Secret": "wrong-secret"})
+        assert r.status_code == 401
+
+    def test_correct_secret_200(self, client, store):
+        """Happy path: correct secret returns 200 even with empty store."""
+        r = client.post("/cron/retain-logs", headers={"X-Cron-Secret": "test-cron-secret"})
+        assert r.status_code == 200
+        assert r.json() == {"deleted_logs": 0, "deleted_webhook_events": 0}
+
+    def test_deletes_old_logs_keeps_new(self, client, store):
+        """Old rows (created_at < 14 days ago) are deleted; new rows are kept."""
+        now = datetime.now(timezone.utc)
+        old_iso = (now - timedelta(days=20)).isoformat()
+        new_iso = (now - timedelta(days=1)).isoformat()
+
+        store.logs = {
+            "old_log_1": {"$id": "old_log_1", "created_at": old_iso},
+            "new_log_1": {"$id": "new_log_1", "created_at": new_iso},
+        }
+        store.webhook_events = {
+            "old_evt_1": {"$id": "old_evt_1", "received_at": old_iso},
+            "new_evt_1": {"$id": "new_evt_1", "received_at": new_iso},
+        }
+
+        r = client.post("/cron/retain-logs", headers={"X-Cron-Secret": "test-cron-secret"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["deleted_logs"] == 1
+        assert body["deleted_webhook_events"] == 1
+
+        # Old rows removed, new rows remain
+        assert "old_log_1" not in store.logs
+        assert "new_log_1" in store.logs
+        assert "old_evt_1" not in store.webhook_events
+        assert "new_evt_1" in store.webhook_events
+
+    def test_empty_store_zero_error(self, client, store):
+        """Empty store returns zero counts without error."""
+        store.logs = {}
+        store.webhook_events = {}
+        r = client.post("/cron/retain-logs", headers={"X-Cron-Secret": "test-cron-secret"})
+        assert r.status_code == 200
+        assert r.json() == {"deleted_logs": 0, "deleted_webhook_events": 0}

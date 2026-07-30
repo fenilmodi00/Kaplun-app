@@ -450,6 +450,76 @@ class AutomationStore:
             },
         )
 
+    # ── retention ──────────────────────────────────────────────────────────────
+
+    def delete_logs_older_than(self, cutoff_iso: str) -> int:
+        """Delete automation_log rows with created_at < cutoff_iso.
+
+        Paginates through results 100 at a time and deletes each row.
+        Returns the total number of deleted rows.
+        """
+        total_deleted = 0
+        offset = 0
+        batch_size = 100
+        while True:
+            result = self._tables.list_rows(
+                database_id=APPWRITE_DATABASE_ID,
+                table_id=APPWRITE_AUTOMATION_LOGS_TABLE_ID,
+                queries=[
+                    Query.less_than("created_at", cutoff_iso),
+                    Query.limit(batch_size),
+                    Query.offset(offset),
+                ],
+            )
+            rows, _ = _rows_and_total(result)
+            if not rows:
+                break
+            for row in rows:
+                row_id = row.get("$id")
+                if row_id:
+                    self._tables.delete_row(
+                        database_id=APPWRITE_DATABASE_ID,
+                        table_id=APPWRITE_AUTOMATION_LOGS_TABLE_ID,
+                        row_id=row_id,
+                    )
+                    total_deleted += 1
+            offset += batch_size
+        return total_deleted
+
+    def delete_webhook_events_older_than(self, cutoff_iso: str) -> int:
+        """Delete webhook_event rows with received_at < cutoff_iso.
+
+        Paginates through results 100 at a time and deletes each row.
+        Returns the total number of deleted rows.
+        """
+        total_deleted = 0
+        offset = 0
+        batch_size = 100
+        while True:
+            result = self._tables.list_rows(
+                database_id=APPWRITE_DATABASE_ID,
+                table_id=APPWRITE_WEBHOOK_EVENTS_TABLE_ID,
+                queries=[
+                    Query.less_than("received_at", cutoff_iso),
+                    Query.limit(batch_size),
+                    Query.offset(offset),
+                ],
+            )
+            rows, _ = _rows_and_total(result)
+            if not rows:
+                break
+            for row in rows:
+                row_id = row.get("$id")
+                if row_id:
+                    self._tables.delete_row(
+                        database_id=APPWRITE_DATABASE_ID,
+                        table_id=APPWRITE_WEBHOOK_EVENTS_TABLE_ID,
+                        row_id=row_id,
+                    )
+                    total_deleted += 1
+            offset += batch_size
+        return total_deleted
+
     # ── stats ──────────────────────────────────────────────────────────────────
 
     def count_logs_by_action(self, automation_id: str) -> dict[str, int]:
