@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, Pressable } from '@/tw';
 import { SymbolIcon } from '@/components/symbol-icon';
 import { hapticSelection } from '@/lib/haptics';
-import { BlurView } from 'expo-blur';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import type { View as RNView } from 'react-native';
 import { EdgeBlur } from '@/components/edge-blur';
@@ -54,11 +53,9 @@ export function ClayTabBar({ state, navigation, insets, blurTarget }: ClayTabBar
       pointerEvents="box-none"
     >
       {/*
-        Blur region aligns with the top of the pill so there is no blur above
-        the navbar. Height = insets.bottom + 8 (pill offset) + PILL_HEIGHT.
-        This aligns with TAB_BAR_CLEARANCE=110 from screen-shell.tsx:
-        insets.bottom + 8 + 66 + 36 = 110, where the extra 36 is scroll-content
-        clearance, not part of the blur region.
+        Scrim-only fade under the pill — the native BlurView
+        (dimezisBlurViewSdk31Plus) crashed Android when remounted on screen
+        transitions, so the bar uses a solid translucent pill instead.
       */}
       <EdgeBlur
         position="bottom"
@@ -74,71 +71,63 @@ export function ClayTabBar({ state, navigation, insets, blurTarget }: ClayTabBar
           marginBottom: insets.bottom + 8,
           borderRadius: 22,
           overflow: 'hidden',
+          backgroundColor: 'rgba(255,250,240,0.95)',
           boxShadow: '0 6px 20px rgba(10,10,10,0.08)',
         }}
       >
-        <BlurView
-          intensity={90}
-          tint="systemThickMaterialLight"
-          blurMethod="dimezisBlurViewSdk31Plus"
-          blurReductionFactor={1}
-          blurTarget={blurTarget}
-          style={{ backgroundColor: 'rgba(255,250,240,0.85)' }}
-        >
-          <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
-            {TABS.map((tab, index) => {
-              const isFocused = state.index === index;
-              return (
-                <Pressable
-                  key={tab.name}
-                  className="flex-1 items-center"
-                  style={{ paddingVertical: 6, paddingTop: 5, gap: 3 }}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: isFocused }}
-                  onPress={() => {
-                    hapticSelection();
-                    const event = navigation.emit({
-                      type: 'tabPress',
-                      target: state.routes[index].key,
-                      canPreventDefault: true,
-                    });
-                    if (!isFocused && !event.defaultPrevented) {
-                      navigation.navigate(tab.name);
-                    }
+        <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
+          {TABS.map((tab, index) => {
+            const isFocused = state.index === index;
+            return (
+              <Pressable
+                key={tab.name}
+                className="flex-1 items-center"
+                style={{ paddingVertical: 6, paddingTop: 5, gap: 3 }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isFocused }}
+                onPress={() => {
+                  hapticSelection();
+                  const event = navigation.emit({
+                    type: 'tabPress',
+                    target: state.routes[index].key,
+                    canPreventDefault: true,
+                  });
+                  if (!isFocused && !event.defaultPrevented) {
+                    navigation.navigate(tab.name);
+                  }
+                }}
+              >
+                <SymbolIcon
+                  name={TAB_NAMES[tab.name]}
+                  active={isFocused}
+                  size={20}
+                  color={isFocused ? '#0a0a0a' : '#9a9a9a'}
+                />
+                <Text
+                  className="font-medium"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  style={{
+                    fontSize: 10.5,
+                    color: isFocused ? '#0a0a0a' : '#9a9a9a',
                   }}
                 >
-                  <SymbolIcon
-                    name={TAB_NAMES[tab.name]}
-                    active={isFocused}
-                    size={20}
-                    color={isFocused ? '#0a0a0a' : '#9a9a9a'}
-                  />
-                  <Text
-                    className="font-medium"
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                    style={{
-                      fontSize: 10.5,
-                      color: isFocused ? '#0a0a0a' : '#9a9a9a',
-                    }}
-                  >
-                    {tab.label}
-                  </Text>
-                  <View
-                    style={{
-                      width: 14,
-                      height: 2.5,
-                      borderRadius: 2,
-                      backgroundColor: isFocused ? '#0a0a0a' : 'transparent',
-                      marginTop: 1,
-                    }}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        </BlurView>
+                  {tab.label}
+                </Text>
+                <View
+                  style={{
+                    width: 14,
+                    height: 2.5,
+                    borderRadius: 2,
+                    backgroundColor: isFocused ? '#0a0a0a' : 'transparent',
+                    marginTop: 1,
+                  }}
+                />
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
