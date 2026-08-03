@@ -28,6 +28,7 @@ import (
 	"kaplun/api-go/internal/services/automations"
 	"kaplun/api-go/internal/services/bridge"
 	"kaplun/api-go/internal/services/oauth"
+	"kaplun/api-go/internal/services/reconcile"
 	"kaplun/api-go/internal/services/session"
 	"kaplun/api-go/internal/services/trackedlinks"
 	"kaplun/api-go/internal/store"
@@ -259,6 +260,24 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		logger.Warn("automations store disabled: set all APPWRITE_*_TABLE_ID env vars")
 	}
 
+	// Comment reconciler (polling safety net for comments webhooks miss —
+	// mirrors openreply's dm-worker poll). Runs in-process on an interval so
+	// no external scheduler is required.
+	var reconcileSvc *reconcile.Service
+	if autoStore != nil {
+		reconcileSvc = reconcile.NewService(
+			autoStore.AsReconcile(),
+			reconcileGraph{client: graphClient},
+			safeTokenDecryptor{c: tokCrypto},
+			keywordMatcherAdapter{},
+		)
+	}
+	if reconcileSvc != nil && cfg.AutomationSweeperEnabled {
+		loopCtx, loopCancel := context.WithCancel(context.Background())
+		cleanups = append(cleanups, loopCancel)
+		startReconcileLoop(loopCtx, reconcileSvc, reconcilePollInterval(), logger)
+	}
+
 	var pool *worker.Pool
 	if cfg.AutomationSweeperEnabled && autoStore != nil {
 		pool = worker.NewPool(4, 64)
@@ -308,13 +327,17 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		deps.CronAuth = middleware.CronSecret(cfg.CronSecret)
 		// Keep cron-refreshed tokens plaintext: the Expo app reads access_token
 		// directly and cannot decrypt enc1: values.
+		var cronReconciler handlers.ReconcileService
+		if reconcileSvc != nil {
+			cronReconciler = cronReconcileAdapter{svc: reconcileSvc}
+		}
 		deps.Cron = handlers.NewCronHandler(
 			autoStore,
 			&metaTokenRefresher{client: graphClient},
 			nil, // no encryption: app uses the token directly
-			nil, // reconcile service not wired yet (needs Graph media/comments adapters)
+			cronReconciler,
 		)
-		logger.Info("route enabled", "path", "/cron/* (store + token refresh wired; reconcile deferred)")
+		logger.Info("route enabled", "path", "/cron/* (store + token refresh + reconcile wired)")
 	} else if cfg.CronSecret != "" {
 		logger.Warn("cron skipped: automation store unavailable (set APPWRITE_*_TABLE_ID env vars)")
 	} else {
@@ -336,7 +359,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			creatorStore = awClient
 		}
 		if creatorStore != nil {
-			deps.InstagramOAuth = handlers.NewInstagramOAuthHandler(
+			oauthHandler := handlers.NewInstagramOAuthHandler(
 				oauthSvc,
 				creatorStore,
 				oauthCrypto,
@@ -345,6 +368,10 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 				cfg.RedirectURI,
 				logger,
 			)
+			// Meta Step 3: POST /{ig-user-id}/subscribed_apps after OAuth so
+			// comments/messages webhooks actually deliver for that IG account.
+			oauthHandler.Subscriber = graphClient
+			deps.InstagramOAuth = oauthHandler
 			logger.Info("route enabled",
 				"path", "GET /instagram/callback",
 				"instagram_app_id", cfg.InstagramAppID,
