@@ -1,38 +1,80 @@
+/**
+ * Profile screen — creator card, reels, insights, deals, account actions.
+ *
+ * NOTE: raw React Native + StyleSheet instead of `@/tw` className primitives.
+ * The useCssElement bridge drops layout classes on Android (ballooned cards,
+ * floating text) — same failure the automate screens had. See src/tw/AGENTS.md
+ * for the documented raw-RN escape hatch.
+ */
+
 import React, { useEffect } from 'react';
-import { StyleProp, ViewStyle } from 'react-native';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from '@/lib/reanimated-platform';
-import { useUser, useAuth, useClerk } from "@clerk/expo";
-import { View, Text, ScrollView } from '@/tw';
-import { Image } from '@/tw/image';
-import { cn } from '@/tw/cn';
+import { useClerk } from '@clerk/expo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { useDashboard } from '@/hooks/useDashboard';
 import { disconnectInstagram } from '@/lib/instagram';
-import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
-import { ClayAvatar } from '@/components/clay/ClayAvatar';
+import { addLog } from '@/lib/logger';
+import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
-import { ScreenShell } from '@/components/screen-shell';
+import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 
-/** Status chip color styling per DESIGN.md §3.3 & §5.4 */
+const COLORS = {
+  canvas: '#fffaf0',
+  ink: '#0a0a0a',
+  body: '#3a3a3a',
+  muted: '#6a6a6a',
+  mutedSoft: '#9a9a9a',
+  hairline: '#e5e5e5',
+  surfaceSoft: '#faf5e8',
+  surfaceCard: '#f5f0e0',
+  mint: '#a4d4c5',
+  lavender: '#b8a4ed',
+  peach: '#ffb084',
+  teal: '#1a3a3a',
+  ochre: '#e8b94a',
+  error: '#ef4444',
+  white: '#ffffff',
+};
+
+const FONT = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+};
+
+/** Status chip colors (hex mirror of DESIGN.md §3.3) */
 const STATUS_META: Record<string, { bg: string; text: string }> = {
-  invited: { bg: 'bg-brand-teal', text: 'text-on-dark' },
-  negotiating: { bg: 'bg-brand-ochre', text: 'text-ink' },
-  contracted: { bg: 'bg-brand-mint', text: 'text-ink' },
-  content_pending: { bg: 'bg-brand-lavender', text: 'text-on-dark' },
-  live: { bg: 'bg-brand-mint', text: 'text-ink' },
-  completed: { bg: 'bg-surface-card', text: 'text-muted' },
-  declined: { bg: 'bg-error', text: 'text-on-dark' },
+  invited: { bg: COLORS.teal, text: COLORS.white },
+  negotiating: { bg: COLORS.ochre, text: COLORS.ink },
+  contracted: { bg: COLORS.mint, text: COLORS.ink },
+  content_pending: { bg: COLORS.lavender, text: COLORS.white },
+  live: { bg: COLORS.mint, text: COLORS.ink },
+  completed: { bg: COLORS.surfaceCard, text: COLORS.muted },
+  declined: { bg: COLORS.error, text: COLORS.white },
 };
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+function SectionTitle({ children }: { children: string }) {
+  return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
 function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
@@ -43,12 +85,10 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
   }, [shake]);
 
   return (
-    <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
+    <View style={styles.centerState}>
       <Animated.View style={animatedStyle as StyleProp<ViewStyle>}>
-        <View className="max-w-[320px] items-center gap-4">
-          <Text className="text-center text-body-md text-error">
-            {error}
-          </Text>
+        <View style={styles.stateInner}>
+          <Text style={styles.stateError}>{error}</Text>
           <ClayAnimatedButton variant="secondary" onPress={onRetry}>
             Retry
           </ClayAnimatedButton>
@@ -59,8 +99,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 }
 
 export default function ProfileScreen() {
-  const { user } = useUser();
-  const { getToken } = useAuth();
+  const insets = useSafeAreaInsets();
   const { signOut } = useClerk();
   const {
     creator,
@@ -71,9 +110,9 @@ export default function ProfileScreen() {
     error,
     refresh,
   } = useCreatorProfile();
-  const { data: dashboardData, loading: dashboardLoading } = useDashboard();
+  const { loading: dashboardLoading } = useDashboard();
 
-  // Avatar scale-in entrance
+  // Avatar scale-in entrance (reanimated-platform is web/native safe)
   const avatarScale = useSharedValue(0);
   useEffect(() => {
     avatarScale.value = withSpring(1, { damping: 12, stiffness: 140 });
@@ -86,23 +125,35 @@ export default function ProfileScreen() {
     try {
       await disconnectInstagram();
       refresh();
-    } catch {
-      // Silently handle — user can retry
+    } catch (err: unknown) {
+      // User can retry; log so silent failures are visible in SplashLogger.
+      addLog(
+        `profile: disconnect failed — ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
+
+  const contentPadding = {
+    paddingTop: insets.top + 12,
+    paddingBottom: insets.bottom + TAB_BAR_CLEARANCE,
+    paddingHorizontal: 16,
+  };
 
   // Loading state — skeleton, not a full-screen spinner
   if (isLoading || dashboardLoading) {
     return (
-      <ScreenShell>
-        <View className="items-center" style={{ gap: 10, marginTop: 24 }}>
-          <View className="bg-white border border-hairline" style={{ width: 88, height: 88, borderRadius: 44 }} />
-          <View className="bg-white border border-hairline" style={{ height: 20, width: 140, borderRadius: 8 }} />
-          <View className="bg-white/60 border border-hairline" style={{ height: 14, width: 100, borderRadius: 6 }} />
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[contentPadding, styles.scrollContent]}
+      >
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonAvatar} />
+          <View style={styles.skeletonLineWide} />
+          <View style={styles.skeletonLineNarrow} />
         </View>
-        <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16, marginTop: 16 }} />
-        <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16 }} />
-      </ScreenShell>
+        <View style={styles.skeletonCard} />
+        <View style={styles.skeletonCard} />
+      </ScrollView>
     );
   }
 
@@ -114,175 +165,175 @@ export default function ProfileScreen() {
   // Empty state — no creator connected
   if (!creator) {
     return (
-      <ScreenShell center>
-        <Text className="text-center text-body-md text-body">
+      <View style={styles.centerState}>
+        <Text style={styles.stateBody}>
           Connect your Instagram to see your profile
         </Text>
         <ClayAnimatedButton variant="secondary" onPress={refresh}>
           Refresh
         </ClayAnimatedButton>
-      </ScreenShell>
+      </View>
     );
   }
 
   return (
-    <ScreenShell contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[contentPadding, styles.scrollContent]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Creator Card */}
-      <ClayAnimatedCard delay={0}>
-        <View className="flex-row items-center gap-4">
+      <View style={styles.card}>
+        <View style={styles.creatorRow}>
           <Animated.View style={avatarAnimatedStyle}>
-            <ClayAvatar src={creator.profile_pic_url} size={64} />
+            {creator.profile_pic_url ? (
+              <Image
+                source={{ uri: creator.profile_pic_url }}
+                style={styles.avatar}
+                accessibilityLabel={`${creator.full_name} avatar`}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarFallbackText}>
+                  {(creator.full_name || '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
           </Animated.View>
-          <View className="flex-1 gap-1">
-            <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-              {creator.full_name}
-            </Text>
-            <Text className="text-body-sm text-muted">
-              @{creator.ig_username}
-            </Text>
-            <View className="mt-1 flex-row flex-wrap gap-2">
-              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+          <View style={styles.creatorInfo}>
+            <Text style={styles.creatorName}>{creator.full_name}</Text>
+            <Text style={styles.creatorHandle}>@{creator.ig_username}</Text>
+            <View style={styles.countPillsRow}>
+              <Text style={styles.countPill}>
                 {formatCount(creator.follower_count)} followers
               </Text>
-              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+              <Text style={styles.countPill}>
                 {formatCount(creator.following_count)} following
               </Text>
-              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+              <Text style={styles.countPill}>
                 {formatCount(creator.media_count)} posts
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Badges */}
-        <View className="mt-3 flex-row flex-wrap gap-2">
-          <Text className="rounded-pill bg-brand-mint px-3 py-1 text-caption font-semibold text-ink">
-            {creator.engagement_rate.toFixed(1)}% engagement
-          </Text>
-          <Text className="rounded-pill bg-brand-lavender px-3 py-1 text-caption font-semibold text-on-dark">
-            {creator.creator_tier.replace(/_/g, ' ')}
-          </Text>
-          <Text className="rounded-pill bg-brand-peach px-3 py-1 text-caption font-semibold text-on-dark">
-            {creator.niche}
-          </Text>
+        {/* Badges — enrichment fields may be null on partially-synced rows */}
+        <View style={styles.badgesRow}>
+          {typeof creator.engagement_rate === 'number' && (
+            <Text style={[styles.badge, styles.badgeMint]}>
+              {creator.engagement_rate.toFixed(1)}% engagement
+            </Text>
+          )}
+          {creator.creator_tier && (
+            <Text style={[styles.badge, styles.badgeLavender]}>
+              {creator.creator_tier.replace(/_/g, ' ')}
+            </Text>
+          )}
+          {creator.niche && (
+            <Text style={[styles.badge, styles.badgePeach]}>
+              {creator.niche}
+            </Text>
+          )}
         </View>
-      </ClayAnimatedCard>
+      </View>
 
       {/* Recent Reels */}
-      <View className="gap-2">
-        <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-          Recent Reels
-        </Text>
+      <View style={styles.section}>
+        <SectionTitle>Recent Reels</SectionTitle>
         {recentReels.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-3 pb-2">
+            <View style={styles.reelsRow}>
               {recentReels.map((reel, index) => (
-                <ClayAnimatedCard
-                  key={reel.$id ?? index}
-                  delay={index * 100}
-                  padding="p-0"
-                >
-                  <View className="w-40">
-                    <Image
-                      source={{ uri: reel.display_url ?? '' }}
-                      className="h-[200px] w-40 rounded-sm"
-                    />
-                    <View className="p-2">
-                      <Text className="text-caption text-muted">
-                        {formatCount(reel.video_view_count)} views
-                      </Text>
-                    </View>
+                <View key={reel.$id ?? index} style={styles.reelCard}>
+                  <Image
+                    source={{ uri: reel.display_url ?? '' }}
+                    style={styles.reelImage}
+                  />
+                  <View style={styles.reelMeta}>
+                    <Text style={styles.reelViews}>
+                      {formatCount(reel.video_view_count)} views
+                    </Text>
                   </View>
-                </ClayAnimatedCard>
+                </View>
               ))}
             </View>
           </ScrollView>
         ) : (
-          <Text className="text-body-sm text-muted">
-            No recent reels
-          </Text>
+          <Text style={styles.mutedText}>No recent reels</Text>
         )}
       </View>
 
       {/* Insights Summary */}
-      <View className="gap-2">
+      <View style={styles.section}>
         {insights?.data ? (
-          <ClayFeatureCard color="cream" title="Insights" delay={200}>
-            <View className="gap-2">
-              {insights.data.map((metric, index) => (
-                <View key={index} className="flex-row justify-between">
-                  <Text className="text-body-sm capitalize text-body">
+          <View style={styles.card}>
+            <SectionTitle>Insights</SectionTitle>
+            <View style={styles.insightsList}>
+              {insights.data.map((metric) => (
+                <View key={metric.name} style={styles.insightRow}>
+                  <Text style={styles.insightName}>
                     {metric.name.replace(/_/g, ' ')}
                   </Text>
-                  <Text className="text-body-sm font-semibold text-ink">
+                  <Text style={styles.insightValue}>
                     {metric.values?.[0]?.value ?? metric.total_value?.value ?? '—'}
                   </Text>
                 </View>
               ))}
             </View>
-          </ClayFeatureCard>
+          </View>
         ) : (
-          <View className="gap-2">
-            <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-              Insights
-            </Text>
-            <Text className="text-body-sm text-muted">
+          <>
+            <SectionTitle>Insights</SectionTitle>
+            <Text style={styles.mutedText}>
               Insights available for business accounts only
             </Text>
-          </View>
+          </>
         )}
       </View>
 
       {/* Active Deals */}
-      <View className="gap-2">
-        <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-          Active Deals
-        </Text>
+      <View style={styles.section}>
+        <SectionTitle>Active Deals</SectionTitle>
         {dealThreads.length > 0 ? (
-          <View className="gap-2">
-            {dealThreads.map((thread, index) => {
-              const meta = STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' };
+          <View style={styles.dealsList}>
+            {dealThreads.map((thread) => {
+              const meta = STATUS_META[thread.status] ?? {
+                bg: COLORS.surfaceCard,
+                text: COLORS.muted,
+              };
               return (
-                <ClayAnimatedCard
-                  key={thread.$id ?? thread.thread_id}
-                  delay={index * 100}
-                  padding="p-4"
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-1 gap-1">
-                      <Text className="text-body-sm font-semibold text-ink">
-                        {thread.campaign_title}
-                      </Text>
-                      <Text className="text-caption text-muted">
-                        {thread.agent_assigned}
-                      </Text>
+                <View key={thread.$id ?? thread.thread_id} style={styles.card}>
+                  <View style={styles.dealRow}>
+                    <View style={styles.dealInfo}>
+                      <Text style={styles.dealTitle}>{thread.campaign_title}</Text>
+                      <Text style={styles.dealAgent}>{thread.agent_assigned}</Text>
                     </View>
-                    <View className="flex-row items-center gap-2">
-                      <View className={cn('rounded-pill px-2.5 py-1', meta.bg)}>
-                        <Text className={cn('text-caption-uppercase font-semibold', meta.text)}>
+                    <View style={styles.dealRight}>
+                      <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+                        <Text style={[styles.statusPillText, { color: meta.text }]}>
                           {thread.status.replace(/_/g, ' ')}
                         </Text>
                       </View>
                       {thread.unread_count > 0 && (
-                        <Text className="h-[22px] min-w-[22px] rounded-pill bg-error px-1.5 text-center text-caption leading-[22px] text-on-primary">
-                          {thread.unread_count}
-                        </Text>
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadBadgeText}>
+                            {thread.unread_count}
+                          </Text>
+                        </View>
                       )}
                     </View>
                   </View>
-                </ClayAnimatedCard>
+                </View>
               );
             })}
           </View>
         ) : (
-          <Text className="text-body-sm text-muted">
-            No active deals
-          </Text>
+          <Text style={styles.mutedText}>No active deals</Text>
         )}
       </View>
 
       {/* Action Buttons */}
-      <View className="mt-4 gap-3">
+      <View style={styles.actions}>
         <ClayAnimatedButton variant="secondary" onPress={handleDisconnect} fullWidth>
           Disconnect Instagram
         </ClayAnimatedButton>
@@ -290,6 +341,319 @@ export default function ProfileScreen() {
           Sign Out
         </ClayAnimatedButton>
       </View>
-    </ScreenShell>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.canvas,
+  },
+  scrollContent: {
+    gap: 16,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 16,
+    backgroundColor: COLORS.canvas,
+  },
+  stateInner: {
+    maxWidth: 320,
+    alignItems: 'center',
+    gap: 16,
+  },
+  stateError: {
+    textAlign: 'center',
+    fontFamily: FONT.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: COLORS.error,
+  },
+  stateBody: {
+    textAlign: 'center',
+    fontFamily: FONT.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: COLORS.body,
+  },
+
+  /* Skeleton */
+  skeletonHeader: {
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 24,
+  },
+  skeletonAvatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.white,
+  },
+  skeletonLineWide: {
+    height: 20,
+    width: 140,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.white,
+  },
+  skeletonLineNarrow: {
+    height: 14,
+    width: 100,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.white,
+    opacity: 0.6,
+  },
+  skeletonCard: {
+    height: 96,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.white,
+  },
+
+  /* Cards */
+  card: {
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    borderRadius: 14,
+    backgroundColor: COLORS.canvas,
+    padding: 14,
+    gap: 10,
+  },
+  section: {
+    gap: 8,
+  },
+  sectionTitle: {
+    fontFamily: FONT.semibold,
+    fontSize: 18,
+    lineHeight: 25,
+    letterSpacing: -0.3,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  mutedText: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+
+  /* Creator */
+  creatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.lavender,
+  },
+  avatarFallbackText: {
+    fontFamily: FONT.semibold,
+    fontSize: 24,
+    color: COLORS.white,
+    includeFontPadding: false,
+  },
+  creatorInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  creatorName: {
+    fontFamily: FONT.semibold,
+    fontSize: 18,
+    lineHeight: 25,
+    letterSpacing: -0.3,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  creatorHandle: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+  countPillsRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  countPill: {
+    borderRadius: 999,
+    backgroundColor: COLORS.surfaceCard,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.body,
+    includeFontPadding: false,
+    overflow: 'hidden',
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  badge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontFamily: FONT.semibold,
+    fontSize: 13,
+    includeFontPadding: false,
+    overflow: 'hidden',
+  },
+  badgeMint: {
+    backgroundColor: COLORS.mint,
+    color: COLORS.ink,
+  },
+  badgeLavender: {
+    backgroundColor: COLORS.lavender,
+    color: COLORS.white,
+  },
+  badgePeach: {
+    backgroundColor: COLORS.peach,
+    color: COLORS.ink,
+  },
+
+  /* Reels */
+  reelsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingBottom: 8,
+  },
+  reelCard: {
+    width: 160,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    borderRadius: 12,
+    backgroundColor: COLORS.canvas,
+    overflow: 'hidden',
+  },
+  reelImage: {
+    width: 160,
+    height: 200,
+    backgroundColor: COLORS.surfaceSoft,
+  },
+  reelMeta: {
+    padding: 8,
+  },
+  reelViews: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+
+  /* Insights */
+  insightsList: {
+    gap: 8,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  insightName: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.body,
+    textTransform: 'capitalize',
+  },
+  insightValue: {
+    fontFamily: FONT.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+
+  /* Deals */
+  dealsList: {
+    gap: 8,
+  },
+  dealRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  dealInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  dealTitle: {
+    fontFamily: FONT.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  dealAgent: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+  dealRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillText: {
+    fontFamily: FONT.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.8,
+    textTransform: 'capitalize',
+    includeFontPadding: false,
+  },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: {
+    fontFamily: FONT.semibold,
+    fontSize: 13,
+    lineHeight: 16,
+    color: COLORS.white,
+    includeFontPadding: false,
+  },
+
+  /* Actions */
+  actions: {
+    marginTop: 8,
+    gap: 12,
+  },
+});
