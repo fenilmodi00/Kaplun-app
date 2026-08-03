@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -41,6 +42,7 @@ type InstagramOAuthHandler struct {
 	AppSecret   string
 	RedirectURI string
 	Now         func() time.Time
+	logger      *slog.Logger
 }
 
 func NewInstagramOAuthHandler(
@@ -48,7 +50,11 @@ func NewInstagramOAuthHandler(
 	store CreatorProfileStore,
 	crypto OAuthTokenCrypto,
 	appID, appSecret, redirectURI string,
+	logger *slog.Logger,
 ) *InstagramOAuthHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &InstagramOAuthHandler{
 		OAuth:       exchanger,
 		Store:       store,
@@ -57,6 +63,7 @@ func NewInstagramOAuthHandler(
 		AppSecret:   appSecret,
 		RedirectURI: redirectURI,
 		Now:         time.Now,
+		logger:      logger,
 	}
 }
 
@@ -67,8 +74,26 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	errorReason := c.Query("error_reason")
 	errorDescription := c.Query("error_description")
 
+	h.logger.Info("instagram oauth callback received",
+		"has_code", code != "",
+		"code_len", len(code),
+		"has_state", state != "",
+		"oauth_error", oauthErr,
+		"error_reason", errorReason,
+		"error_description", errorDescription,
+		"configured_app_id", h.AppID,
+		"configured_redirect_uri", h.RedirectURI,
+		"has_app_secret", h.AppSecret != "",
+		"raw_query", c.Request.URL.RawQuery,
+	)
+
 	if oauthErr != "" {
 		message := firstNonEmpty(errorDescription, errorReason, oauthErr)
+		h.logger.Warn("instagram oauth denied by Meta",
+			"error", oauthErr,
+			"error_reason", errorReason,
+			"error_description", errorDescription,
+		)
 		redirectURL := extractRedirectURL(state)
 		if redirectURL == "" {
 			redirectURL = "exp://localhost:8081"
@@ -78,6 +103,7 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	}
 
 	if code == "" {
+		h.logger.Warn("instagram oauth callback missing code")
 		redirectURL := extractRedirectURL(state)
 		if redirectURL == "" {
 			redirectURL = "exp://localhost:8081"
@@ -87,12 +113,14 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	}
 
 	if state == "" {
+		h.logger.Warn("instagram oauth callback missing state")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Missing state parameter. Please try connecting again.", "exp://localhost:8081")))
 		return
 	}
 
 	var stateData map[string]any
 	if err := json.Unmarshal([]byte(state), &stateData); err != nil {
+		h.logger.Warn("instagram oauth invalid state json", "err", err, "state_prefix", truncateForLog(state, 80))
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Invalid state parameter. Please try connecting again.", "exp://localhost:8081")))
 		return
 	}
@@ -103,26 +131,58 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 		redirectURL = "exp://localhost:8081"
 	}
 	if clerkID == "" {
+		h.logger.Warn("instagram oauth state missing clerk_id")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Missing user identifier. Please try connecting again.", redirectURL)))
 		return
 	}
 
 	if h.AppID == "" || h.AppSecret == "" || h.RedirectURI == "" {
+		h.logger.Error("instagram oauth server misconfigured",
+			"has_app_id", h.AppID != "",
+			"has_app_secret", h.AppSecret != "",
+			"has_redirect_uri", h.RedirectURI != "",
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Server configuration error. Please contact support.", redirectURL)))
 		return
 	}
 
+	h.logger.Info("instagram oauth exchanging short token",
+		"clerk_user_id", clerkID,
+		"app_id", h.AppID,
+		"redirect_uri", h.RedirectURI,
+	)
 	shortToken, err := h.OAuth.ExchangeCodeForShortToken(c.Request.Context(), code)
 	if err != nil {
+		h.logger.Error("instagram oauth short-token exchange failed",
+			"clerk_user_id", clerkID,
+			"app_id", h.AppID,
+			"redirect_uri", h.RedirectURI,
+			"err", err,
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to exchange authorization code: "+err.Error(), redirectURL)))
 		return
 	}
+	h.logger.Info("instagram oauth short token ok",
+		"clerk_user_id", clerkID,
+		"user_id", shortToken.UserID,
+		"token_len", len(shortToken.AccessToken),
+	)
 
+	h.logger.Info("instagram oauth exchanging long token", "clerk_user_id", clerkID)
 	longToken, err := h.OAuth.ExchangeForLongToken(c.Request.Context(), shortToken.AccessToken)
 	if err != nil {
+		h.logger.Error("instagram oauth long-token exchange failed",
+			"clerk_user_id", clerkID,
+			"err", err,
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to obtain long-lived token: "+err.Error(), redirectURL)))
 		return
 	}
+	h.logger.Info("instagram oauth long token ok",
+		"clerk_user_id", clerkID,
+		"token_len", len(longToken.AccessToken),
+		"expires_in", longToken.ExpiresIn,
+	)
 
 	now := time.Now()
 	if h.Now != nil {
@@ -130,8 +190,13 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	}
 	tokenExpiresAt := oauth.CalculateTokenExpiry(longToken.ExpiresIn, now)
 
+	h.logger.Info("instagram oauth fetching profile", "clerk_user_id", clerkID)
 	profile, err := h.OAuth.FetchInstagramProfile(c.Request.Context(), longToken.AccessToken)
 	if err != nil {
+		h.logger.Error("instagram oauth profile fetch failed",
+			"clerk_user_id", clerkID,
+			"err", err,
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to fetch Instagram profile: "+err.Error(), redirectURL)))
 		return
 	}
@@ -139,37 +204,68 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	if username == "" {
 		username = profile.ID
 	}
+	h.logger.Info("instagram oauth profile ok",
+		"clerk_user_id", clerkID,
+		"ig_user_id", profile.ID,
+		"username", username,
+		"account_type", profile.AccountType,
+	)
 
-	encryptedToken := longToken.AccessToken
-	if h.Crypto != nil {
-		enc, encErr := h.Crypto.Encrypt(longToken.AccessToken)
-		if encErr != nil {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to save your profile: "+encErr.Error(), redirectURL)))
-			return
-		}
-		encryptedToken = enc
-	}
-
-	creatorData := oauth.BuildCreatorData(profile, encryptedToken, tokenExpiresAt, clerkID, now)
+	// Store the long-lived token in plaintext. The Expo app reads this token
+	// directly from the creators row and calls graph.instagram.com, so it must
+	// be usable without backend decryption. The worker still decrypts when an
+	// encrypted legacy value is present via DecryptOrPlaintext.
+	creatorData := oauth.BuildCreatorData(profile, longToken.AccessToken, tokenExpiresAt, clerkID, now)
 	ok, err := h.Store.StoreCreatorProfile(c.Request.Context(), clerkID, creatorData)
 	if err != nil {
+		h.logger.Error("instagram oauth store profile failed",
+			"clerk_user_id", clerkID,
+			"ig_user_id", profile.ID,
+			"err", err,
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to save your profile: "+err.Error(), redirectURL)))
 		return
 	}
 	if !ok {
+		h.logger.Error("instagram oauth store profile returned false",
+			"clerk_user_id", clerkID,
+			"ig_user_id", profile.ID,
+		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to save your profile. Please try again.", redirectURL)))
 		return
 	}
+	h.logger.Info("instagram oauth creator profile saved",
+		"clerk_user_id", clerkID,
+		"ig_user_id", profile.ID,
+		"username", username,
+		"token_expires_at", tokenExpiresAt,
+	)
 
 	if h.Subscriber != nil {
-		_ = h.Subscriber.SubscribeToWebhooks(
+		if subErr := h.Subscriber.SubscribeToWebhooks(
 			c.Request.Context(),
 			profile.ID,
 			longToken.AccessToken,
 			[]string{"comments", "messages", "messaging_postbacks"},
-		)
+		); subErr != nil {
+			h.logger.Warn("instagram oauth webhook subscribe failed",
+				"clerk_user_id", clerkID,
+				"ig_user_id", profile.ID,
+				"err", subErr,
+			)
+		} else {
+			h.logger.Info("instagram oauth webhook subscribed",
+				"clerk_user_id", clerkID,
+				"ig_user_id", profile.ID,
+			)
+		}
 	}
 
+	h.logger.Info("instagram oauth success",
+		"clerk_user_id", clerkID,
+		"username", username,
+		"redirect_url", redirectURL,
+	)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(successPage(username, redirectURL)))
 }
 
@@ -246,4 +342,11 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func truncateForLog(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

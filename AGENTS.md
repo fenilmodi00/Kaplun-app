@@ -10,14 +10,14 @@
 
 Expo SDK 57 mobile app ("creator-workspace") for Instagram creators. React Query + Appwrite TablesDB (CRUD + Realtime) + backend API (auth bridge + automations). Clay design system via Tailwind v4 + `react-native-css`. expo-router file-based routing. Bun (not npm).
 
-**API migration:** Gin/Go server lives in `api-go/` (replacing FastAPI `api/`). Contracts: `docs/fastapi-to-gin-inventory.md`. Cutover: `docs/plans/2026-07-30-fastapi-to-gin-cutover.md`.
+**API:** Gin/Go server lives in `api-go/` (FastAPI `api/` removed). Historical contracts: `docs/fastapi-to-gin-inventory.md`. Cutover notes: `docs/plans/2026-07-30-fastapi-to-gin-cutover.md`.
 
 ## STACK
 
 - **Framework**: Expo SDK 57, React Native 0.86, React 19.2
 - **Routing**: expo-router file-based
 - **Data**: `@tanstack/react-query` (useQuery/useMutation/useQueries) → `@/lib/repository` (typed Appwrite calls with retry) → `tablesDB` (Appwrite TablesDB, not Databases)
-- **Auth**: Clerk (`@clerk/expo`) → API `POST /auth/appwrite-session` (Gin or FastAPI) → Appwrite session (24h TTL fast path)
+- **Auth**: Clerk (`@clerk/expo`) → API `POST /auth/appwrite-session` (Gin `api-go`) → Appwrite session (24h TTL fast path)
 - **Instagram**: App calls `graph.instagram.com` directly with the user's long-lived token from their `creators` row, with `ig_refresh_token` on Meta error 190. The old Appwrite ig-api-proxy is **broken** — Appwrite strips the reserved `x-appwrite-user-jwt` header before it reaches the function runtime, so every proxy call 401s (verified in execution logs). Do not reintroduce it.
 - **Styling**: NativeWind v5 + Tailwind CSS v4 + `react-native-css` (`useCssElement` bridge, not `styled()`)
 - **Reanimated web workaround**: Metro aliases + platform wrappers for #8285 (Reanimated crashes on web)
@@ -65,7 +65,7 @@ No EAS config, no CI. `dist/` (web export) is gitignored.
 | Add an Appwrite table ID | `src/lib/constants.ts` (`TABLES` enum) + `src/lib/types.ts` for the shape | |
 | Add a data hook | `src/hooks/` | All hooks use `useQuery`/`useMutation` from `@tanstack/react-query` on repository functions |
 | Add realtime subscription | `src/lib/realtime.ts` | `useRealtimeSubscription(channel, () => queryClient.invalidateQueries(...))` |
-| Add a FastAPI call | `src/lib/automations.ts` + `src/lib/auth-bridge.ts` | Both use Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` (the Gin/FastAPI server) |
+| Add a backend API call | `src/lib/automations.ts` + `src/lib/auth-bridge.ts` | Both use Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` (Gin `api-go`) |
 | Add an Instagram call | `src/lib/instagram.ts` | Direct Graph API (`graph.instagram.com`) with per-user token from `creators` row, not a proxy |
 | Add a Clay component | `src/components/clay/` | Decide `@/tw` vs raw RN; add `.web.tsx` if using Reanimated |
 | Add a styled primitive | `src/tw/` | `useCssElement(RNComponent, props, { className: 'style' })` |
@@ -87,8 +87,8 @@ Instagram operations:
     → on Meta error 190: ig_refresh_token → updateCreatorToken() → retry once
 
 Auth bridge (once per sign-in):
-  Clerk getToken() → Gin/FastAPI /auth/appwrite-session → account.createSession()
-  → ensureAppwriteSession() with 24h TTL fast path + exponential backoff retry
+  Clerk getToken() → Gin /auth/appwrite-session → account.createSession()
+ → ensureAppwriteSession() with 24h TTL fast path + exponential backoff retry
 ```
 
 ## KEY FILES
@@ -114,8 +114,8 @@ Auth bridge (once per sign-in):
 
 - **Data**: React Query (`@tanstack/react-query`) throughout. `useQuery` for reads, `useMutation` for writes, `useQueryClient.invalidateQueries()` for refetch triggers. `staleTime: 30_000`, `gcTime: 5 * 60_000`, `retry: false` in production hooks.
 - **Persistence**: Appwrite TablesDB (not SQL Databases). Typed via `@/lib/repository.ts`. All calls wrapped in `executeWithRetryAndTimeout()` (3 attempts, backoff + jitter, 15s timeout).
-- **Instagram API**: Every Instagram call goes through `@/lib/instagram.ts` → `graph.instagram.com` directly with the per-user token from the `creators` row. No proxy. The `EXPO_PUBLIC_IG_API_BASE_URL` server (Gin/FastAPI) is used only for the auth bridge (`/auth/appwrite-session`) and the automations client (`/automations/*`), both Clerk Bearer.
-- **Auth**: Clerk JWT → Gin/FastAPI `/auth/appwrite-session` → Appwrite session. AuthGate mounts tabs immediately; data hooks wait on `useBridge().isReady`. Failures surface as soft Retry (`bridge_failed`), not Instagram `session_expired`.
+- **Instagram API**: Every Instagram call goes through `@/lib/instagram.ts` → `graph.instagram.com` directly with the per-user token from the `creators` row. No proxy. The `EXPO_PUBLIC_IG_API_BASE_URL` server (Gin `api-go`) is used only for the auth bridge (`/auth/appwrite-session`) and the automations client (`/automations/*`), both Clerk Bearer.
+- **Auth**: Clerk JWT → Gin `/auth/appwrite-session` → Appwrite session. AuthGate mounts tabs immediately; data hooks wait on `useBridge().isReady`. Failures surface as soft Retry (`bridge_failed`), not Instagram `session_expired`.
 - **`session_expired`**: Instagram token missing/unusable → `throw new Error('session_expired')` from `@/lib/instagram`. Hooks surface this as `error: 'session_expired'` for re-login UI. (Unrelated to the auth bridge, which surfaces `bridge_failed`.)
 - **Fonts**: Inter 400/500/600 via `@expo-google-fonts/inter`; loaded at boot via `useClayFonts()`; gates render in `AuthGate`.
 - **Reanimated**: Import from `@/lib/reanimated-platform` (NOT `react-native-reanimated` directly). Metro aliases + web stubs on web.
@@ -162,7 +162,7 @@ Auth bridge (once per sign-in):
 
 ## NOTES
 
-- **3-system architecture**: App → Appwrite TablesDB (CRUD + Realtime); App → `graph.instagram.com` directly (per-user token, token refresh on 190); App → Gin/FastAPI → Appwrite session (auth bridge only) + automations client.
+- **3-system architecture**: App → Appwrite TablesDB (CRUD + Realtime); App → `graph.instagram.com` directly (per-user token, token refresh on 190); App → Gin `api-go` → Appwrite session (auth bridge) + automations client.
 - **SDK version**: Expo SDK **57** (`package.json`: `"expo": "^57.0.0"`). Read https://docs.expo.dev/versions/v57.0.0/.
 - **React Query mutation pattern**: `useMutation` with `onSuccess: (result) => queryClient.setQueryData(...)` for optimistic cache updates. See `useMessages` for the pattern.
 - **Realtime invalidation pattern**: Subscribe in `useEffect` → on event → `queryClient.invalidateQueries({ queryKey: [...] })`. See `useThreads` and `useMessages`.

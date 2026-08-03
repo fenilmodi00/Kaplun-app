@@ -45,6 +45,29 @@ func TestExchangeCodeForShortToken(t *testing.T) {
 	}
 }
 
+func TestExchangeCodeForShortTokenNestedDataEnvelope(t *testing.T) {
+	t.Parallel()
+
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body: io.NopCloser(strings.NewReader(
+				`{"data":[{"access_token":"nested-short","user_id":"99","permissions":"instagram_business_basic"}]}`,
+			)),
+			Header: make(http.Header),
+		}, nil
+	})
+
+	svc := oauth.NewService(client, oauth.Config{AppID: "id", AppSecret: "sec", RedirectURI: "https://cb"})
+	got, err := svc.ExchangeCodeForShortToken(context.Background(), "abc")
+	if err != nil {
+		t.Fatalf("exchange: %v", err)
+	}
+	if got.AccessToken != "nested-short" || got.UserID != "99" {
+		t.Fatalf("token: %#v", got)
+	}
+}
+
 func TestExchangeForLongTokenAndProfile(t *testing.T) {
 	t.Parallel()
 
@@ -103,5 +126,11 @@ func TestBuildCreatorDataAndExpiry(t *testing.T) {
 	}
 	if data["clerk_user_id"] != "clerk1" || data["ig_user_id"] != "ig1" {
 		t.Fatalf("ids: %#v", data)
+	}
+	if _, ok := data["ig_session_json"]; ok {
+		t.Fatalf("ig_session_json must not be sent — creators table has no such column")
+	}
+	if data["access_token"] != "tok" {
+		t.Fatalf("access_token: %#v", data["access_token"])
 	}
 }

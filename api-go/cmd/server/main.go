@@ -20,6 +20,7 @@ import (
 	"kaplun/api-go/internal/middleware"
 	"kaplun/api-go/internal/platform/appwrite"
 	"kaplun/api-go/internal/platform/clerk"
+	"kaplun/api-go/internal/platform/cloudflare"
 	"kaplun/api-go/internal/platform/crypto"
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/platform/ngrok"
@@ -70,9 +71,49 @@ func main() {
 	}()
 
 	var (
-		tunnelMu sync.Mutex
-		tunnel   *ngrok.Tunnel
+		tunnelMu   sync.Mutex
+		ngrokTun   *ngrok.Tunnel
+		cfTun      *cloudflare.Tunnel
 	)
+
+	logPublicEndpoints := func(publicURL string) {
+		base := strings.TrimRight(publicURL, "/")
+		logger.Info("tunnel public URL",
+			"url", publicURL,
+			"oauth_callback", base+"/instagram/callback",
+			"webhook", base+"/webhooks/instagram",
+		)
+		logger.Info("update Meta + .env to this tunnel host",
+			"REDIRECT_URI", base+"/instagram/callback",
+			"EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI", base+"/instagram/callback",
+			"PUBLIC_BASE_URL", base,
+		)
+	}
+
+	if cfg.CloudflareTunnelEnabled {
+		knownURL := cloudflare.ResolveURL(cfg.CloudflareTunnelURL, cfg.PublicBaseURL)
+		logger.Info("cloudflare tunnel starting in background", "url", knownURL, "local", ":"+cfg.Port, "named", cfg.CloudflareTunnelToken != "" || cfg.CloudflareTunnelName != "", "tunnel_name", cfg.CloudflareTunnelName)
+		go func() {
+			t, err := cloudflare.Start(ctx, cloudflare.Options{
+				Port:   cfg.Port,
+				Token:  cfg.CloudflareTunnelToken,
+				Name:   cfg.CloudflareTunnelName,
+				URL:    knownURL,
+				Logger: logger,
+			})
+			if err != nil {
+				logger.Warn("cloudflare tunnel start failed (server continues locally)", "error", err)
+				return
+			}
+			tunnelMu.Lock()
+			cfTun = t
+			tunnelMu.Unlock()
+			logPublicEndpoints(t.PublicURL)
+		}()
+	} else {
+		logger.Info("cloudflare tunnel disabled (set CLOUDFLARE_TUNNEL_ENABLED=true)")
+	}
+
 	if cfg.NgrokEnabled {
 		tunnelURL := ngrok.ResolveURL(cfg.NgrokDomain, cfg.PublicBaseURL)
 		logger.Info("ngrok starting in background", "url", tunnelURL, "local", ":"+cfg.Port)
@@ -87,27 +128,27 @@ func main() {
 				return
 			}
 			tunnelMu.Lock()
-			tunnel = t
+			ngrokTun = t
 			tunnelMu.Unlock()
-			logger.Info("ngrok public URL",
-				"url", t.PublicURL,
-				"oauth_callback", strings.TrimRight(t.PublicURL, "/")+"/instagram/callback",
-				"webhook", strings.TrimRight(t.PublicURL, "/")+"/webhooks/instagram",
-			)
+			logPublicEndpoints(t.PublicURL)
 		}()
-	} else {
-		logger.Info("ngrok disabled (set NGROK_ENABLED=true for local HTTPS tunnel)")
 	}
 
 	<-ctx.Done()
 	logger.Info("shutting down")
 
 	tunnelMu.Lock()
-	t := tunnel
+	n := ngrokTun
+	c := cfTun
 	tunnelMu.Unlock()
-	if t != nil {
-		if stopErr := t.Stop(); stopErr != nil {
+	if n != nil {
+		if stopErr := n.Stop(); stopErr != nil {
 			logger.Warn("ngrok stop", "error", stopErr)
+		}
+	}
+	if c != nil {
+		if stopErr := c.Stop(); stopErr != nil {
+			logger.Warn("cloudflare tunnel stop", "error", stopErr)
 		}
 	}
 
@@ -265,14 +306,12 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 
 	if cfg.CronSecret != "" && autoStore != nil {
 		deps.CronAuth = middleware.CronSecret(cfg.CronSecret)
-		var cronCrypto handlers.TokenCrypto
-		if tokCrypto != nil {
-			cronCrypto = tokCrypto
-		}
+		// Keep cron-refreshed tokens plaintext: the Expo app reads access_token
+		// directly and cannot decrypt enc1: values.
 		deps.Cron = handlers.NewCronHandler(
 			autoStore,
 			&metaTokenRefresher{client: graphClient},
-			cronCrypto,
+			nil, // no encryption: app uses the token directly
 			nil, // reconcile service not wired yet (needs Graph media/comments adapters)
 		)
 		logger.Info("route enabled", "path", "/cron/* (store + token refresh wired; reconcile deferred)")
@@ -304,8 +343,13 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 				cfg.InstagramAppID,
 				cfg.InstagramAppSecret,
 				cfg.RedirectURI,
+				logger,
 			)
-			logger.Info("route enabled", "path", "GET /instagram/callback")
+			logger.Info("route enabled",
+				"path", "GET /instagram/callback",
+				"instagram_app_id", cfg.InstagramAppID,
+				"redirect_uri", cfg.RedirectURI,
+			)
 		} else {
 			logger.Warn("instagram oauth skipped: Appwrite required to persist creator profiles")
 		}

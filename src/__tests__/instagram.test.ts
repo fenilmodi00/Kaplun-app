@@ -191,13 +191,13 @@ describe('token refresh on 190', () => {
     expect(result).toEqual(mockMedia);
   });
 
-  it('throws session_expired when the refresh call fails', async () => {
+  it('throws session_expired and clears the token when the refresh call fails with 190', async () => {
     mockFetch
       .mockResolvedValueOnce(graphError(190, 'Session has expired'))
       .mockResolvedValueOnce(graphError(190, 'Session has expired'));
 
     await expect(fetchMedia()).rejects.toThrow('session_expired');
-    expect(mockUpdateCreatorToken).not.toHaveBeenCalled();
+    expect(mockUpdateCreatorToken).toHaveBeenCalledWith('row-1', '', '');
   });
 
   it('throws session_expired when the retry after refresh is still 190', async () => {

@@ -10,8 +10,9 @@ import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimatio
 import { AnimatedView } from '@/tw/animated';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
 import { useBridge } from '@/lib/bridge-context';
-import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
+import { fetchProfile, disconnectInstagram, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
+import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
 import type { Creator } from '@/lib/types';
 
@@ -41,6 +42,20 @@ function profileFromCreator(creator: Creator): InstagramProfileResponse {
     media_count: creator.media_count ?? creator.post_count ?? 0,
     profile_picture_url: creator.profile_pic_url || '',
   };
+}
+
+function hasUsableToken(creator: Creator | null): boolean {
+  if (!creator || !creator.access_token) return false;
+  const ENCRYPTED_TOKEN_PREFIX = 'enc1:';
+  return !creator.access_token.startsWith(ENCRYPTED_TOKEN_PREFIX);
+}
+
+async function clearInstagramTokenSilently(): Promise<void> {
+  try {
+    await disconnectInstagram();
+  } catch {
+    /* no-op */
+  }
 }
 
 function getInitials(name: string): string {
@@ -369,20 +384,28 @@ export default function HomeScreen() {
         return;
       }
       try {
-        // Prefer Appwrite TablesDB as source of truth — it's local/fast and
-        // doesn't depend on the ig-api-proxy cloud function (which can cold-start
-        // or abort on the 15s timeout). Only fall back to the proxy if Appwrite
-        // has no row yet.
+        // Prefer Appwrite TablesDB as source of truth. Only call Graph when we
+        // already have a usable plaintext token — otherwise fetchProfile throws
+        // session_expired and the catch below used to wipe the row.
         const creator = await getCreatorByClerkId(user.id);
-        if (creator && creator.is_onboarded && creator.username) {
+        if (creator?.access_token?.startsWith('enc1:')) {
+          // Legacy encrypted tokens cannot be used by the direct Graph client.
+          await clearInstagramTokenSilently();
+        } else if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
           if (!cancelled) setProfile(profileFromCreator(creator));
-        } else {
-          // No onboarded creator row — try the proxy as enrichment.
+        } else if (hasUsableToken(creator)) {
           const p = await fetchProfile();
           if (!cancelled) setProfile(p);
         }
+        // else: no usable token — leave profile null so the connect UI shows.
       } catch (_err: unknown) {
-        // session_expired or not connected yet — leave profile null
+        // Do not clear the stored token here. Graph 190 cleanup belongs in
+        // @/lib/instagram (after a failed ig_refresh_token). Wiping on every
+        // session_expired made reconnect appear to succeed while leaving an
+        // empty access_token on the creators row.
+        if (!(_err instanceof Error && _err.message === 'session_expired')) {
+          // non-session errors are ignored for the connect gate
+        }
       } finally {
         if (!cancelled) setIsCheckingConnection(false);
       }
@@ -397,30 +420,44 @@ export default function HomeScreen() {
     if (!user) return;
     setIsConnecting(true);
     setError(null);
+    addLog(`home-connect: start clerk=${user.id.slice(0, 12)}…`);
     try {
       const appwriteUser = await ensureAppwriteSession(getToken);
+      addLog(`home-connect: appwrite session ok uid=${appwriteUser.$id.slice(0, 12)}…`);
       const success = await startInstagramOAuth(user.id, appwriteUser.$id);
       if (!success) throw new Error('Instagram connection was not successful');
 
-      // Appwrite is the source of truth — the OAuth callback already wrote
-      // the creator row. Load it immediately so the UI shows connected even
-      // if the ig-api-proxy enrichment call below times out or aborts.
+      // Appwrite is the source of truth — the OAuth callback must have written
+      // a usable plaintext access_token. Do not treat "username present" alone
+      // as connected (that false-positive hid empty-token reconnect failures).
       const creator = await getCreatorByClerkId(user.id);
-      if (creator && creator.is_onboarded && creator.username) {
+      const tokenLen = creator?.access_token?.length ?? 0;
+      addLog(
+        `home-connect: post-oauth username=${creator?.username ?? '(none)'} token_len=${tokenLen} onboarded=${creator?.is_onboarded ?? false}`
+      );
+      if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
         setProfile(profileFromCreator(creator));
+      } else {
+        throw new Error(
+          'Instagram authorization finished but no usable token was saved. Ensure EXPO_PUBLIC_IG_APP_ID matches backend INSTAGRAM_APP_ID (Instagram App ID from Meta dashboard, not the Facebook App ID).'
+        );
       }
 
-      // Best-effort enrichment from the proxy. If this aborts (15s timeout
-      // on a cold Appwrite Function) or fails, we keep the Appwrite-sourced
-      // profile rather than showing a false "connection failed" error.
+      // Best-effort live profile enrichment from Graph. Keep Appwrite profile
+      // if this fails — do not surface as a connection failure.
       try {
         const p = await fetchProfile();
         setProfile(p);
-      } catch (_enrichErr: unknown) {
-        // Keep the profile from Appwrite — do not surface this as an error.
+        addLog(`home-connect: graph profile ok @${p.username}`);
+      } catch (enrichErr: unknown) {
+        addLog(
+          `home-connect: graph enrich skipped err=${enrichErr instanceof Error ? enrichErr.message : String(enrichErr)}`
+        );
       }
+      addLog('home-connect: ok');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to connect';
+      addLog(`home-connect: failed err=${message}`);
       if (message === 'Instagram OAuth was cancelled') {
         // Silent return — no error shown
       } else {

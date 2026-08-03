@@ -71,7 +71,7 @@ func TestInstagramCallbackSuccess(t *testing.T) {
 		profile: oauth.Profile{ID: "ig1", Username: "alice", AccountType: "CREATOR"},
 	}
 	store := &fakeCreatorStore{ok: true}
-	h := handlers.NewInstagramOAuthHandler(oauthFake, store, fakeOAuthCrypto{}, "app", "secret", "https://cb")
+	h := handlers.NewInstagramOAuthHandler(oauthFake, store, fakeOAuthCrypto{}, "app", "secret", "https://cb", nil)
 	fixed := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	h.Now = func() time.Time { return fixed }
 
@@ -93,8 +93,8 @@ func TestInstagramCallbackSuccess(t *testing.T) {
 	if !strings.Contains(body, "@alice") {
 		t.Fatalf("expected username in body")
 	}
-	if store.data["access_token"] != "enc1:long" {
-		t.Fatalf("expected encrypted token, got %#v", store.data["access_token"])
+	if store.data["access_token"] != "long" {
+		t.Fatalf("expected plaintext token, got %#v", store.data["access_token"])
 	}
 	if store.data["account_type"] != "creator" {
 		t.Fatalf("account_type: %v", store.data["account_type"])
@@ -105,7 +105,7 @@ func TestInstagramCallbackOAuthError(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb")
+	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb", nil)
 	engine := gin.New()
 	engine.GET("/instagram/callback", h.Callback)
 
@@ -124,7 +124,7 @@ func TestInstagramCallbackMissingCode(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb")
+	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb", nil)
 	engine := gin.New()
 	engine.GET("/instagram/callback", h.Callback)
 

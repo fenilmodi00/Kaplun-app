@@ -163,21 +163,32 @@ async function resolveCreatorToken(): Promise<ResolvedToken> {
 /**
  * Refresh a long-lived token via `ig_refresh_token` (no app secret needed).
  * Returns the new token + its computed expiry timestamp.
+ *
+ * Re-throws `GraphTokenExpired` when Meta explicitly rejects the token (code 190)
+ * so the caller can clear the stale row. All other failures surface as
+ * `session_expired`.
  */
 async function refreshLongLivedToken(
   currentToken: string
 ): Promise<{ token: string; expiresAt: string }> {
-  const body = await graphGet<{ access_token?: string; expires_in?: number }>(
-    '/refresh_access_token?grant_type=ig_refresh_token',
-    currentToken
-  );
-  if (!body.access_token) {
+  try {
+    const body = await graphGet<{ access_token?: string; expires_in?: number }>(
+      '/refresh_access_token?grant_type=ig_refresh_token',
+      currentToken
+    );
+    if (!body.access_token) {
+      throw new Error('session_expired');
+    }
+    const expiresAt = new Date(
+      Date.now() + (body.expires_in ?? DEFAULT_LONG_LIVED_EXPIRES_IN) * 1000
+    ).toISOString();
+    return { token: body.access_token, expiresAt };
+  } catch (err) {
+    if (err instanceof GraphTokenExpired) {
+      throw err;
+    }
     throw new Error('session_expired');
   }
-  const expiresAt = new Date(
-    Date.now() + (body.expires_in ?? DEFAULT_LONG_LIVED_EXPIRES_IN) * 1000
-  ).toISOString();
-  return { token: body.access_token, expiresAt };
 }
 
 /**
@@ -206,6 +217,20 @@ async function callWithFreshToken<T>(
           refreshErr instanceof Error ? refreshErr.message : String(refreshErr)
         }`
       );
+      // Meta explicitly rejected the refresh (code 190) — the stored token is
+      // unusable. Clear it so every screen (including home) agrees the account
+      // is disconnected.
+      if (refreshErr instanceof GraphTokenExpired) {
+        try {
+          await disconnectInstagram();
+        } catch (clearErr: unknown) {
+          addLog(
+            `instagram: failed to clear invalidated token — ${
+              clearErr instanceof Error ? clearErr.message : String(clearErr)
+            }`
+          );
+        }
+      }
       throw new Error('session_expired');
     }
 
@@ -224,6 +249,16 @@ async function callWithFreshToken<T>(
       return await call(refreshed.token);
     } catch (retryErr) {
       if (retryErr instanceof GraphTokenExpired) {
+        // A fresh token was rejected immediately — clear the row.
+        try {
+          await disconnectInstagram();
+        } catch (clearErr: unknown) {
+          addLog(
+            `instagram: failed to clear rejected token — ${
+              clearErr instanceof Error ? clearErr.message : String(clearErr)
+            }`
+          );
+        }
         throw new Error('session_expired');
       }
       throw retryErr;

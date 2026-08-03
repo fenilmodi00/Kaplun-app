@@ -50,6 +50,12 @@ type Config struct {
 	// Local tunnel (until production deploy)
 	NgrokEnabled bool
 	NgrokDomain  string
+
+	// Cloudflare Tunnel (preferred for Meta webhooks — no free-ngrok interstitial)
+	CloudflareTunnelEnabled bool
+	CloudflareTunnelToken   string // Zero Trust install token (optional)
+	CloudflareTunnelName    string // CLI tunnel name, e.g. kaplun-api (uses ~/.cloudflared credentials)
+	CloudflareTunnelURL     string // known public URL for named tunnels
 }
 
 // Load reads configuration from the process environment.
@@ -118,8 +124,18 @@ func FromMap(values map[string]string) (Config, error) {
 	}
 	cfg.AutomationSweeperEnabled = sweeper
 
-	// Default on for local Meta webhooks/OAuth until the API is deployed.
-	ngrokOn, err := parseBoolDefault(values["NGROK_ENABLED"], true)
+	// Prefer Cloudflare Tunnel for local Meta webhooks/OAuth (no free-ngrok interstitial).
+	cfOn, err := parseBoolDefault(values["CLOUDFLARE_TUNNEL_ENABLED"], true)
+	if err != nil {
+		return Config{}, fmt.Errorf("CLOUDFLARE_TUNNEL_ENABLED: %w", err)
+	}
+	cfg.CloudflareTunnelEnabled = cfOn
+	cfg.CloudflareTunnelToken = strings.TrimSpace(values["CLOUDFLARE_TUNNEL_TOKEN"])
+	cfg.CloudflareTunnelName = strings.TrimSpace(values["CLOUDFLARE_TUNNEL_NAME"])
+	cfg.CloudflareTunnelURL = strings.TrimSpace(values["CLOUDFLARE_TUNNEL_URL"])
+
+	// ngrok stays available but defaults off — free ngrok breaks Meta webhook verify.
+	ngrokOn, err := parseBoolDefault(values["NGROK_ENABLED"], false)
 	if err != nil {
 		return Config{}, fmt.Errorf("NGROK_ENABLED: %w", err)
 	}
@@ -178,6 +194,10 @@ func envMap() map[string]string {
 		"AUTOMATION_SWEEPER_ENABLED",
 		"NGROK_ENABLED",
 		"NGROK_DOMAIN",
+		"CLOUDFLARE_TUNNEL_ENABLED",
+		"CLOUDFLARE_TUNNEL_TOKEN",
+		"CLOUDFLARE_TUNNEL_NAME",
+		"CLOUDFLARE_TUNNEL_URL",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {

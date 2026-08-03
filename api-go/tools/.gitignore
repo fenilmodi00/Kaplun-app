@@ -1,0 +1,4 @@
+# Local cloudflared binary for Windows (downloaded; not committed).
+# Place cloudflared / cloudflared.exe here, or install on PATH.
+*
+!.gitignore

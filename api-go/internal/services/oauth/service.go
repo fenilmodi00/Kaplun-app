@@ -83,13 +83,15 @@ func (s *Service) ExchangeCodeForShortToken(ctx context.Context, code string) (T
 	if err != nil {
 		return TokenResult{}, err
 	}
-	token, _ := data["access_token"].(string)
+	// Instagram Login returns { "data": [ { "access_token", "user_id", ... } ] }.
+	// Older flat { "access_token", "user_id" } responses are still accepted.
+	token, userID := extractShortLivedToken(data)
 	if token == "" {
 		return TokenResult{}, fmt.Errorf("missing access_token in response: %v", data)
 	}
 	return TokenResult{
 		AccessToken: token,
-		UserID:      asString(data["user_id"]),
+		UserID:      userID,
 		Raw:         data,
 	}, nil
 }
@@ -205,7 +207,6 @@ func BuildCreatorData(profile Profile, accessToken, tokenExpiresAt, clerkID stri
 		"account_type":     accountType,
 		"is_onboarded":     true,
 		"access_token":     accessToken,
-		"ig_session_json":  nil,
 		"token_expires_at": tokenExpiresAt,
 		"updated_at":       now.UTC().Format(time.RFC3339Nano),
 	}
@@ -214,23 +215,79 @@ func BuildCreatorData(profile Profile, accessToken, tokenExpiresAt, clerkID stri
 func (s *Service) doJSON(req *http.Request) (map[string]any, error) {
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s %s: %w", req.Method, redactURL(req.URL), err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s %s: read body: %w", req.Method, redactURL(req.URL), err)
 	}
+	trimmed := strings.TrimSpace(string(body))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("%s %s → http %d: %s", req.Method, redactURL(req.URL), resp.StatusCode, truncateBody(trimmed, 800))
 	}
 
 	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s %s: decode json: %w; body=%s", req.Method, redactURL(req.URL), err, truncateBody(trimmed, 200))
 	}
 	return data, nil
+}
+
+// redactURL strips secrets from Meta URLs before they land in error strings/logs.
+func redactURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	clone := *u
+	q := clone.Query()
+	for _, key := range []string{"access_token", "client_secret", "code"} {
+		if q.Has(key) {
+			q.Set(key, "[redacted]")
+		}
+	}
+	clone.RawQuery = q.Encode()
+	return clone.String()
+}
+
+func truncateBody(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
+// extractShortLivedToken reads access_token (+ user_id) from either the
+// Instagram Login envelope or a legacy flat token payload.
+func extractShortLivedToken(data map[string]any) (token, userID string) {
+	if token, _ = data["access_token"].(string); token != "" {
+		return token, asString(data["user_id"])
+	}
+	rawData, ok := data["data"]
+	if !ok {
+		return "", ""
+	}
+	switch items := rawData.(type) {
+	case []any:
+		if len(items) == 0 {
+			return "", ""
+		}
+		item, _ := items[0].(map[string]any)
+		if item == nil {
+			return "", ""
+		}
+		token, _ = item["access_token"].(string)
+		return token, asString(item["user_id"])
+	case []map[string]any:
+		if len(items) == 0 {
+			return "", ""
+		}
+		token, _ = items[0]["access_token"].(string)
+		return token, asString(items[0]["user_id"])
+	default:
+		return "", ""
+	}
 }
 
 func asString(value any) string {

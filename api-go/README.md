@@ -12,9 +12,15 @@ go run ./cmd/server
 
 `cmd/server` loads `api-go/.env` automatically (like FastAPI's dotenv). Process env vars override `.env`.
 
-By default it also starts an **ngrok** HTTPS tunnel to `IG_API_PORT` in the background (same reserved URL as `PUBLIC_BASE_URL` when that host contains `ngrok`). The HTTP server listens immediately; ngrok readiness is logged a few seconds later. Disable with `NGROK_ENABLED=false` once the API is deployed. Requires the `ngrok` CLI on PATH.
+By default it also starts a **Cloudflare quick Tunnel** (`cloudflared`) to `IG_API_PORT` in the background. Free Cloudflare tunnels do **not** show the browser interstitial that breaks Meta webhook verification (unlike free ngrok). The HTTP server listens immediately; tunnel readiness is logged a few seconds later with the public URL, OAuth callback, and webhook paths.
 
-Default listen: `:8000` (`IG_API_PORT`). You should see `"msg":"loaded env file"`, then `"msg":"server listening"`, then `"msg":"ngrok tunnel ready"`.
+Requires the `cloudflared` CLI on PATH (or `api-go/tools/cloudflared.exe`). Disable with `CLOUDFLARE_TUNNEL_ENABLED=false` once the API is deployed.
+
+Named tunnel (stable hostname after `cloudflared tunnel create` + `route dns`): set `CLOUDFLARE_TUNNEL_NAME` + `CLOUDFLARE_TUNNEL_URL` — uses `~/.cloudflared/<uuid>.json`, no token needed. Zero Trust dashboard path: `CLOUDFLARE_TUNNEL_TOKEN` + `CLOUDFLARE_TUNNEL_URL`. Empty name+token = ephemeral `*.trycloudflare.com` quick tunnel. Legacy ngrok: `NGROK_ENABLED=true` (defaults off).
+
+Default listen: `:8000` (`IG_API_PORT`). You should see `"msg":"loaded env file"`, then `"msg":"server listening"`, then `"msg":"cloudflare quick tunnel ready"` / `"tunnel public URL"`.
+
+**Important:** quick tunnels get a new `*.trycloudflare.com` host each restart. Update Meta OAuth redirect URI, webhook callback URL, and `REDIRECT_URI` / `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` to match the logged URL (or use a named Cloudflare tunnel for a stable hostname).
 
 Note: `go run ./cmd/server` compiles first — a cold build can take ~30–60s with no logs. Re-runs are much faster, or use `go build -o server.exe ./cmd/server && ./server.exe`.
 

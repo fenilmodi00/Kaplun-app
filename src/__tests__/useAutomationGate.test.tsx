@@ -13,7 +13,11 @@ jest.mock('@/lib/instagram-oauth', () => ({
   startInstagramOAuth: jest.fn().mockResolvedValue(true),
 }));
 
-import { renderHook, waitFor } from '@testing-library/react-native';
+jest.mock('@/lib/bridge-context', () => ({
+  useBridge: () => ({ isReady: true, status: 'ready', retry: jest.fn(), setStatus: jest.fn() }),
+}));
+
+import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { getCreatorByClerkId } from '@/lib/repository';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
@@ -38,9 +42,9 @@ describe('useAutomationGate', () => {
     });
 
     await waitFor(() => {
+      expect(result.current.loading).toBe(false);
       expect(result.current.connected).toBe(true);
     });
-    expect(result.current.loading).toBe(false);
   });
 
   it('returns connected: false when creator has no access_token', async () => {
@@ -54,12 +58,57 @@ describe('useAutomationGate', () => {
     });
 
     await waitFor(() => {
+      expect(result.current.loading).toBe(false);
       expect(result.current.connected).toBe(false);
-    }, { timeout: 5000 });
-    expect(result.current.loading).toBe(false);
+    });
   });
 
-  it('connect() calls startInstagramOAuth with clerk id + appwrite uid and refreshes on success', async () => {
+  it('returns connected: false for legacy enc1: tokens', async () => {
+    mockGetCreatorByClerkId.mockResolvedValue({
+      $id: 'creator-1',
+      access_token: 'enc1:cipher',
+    });
+
+    const { result } = await renderHook(() => useAutomationGate(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.connected).toBe(false);
+    });
+  });
+
+  it('connect() calls startInstagramOAuth with clerk id and verifies token was saved', async () => {
+    let token = '';
+    mockGetCreatorByClerkId.mockImplementation(async () => ({
+      $id: 'creator-1',
+      access_token: token,
+    }));
+    mockStartInstagramOAuth.mockImplementation(async () => {
+      token = 'fresh-token';
+      return true;
+    });
+
+    const { result } = await renderHook(() => useAutomationGate(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(mockStartInstagramOAuth).toHaveBeenCalledWith(
+      'test-user-id',
+      'test-user-id'
+    );
+  });
+
+  it('connect() throws when OAuth finishes without a usable token', async () => {
     mockGetCreatorByClerkId.mockResolvedValue({
       $id: 'creator-1',
       access_token: '',
@@ -69,16 +118,10 @@ describe('useAutomationGate', () => {
       wrapper: createQueryClientWrapper(),
     });
 
-    // Wait for the initial query to resolve
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
-    await result.current.connect();
-
-    expect(mockStartInstagramOAuth).toHaveBeenCalledWith(
-      'test-user-id',
-      'creator-1'
-    );
+    await expect(result.current.connect()).rejects.toThrow(/no usable token was saved/i);
   });
 });

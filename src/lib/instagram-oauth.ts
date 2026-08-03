@@ -14,6 +14,8 @@
 import { openAuthSessionAsync } from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 
+import { addLog } from '@/lib/logger';
+
 const IG_APP_ID = process.env.EXPO_PUBLIC_IG_APP_ID;
 const IG_OAUTH_REDIRECT_URI = process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI;
 
@@ -92,13 +94,25 @@ export async function startInstagramOAuth(
 
   const authUrl = `${IG_AUTHORIZE_URL}?${params.toString()}`;
 
+  addLog(
+    `ig-oauth: opening authorize client_id=${IG_APP_ID} redirect_uri=${IG_OAUTH_REDIRECT_URI} deep_link=${redirectDeepLink} clerk=${clerkId.slice(0, 12)}…`
+  );
+
   const result = await openAuthSessionAsync(authUrl, redirectDeepLink);
+
+  addLog(
+    `ig-oauth: browser result type=${result.type}` +
+      (result.type === 'success' && 'url' in result && result.url
+        ? ` url=${sanitizeCallbackUrl(result.url)}`
+        : '')
+  );
 
   // In Expo Go on Android, the auth session may return 'dismiss' or 'cancel'
   // when the browser redirects to exp:// (because Expo Go intercepts the URL).
   // We treat any non-cancel result as potentially successful and let the
   // caller verify by calling fetchProfile().
   if (result.type === 'cancel') {
+    addLog('ig-oauth: user cancelled');
     throw new Error('Instagram OAuth was cancelled');
   }
 
@@ -108,19 +122,24 @@ export async function startInstagramOAuth(
     let parsedUrl: URL | null = null;
     try {
       parsedUrl = new URL(cleanUrl);
-    } catch {
-      // URL parsing failed — fall through to optimistic success
+    } catch (parseErr: unknown) {
+      addLog(
+        `ig-oauth: could not parse callback url err=${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+      );
     }
 
     if (parsedUrl) {
       const status = parsedUrl.searchParams.get('status');
+      const message = parsedUrl.searchParams.get('message');
+      addLog(
+        `ig-oauth: callback status=${status ?? '(none)'} message=${message ?? '(none)'}`
+      );
 
       if (status === 'success') {
         return true;
       }
 
       if (status === 'error') {
-        const message = parsedUrl.searchParams.get('message');
         throw new Error(message || 'Instagram connection failed');
       }
     }
@@ -130,5 +149,21 @@ export async function startInstagramOAuth(
   // redirects to exp:// (because Expo Go intercepts the URL as an intent).
   // We treat this as a likely success — the caller should verify by
   // calling fetchProfile() to check if the connection actually worked.
+  addLog('ig-oauth: optimistic success (no status in redirect — verify token in Appwrite)');
   return true;
+}
+
+/** Strip query noise / tokens from callback URLs before logging. */
+function sanitizeCallbackUrl(raw: string): string {
+  try {
+    const u = new URL(raw.replace(/#_$/, ''));
+    const status = u.searchParams.get('status');
+    const message = u.searchParams.get('message');
+    const parts = [`${u.protocol}//${u.host}${u.pathname}`];
+    if (status) parts.push(`status=${status}`);
+    if (message) parts.push(`message=${message.slice(0, 120)}`);
+    return parts.join(' ');
+  } catch {
+    return raw.slice(0, 160);
+  }
 }
