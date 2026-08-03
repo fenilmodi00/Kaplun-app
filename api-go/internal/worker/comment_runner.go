@@ -109,12 +109,16 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 	}
 
 	for _, auto := range filterAutomationsForMedia(allActive, mediaID) {
-		mode := mapString(auto, "match_mode")
-		wholeWord := mode == "" || mode == "whole_word"
+		matchedKeyword := ""
+		if !mapBool(auto, "match_any_word") {
+			mode := mapString(auto, "match_mode")
+			wholeWord := mode == "" || mode == "whole_word"
 
-		m := keywords.MatchKeywords(commentText, mapStringSlice(auto, "keywords"), wholeWord)
-		if !m.Matched {
-			continue
+			m := keywords.MatchKeywords(commentText, mapStringSlice(auto, "keywords"), wholeWord)
+			if !m.Matched {
+				continue
+			}
+			matchedKeyword = m.MatchedKeyword
 		}
 
 		existing, err := r.Store.FindLog(ctx, mapString(auto, "$id"), commentID)
@@ -172,7 +176,7 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 				"comment_id":         commentID,
 				"commenter_username": nilIfEmpty(commenterName),
 				"comment_text":       commentTrim,
-				"matched_keyword":    m.MatchedKeyword,
+				"matched_keyword":    nilIfEmpty(matchedKeyword),
 				"action":             "pending",
 				"created_at":         r.nowISO(),
 			})

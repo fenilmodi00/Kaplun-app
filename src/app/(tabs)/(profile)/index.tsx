@@ -215,7 +215,7 @@ export default function ProfileScreen() {
                     {metric.name.replace(/_/g, ' ')}
                   </Text>
                   <Text className="text-body-sm font-semibold text-ink">
-                    {metric.values[0]?.value ?? '—'}
+                    {metric.values?.[0]?.value ?? metric.total_value?.value ?? '—'}
                   </Text>
                 </View>
               ))}

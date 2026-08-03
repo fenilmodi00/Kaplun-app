@@ -34,6 +34,7 @@ const mockAutomation: Automation = {
   bound_media_ids: [],
   keywords: ['hello', 'world'],
   match_mode: 'whole_word',
+  match_any_word: false,
   opening_dm_mode: 'direct',
   dm_message: 'Thanks for your comment!',
   button_text: null,

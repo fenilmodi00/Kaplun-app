@@ -23,6 +23,7 @@ export interface Automation {
   bound_media_ids: string[];
   keywords: string[];
   match_mode: MatchMode;
+  match_any_word: boolean;
   opening_dm_mode: OpeningDmMode;
   dm_message: string;
   button_text: string | null;
@@ -53,6 +54,7 @@ export interface CreateAutomationInput {
   media_ids?: string[];
   keywords: string[];
   match_mode: MatchMode;
+  match_any_word?: boolean;
   dm_message: string;
   opening_dm_mode?: OpeningDmMode;
   button_text?: string | null;

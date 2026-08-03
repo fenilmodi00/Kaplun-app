@@ -18,6 +18,7 @@ jest.mock('@/lib/instagram', () => ({
 
 jest.mock('@/lib/automations', () => ({
   listCampaignTemplates: jest.fn().mockResolvedValue([]),
+  updateAutomation: jest.fn().mockResolvedValue({}),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -30,6 +31,7 @@ import NewAutomationScreen from '@/app/(tabs)/(automate)/new';
 import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia } from '@/lib/instagram';
+import { updateAutomation } from '@/lib/automations';
 import { validateAutomationDraft } from '@/lib/automation-validation';
 import type { AutomationDraft } from '@/lib/automation-validation';
 
@@ -44,6 +46,7 @@ function makeDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft {
     selectedMediaIds: [],
     keywords: [],
     matchMode: 'whole_word',
+    matchAnyWord: false,
     dmMessage: '',
     openingDmMode: 'direct',
     buttonText: '',
@@ -142,6 +145,11 @@ describe('validateAutomationDraft', () => {
     expect(errors).toContain('At least one keyword is required');
     expect(errors).toContain('DM message is required');
   });
+
+  it('passes with no keywords when matchAnyWord is true', () => {
+    const draft = makeDraft({ name: 'Test', dmMessage: 'Hi!', matchAnyWord: true });
+    expect(validateAutomationDraft(draft)).toEqual([]);
+  });
 });
 
 describe('NewAutomationScreen', () => {
@@ -170,7 +178,7 @@ describe('NewAutomationScreen', () => {
     expect(getByLabelText('Keywords')).toBeTruthy();
     expect(getByLabelText('DM message')).toBeTruthy();
     expect(getByLabelText('Enable public reply')).toBeTruthy();
-    expect(getByText('Preview And Go Live')).toBeTruthy();
+    expect(getByText('Go Live')).toBeTruthy();
   });
 
   it('does not submit when required fields are empty', async () => {
@@ -181,7 +189,7 @@ describe('NewAutomationScreen', () => {
     });
 
     const { getByText } = await render(<NewAutomationScreen />);
-    await fireEvent(getByText('Preview And Go Live'), 'press');
+    await fireEvent(getByText('Go Live'), 'press');
 
     expect(mockCreate).not.toHaveBeenCalled();
   });
@@ -200,7 +208,7 @@ describe('NewAutomationScreen', () => {
     await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks for your comment!');
 
-    await fireEvent(getByText('Preview And Go Live'), 'press');
+    await fireEvent(getByText('Go Live'), 'press');
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -254,7 +262,7 @@ describe('NewAutomationScreen', () => {
 
     await fireEvent(getByLabelText('Enable public reply'), 'valueChange', true);
 
-    await fireEvent(getByText('Preview And Go Live'), 'press');
+    await fireEvent(getByText('Go Live'), 'press');
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -272,7 +280,7 @@ describe('NewAutomationScreen', () => {
     await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks!');
 
-    await fireEvent(getByText('Preview And Go Live'), 'press');
+    await fireEvent(getByText('Go Live'), 'press');
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -302,10 +310,63 @@ describe('NewAutomationScreen', () => {
     await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks!');
 
-    await fireEvent(getByText('Preview And Go Live'), 'press');
+    await fireEvent(getByText('Go Live'), 'press');
 
     expect(
       await findByText(/Instagram account not connected/)
     ).toBeTruthy();
+  });
+
+  it('submits with match_any_word and no keywords when any word is selected', async () => {
+    const mockCreate = jest.fn().mockResolvedValue({ $id: 'auto_1' });
+    mockUseAutomations.mockReturnValue({
+      createAutomation: mockCreate,
+      creating: false,
+    });
+
+    const { getByLabelText, getByText, queryByLabelText } = await render(<NewAutomationScreen />);
+
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
+    await fireEvent(getByText('any post or reel'), 'press');
+    await fireEvent(getByText('any word'), 'press');
+    await fireEvent.changeText(getByLabelText('DM message'), 'Thanks!');
+
+    expect(queryByLabelText('Keywords')).toBeNull();
+
+    await fireEvent(getByText('Go Live'), 'press');
+
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+    const callArg = mockCreate.mock.calls[0][0];
+    expect(callArg.match_any_word).toBe(true);
+    expect(callArg.keywords).toEqual([]);
+  });
+
+  it('save as paused creates then patches status to paused', async () => {
+    const mockCreate = jest.fn().mockResolvedValue({ $id: 'auto_1' });
+    const mockRefresh = jest.fn();
+    mockUseAutomations.mockReturnValue({
+      createAutomation: mockCreate,
+      creating: false,
+      refresh: mockRefresh,
+    });
+    const mockUpdate = jest.mocked(updateAutomation);
+    mockUpdate.mockResolvedValue({} as never);
+
+    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
+    await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
+    await fireEvent(getByText('any post or reel'), 'press');
+    await fireEvent.changeText(getByLabelText('DM message'), 'Hi!');
+
+    await fireEvent(getByText('Save as paused'), 'press');
+
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      expect(mockUpdate).toHaveBeenCalledWith(expect.any(Function), 'auto_1', { status: 'paused' });
+      expect(mockRefresh).toHaveBeenCalled();
+    });
   });
 });

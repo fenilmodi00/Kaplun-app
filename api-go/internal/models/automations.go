@@ -11,6 +11,7 @@ type Automation struct {
 	BoundMediaIDs      []string `json:"bound_media_ids"`
 	Keywords           []string `json:"keywords"`
 	MatchMode          string   `json:"match_mode"`
+	MatchAnyWord       bool     `json:"match_any_word"`
 	OpeningDMMode      string   `json:"opening_dm_mode"`
 	DMMessage          string   `json:"dm_message"`
 	ButtonText         *string  `json:"button_text"`
@@ -44,6 +45,7 @@ type AutomationCreate struct {
 	MediaIDs           []string `json:"media_ids"`
 	Keywords           []string `json:"keywords"`
 	MatchMode          string   `json:"match_mode"`
+	MatchAnyWord       bool     `json:"match_any_word"`
 	DMMessage          string   `json:"dm_message"`
 	OpeningDMMode      string   `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`
@@ -58,6 +60,7 @@ type AutomationPatch struct {
 	Name               *string  `json:"name"`
 	Keywords           []string `json:"keywords"`
 	MatchMode          *string  `json:"match_mode"`
+	MatchAnyWord       *bool    `json:"match_any_word"`
 	DMMessage          *string  `json:"dm_message"`
 	OpeningDMMode      *string  `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`

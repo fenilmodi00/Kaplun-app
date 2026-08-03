@@ -91,6 +91,12 @@ func Start(ctx context.Context, opts Options) (*Tunnel, error) {
 	}
 
 	token := strings.TrimSpace(opts.Token)
+	// Ignore placeholder / comment-leak values (e.g. "   # leave empty") so
+	// CLOUDFLARE_TUNNEL_NAME + credentials-file path is used instead.
+	if token != "" && (strings.HasPrefix(token, "#") || len(token) < 40) {
+		log.Warn("ignoring invalid CLOUDFLARE_TUNNEL_TOKEN (too short or comment); using tunnel name/credentials if set", "token_len", len(token))
+		token = ""
+	}
 	name := strings.TrimSpace(opts.Name)
 	knownURL := strings.TrimSpace(opts.URL)
 

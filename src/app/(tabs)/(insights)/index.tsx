@@ -1,23 +1,690 @@
-import React from 'react';
-import { View, Text } from '@/tw';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useUser } from '@clerk/expo';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenShell } from '@/components/screen-shell';
+import * as Linking from 'expo-linking';
 
-export default function InsightsScreen() {
+import { View, Text, Pressable } from '@/tw';
+import { Image } from '@/tw/image';
+import { AnimatedView } from '@/tw/animated';
+import { ScreenShell } from '@/components/screen-shell';
+import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+import { useEntranceAnimation } from '@/hooks/useClayAnimations';
+import { useInsights, type TopMediaItem } from '@/hooks/useInsights';
+import { startInstagramOAuth } from '@/lib/instagram-oauth';
+import { addLog } from '@/lib/logger';
+import type { InsightPoint } from '@/lib/instagram';
+
+type PeriodDays = 7 | 28;
+const PERIOD_OPTIONS: readonly PeriodDays[] = [7, 28];
+
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function formatCompact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (value >= 10_000) return `${Math.round(value / 1_000)}K`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return value.toLocaleString('en-US');
+}
+
+/** Meta end_time format: '2024-01-01T00:00:00+0000' — take the date part. */
+function dayLabel(endTime: string): string {
+  const parts = endTime.slice(0, 10).split('-').map(Number);
+  const month = MONTHS[(parts[1] ?? 1) - 1] ?? '';
+  return `${month} ${parts[2] ?? ''}`;
+}
+
+function sumPoints(points: InsightPoint[]): number {
+  return points.reduce((acc, p) => acc + p.value, 0);
+}
+
+// ── Animation wrapper (same pattern as home) ─────────────────────────
+
+function Entrance({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
+  const { animatedStyle } = useEntranceAnimation(delay);
+  return <AnimatedView style={[{ width: '100%' }, animatedStyle]}>{children}</AnimatedView>;
+}
+
+// ── Skeleton ─────────────────────────────────────────────────────────
+
+function SkeletonBlock({ height, style }: { height: number; style?: object }) {
   return (
-    <ScreenShell contentContainerStyle={{ paddingHorizontal: 18, gap: 16 }}>
+    <View
+      className="bg-white border border-hairline"
+      style={[{ height, borderRadius: 16 }, style]}
+    />
+  );
+}
+
+function DataSkeleton() {
+  return (
+    <View style={{ gap: 16 }}>
+      <View className="flex-row" style={{ gap: 10 }}>
+        <SkeletonBlock height={92} style={{ flex: 1 }} />
+        <SkeletonBlock height={92} style={{ flex: 1 }} />
+      </View>
+      <View className="flex-row" style={{ gap: 10 }}>
+        <SkeletonBlock height={92} style={{ flex: 1 }} />
+        <SkeletonBlock height={92} style={{ flex: 1 }} />
+      </View>
+      <SkeletonBlock height={220} />
+      <SkeletonBlock height={140} />
+    </View>
+  );
+}
+
+// ── Header pieces ────────────────────────────────────────────────────
+
+function PeriodToggle({
+  days,
+  onChange,
+}: {
+  days: PeriodDays;
+  onChange: (d: PeriodDays) => void;
+}) {
+  return (
+    <View
+      className="flex-row bg-white border border-hairline"
+      style={{ borderRadius: 9999, padding: 3 }}
+    >
+      {PERIOD_OPTIONS.map((option) => {
+        const active = option === days;
+        return (
+          <Pressable
+            key={option}
+            onPress={() => onChange(option)}
+            hitSlop={6}
+            style={{
+              borderRadius: 9999,
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              minWidth: 48,
+              alignItems: 'center',
+              backgroundColor: active ? '#0a0a0a' : 'transparent',
+            }}
+          >
+            <Text
+              className="font-semibold"
+              style={{ fontSize: 12.5, color: active ? '#ffffff' : '#6a6a6a' }}
+            >
+              {option}D
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ── KPI grid ─────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <View
+      className="bg-white border border-hairline rounded-lg"
+      style={{ flexBasis: '48%', flexGrow: 1, padding: 14, gap: 2 }}
+    >
       <Text
-        className="font-medium text-ink"
-        style={{ fontSize: 32, lineHeight: 37, letterSpacing: -0.5 }}
+        className="font-semibold uppercase text-muted"
+        style={{ fontSize: 11, letterSpacing: 1.2 }}
       >
-        Insights
+        {label}
       </Text>
-      <View className="bg-white border border-hairline rounded-xl p-6 items-center gap-3">
-        <Ionicons name="stats-chart-outline" size={32} color="#9a9a9a" />
-        <Text className="text-body-sm text-muted text-center">
-          Insights are coming soon — publish your first post to see analytics.
+      <Text className="font-semibold text-ink" style={{ fontSize: 24, letterSpacing: -0.4 }}>
+        {value}
+      </Text>
+      <Text className="text-muted-soft" style={{ fontSize: 12 }}>
+        {sub}
+      </Text>
+    </View>
+  );
+}
+
+// ── Reach chart ──────────────────────────────────────────────────────
+
+const CHART_HEIGHT = 120;
+
+function ReachChartCard({
+  points,
+  windowDays,
+}: {
+  points: InsightPoint[];
+  windowDays: PeriodDays;
+}) {
+  // Selection is keyed by day (endTime), not index — it survives refetches and
+  // resolves to null automatically when the period toggle drops the day.
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+
+  const total = useMemo(() => sumPoints(points), [points]);
+  const max = useMemo(() => points.reduce((m, p) => Math.max(m, p.value), 0), [points]);
+  const maxIdx = useMemo(
+    () => (max > 0 ? points.findIndex((p) => p.value === max) : -1),
+    [points, max]
+  );
+  const selectedPoint = useMemo(
+    () => points.find((p) => p.endTime === selectedTime) ?? null,
+    [points, selectedTime]
+  );
+
+  const hasData = points.length > 0 && total > 0;
+  const headerValue = selectedPoint ? selectedPoint.value : total;
+  const headerSub = selectedPoint ? dayLabel(selectedPoint.endTime) : `Last ${windowDays} days`;
+
+  const axisIdx = useMemo(() => {
+    if (points.length < 2) return [];
+    const last = points.length - 1;
+    return [0, Math.floor(last / 3), Math.floor((2 * last) / 3), last].filter(
+      (v, i, arr) => arr.indexOf(v) === i
+    );
+  }, [points]);
+
+  const barRadius = windowDays <= 7 ? 6 : 3;
+
+  return (
+    <View className="bg-white border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
+      <View className="flex-row items-end justify-between">
+        <View style={{ gap: 2 }}>
+          <Text
+            className="font-semibold uppercase text-muted"
+            style={{ fontSize: 11, letterSpacing: 1.2 }}
+          >
+            Reach
+          </Text>
+          <Text className="font-semibold text-ink" style={{ fontSize: 28, letterSpacing: -0.5 }}>
+            {formatCompact(headerValue)}
+          </Text>
+          <Text className="text-muted-soft" style={{ fontSize: 12 }}>
+            {headerSub}
+          </Text>
+        </View>
+        {selectedPoint != null && (
+          <Pressable
+            onPress={() => setSelectedTime(null)}
+            style={{ paddingVertical: 6, paddingHorizontal: 8 }}
+          >
+            <Text className="font-medium text-muted" style={{ fontSize: 12.5 }}>
+              Reset
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {hasData ? (
+        <View>
+          <View className="flex-row items-end" style={{ height: CHART_HEIGHT, gap: windowDays <= 7 ? 6 : 2 }}>
+            {points.map((point, i) => {
+              const pct = max > 0 ? point.value / max : 0;
+              const isSelected = selectedTime === point.endTime;
+              const isMax = i === maxIdx && selectedTime == null;
+              const barClass = isSelected ? 'bg-ink' : isMax ? 'bg-brand-ochre' : 'bg-surface-strong';
+              return (
+                <Pressable
+                  key={point.endTime}
+                  onPress={() => setSelectedTime(isSelected ? null : point.endTime)}
+                  className={`flex-1 ${barClass}`}
+                  style={{
+                    height: `${Math.max(pct * 100, 2.5)}%`,
+                    borderTopLeftRadius: barRadius,
+                    borderTopRightRadius: barRadius,
+                  }}
+                  accessibilityLabel={`Reach ${point.value} on ${dayLabel(point.endTime)}`}
+                />
+              );
+            })}
+          </View>
+          <View className="flex-row justify-between" style={{ marginTop: 8 }}>
+            {axisIdx.map((i) => (
+              <Text key={i} className="text-muted-soft" style={{ fontSize: 10.5 }}>
+                {dayLabel(points[i].endTime)}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ) : (
+        <View className="items-center" style={{ height: CHART_HEIGHT, justifyContent: 'center', gap: 6 }}>
+          <Ionicons name="stats-chart-outline" size={22} color="#9a9a9a" />
+          <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
+            No reach data yet — Meta can take up to 48h to report new insights.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Followers card (saturated Clay feature card) ─────────────────────
+
+function FollowersCard({
+  followers,
+  series,
+  windowDays,
+}: {
+  followers: number | null;
+  series: InsightPoint[];
+  windowDays: PeriodDays;
+}) {
+  const current = followers ?? (series.length > 0 ? series[series.length - 1].value : null);
+  const delta =
+    series.length >= 2 ? series[series.length - 1].value - series[0].value : null;
+
+  const min = series.reduce((m, p) => Math.min(m, p.value), Infinity);
+  const max = series.reduce((m, p) => Math.max(m, p.value), -Infinity);
+  const range = max - min;
+
+  return (
+    <View className="bg-brand-teal rounded-xl" style={{ padding: 18, gap: 12 }}>
+      <View className="flex-row items-start justify-between">
+        <View style={{ gap: 2 }}>
+          <Text
+            className="font-semibold uppercase"
+            style={{ fontSize: 11, letterSpacing: 1.2, color: 'rgba(255,255,255,0.7)' }}
+          >
+            Followers
+          </Text>
+          <Text className="font-semibold text-white" style={{ fontSize: 28, letterSpacing: -0.5 }}>
+            {current != null ? formatCompact(current) : '—'}
+          </Text>
+        </View>
+        {delta != null && (
+          <View
+            className="flex-row items-center"
+            style={{
+              gap: 4,
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              borderRadius: 9999,
+              paddingVertical: 4,
+              paddingHorizontal: 10,
+            }}
+          >
+            <Ionicons
+              name={delta > 0 ? 'trending-up' : delta < 0 ? 'trending-down' : 'remove'}
+              size={12}
+              color="#ffffff"
+            />
+            <Text className="font-semibold text-white" style={{ fontSize: 12 }}>
+              {delta > 0 ? `+${formatCompact(delta)}` : delta === 0 ? 'No change' : formatCompact(delta)}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {series.length >= 2 ? (
+        <View className="flex-row items-end" style={{ height: 44, gap: 2 }}>
+          {series.map((point, i) => {
+            const pct = range > 0 ? (point.value - min) / range : 0;
+            const isLast = i === series.length - 1;
+            return (
+              <View
+                key={point.endTime}
+                className="flex-1"
+                style={{
+                  height: `${25 + pct * 75}%`,
+                  backgroundColor: isLast ? '#ffffff' : 'rgba(255,255,255,0.35)',
+                  borderTopLeftRadius: 2,
+                  borderTopRightRadius: 2,
+                }}
+              />
+            );
+          })}
+        </View>
+      ) : (
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Ionicons name="lock-closed-outline" size={13} color="rgba(255,255,255,0.8)" />
+          <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', flex: 1 }}>
+            Daily follower trends unlock at 100 followers — a Meta threshold.
+          </Text>
+        </View>
+      )}
+
+      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+        Last {windowDays} days
+      </Text>
+    </View>
+  );
+}
+
+// ── Top posts ────────────────────────────────────────────────────────
+
+function mediaTypeIcon(item: TopMediaItem): React.ComponentProps<typeof Ionicons>['name'] | null {
+  if (item.media_product_type === 'REELS' || item.media_type === 'VIDEO') return 'videocam';
+  if (item.media_type === 'CAROUSEL_ALBUM') return 'copy';
+  return null;
+}
+
+function TopPostTile({ item }: { item: TopMediaItem }) {
+  const typeIcon = mediaTypeIcon(item);
+  const open = useCallback(() => {
+    if (item.permalink) {
+      Linking.openURL(item.permalink).catch((err: unknown) =>
+        addLog(`insights: open permalink failed — ${err instanceof Error ? err.message : String(err)}`)
+      );
+    }
+  }, [item.permalink]);
+
+  return (
+    <Pressable onPress={open} style={{ flexBasis: '48%', flexGrow: 1, gap: 6 }}>
+      <View
+        className="bg-surface-card border border-hairline"
+        style={{ aspectRatio: 1, borderRadius: 12, overflow: 'hidden' }}
+      >
+        {item.imageUri ? (
+          <Image
+            source={{ uri: item.imageUri }}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Ionicons name="image-outline" size={22} color="#9a9a9a" />
+          </View>
+        )}
+        {typeIcon && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              borderRadius: 9999,
+              padding: 5,
+            }}
+          >
+            <Ionicons name={typeIcon} size={11} color="#ffffff" />
+          </View>
+        )}
+      </View>
+      <View className="flex-row items-center" style={{ gap: 12 }}>
+        <View className="flex-row items-center" style={{ gap: 4 }}>
+          <Ionicons name="heart" size={12} color="#0a0a0a" />
+          <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
+            {formatCompact(item.like_count ?? 0)}
+          </Text>
+        </View>
+        <View className="flex-row items-center" style={{ gap: 4 }}>
+          <Ionicons name="chatbubble" size={11} color="#0a0a0a" />
+          <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
+            {formatCompact(item.comments_count ?? 0)}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function TopPostsCard({ items }: { items: TopMediaItem[] }) {
+  return (
+    <View className="bg-white border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
+      <View style={{ gap: 2 }}>
+        <Text
+          className="font-semibold uppercase text-muted"
+          style={{ fontSize: 11, letterSpacing: 1.2 }}
+        >
+          Top posts
+        </Text>
+        <Text className="text-muted-soft" style={{ fontSize: 12 }}>
+          Ranked by likes + comments
         </Text>
       </View>
+      {items.length > 0 ? (
+        <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+          {items.map((item) => (
+            <TopPostTile key={item.id} item={item} />
+          ))}
+        </View>
+      ) : (
+        <View className="items-center" style={{ paddingVertical: 18, gap: 6 }}>
+          <Ionicons name="images-outline" size={22} color="#9a9a9a" />
+          <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
+            No posts yet — publish your first post and its performance lands here.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Error states ─────────────────────────────────────────────────────
+
+function ReconnectCard({
+  variant,
+  loading,
+  onReconnect,
+}: {
+  variant: 'session_expired' | 'insights_permission';
+  loading: boolean;
+  onReconnect: () => void;
+}) {
+  const copy =
+    variant === 'insights_permission'
+      ? {
+          icon: 'key-outline' as const,
+          title: 'Reconnect to unlock insights',
+          body: "Meta's analytics permission was added after your Instagram was connected. Reconnect once to grant it — your data stays put.",
+        }
+      : {
+          icon: 'log-in-outline' as const,
+          title: 'Instagram disconnected',
+          body: 'Your Instagram session expired. Reconnect to load your analytics.',
+        };
+
+  return (
+    <View
+      className="bg-white border border-hairline rounded-xl items-center"
+      style={{ padding: 24, gap: 12 }}
+    >
+      <View
+        className="bg-brand-lavender items-center justify-center"
+        style={{ width: 52, height: 52, borderRadius: 26 }}
+      >
+        <Ionicons name={copy.icon} size={24} color="#0a0a0a" />
+      </View>
+      <Text
+        className="font-semibold text-ink text-center"
+        style={{ fontSize: 19, letterSpacing: -0.3 }}
+      >
+        {copy.title}
+      </Text>
+      <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 280 }}>
+        {copy.body}
+      </Text>
+      <ClayAnimatedButton variant="primary" fullWidth loading={loading} onPress={onReconnect} height={48}>
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Ionicons name="logo-instagram" size={16} color="#ffffff" />
+          <Text className="font-semibold text-white" style={{ fontSize: 14.5 }}>
+            {loading ? 'Waiting for Instagram…' : 'Reconnect Instagram'}
+          </Text>
+        </View>
+      </ClayAnimatedButton>
+    </View>
+  );
+}
+
+function InlineErrorStrip({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <View
+      className="flex-row items-center bg-white border border-hairline rounded-lg"
+      style={{ padding: 12, gap: 10 }}
+    >
+      <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />
+      <Text className="text-muted" style={{ fontSize: 12.5, flex: 1 }} numberOfLines={2}>
+        Couldn’t load insights — {message}
+      </Text>
+      <Pressable onPress={onRetry} style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
+        <Text className="font-semibold text-ink" style={{ fontSize: 12.5 }}>
+          Retry
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── Main screen ──────────────────────────────────────────────────────
+
+export default function InsightsScreen() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+  const [windowDays, setWindowDays] = useState<PeriodDays>(28);
+  const { profile, insights, topMedia, isLoading, isRefreshing, error, refresh } =
+    useInsights(windowDays);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  const handleReconnect = useCallback(async () => {
+    if (!user) return;
+    setIsReconnecting(true);
+    try {
+      await startInstagramOAuth(user.id, user.id);
+      await queryClient.invalidateQueries({ queryKey: ['insightsProfile'] });
+      await queryClient.invalidateQueries({ queryKey: ['insightsAccount'] });
+      await queryClient.invalidateQueries({ queryKey: ['insightsMedia'] });
+      await queryClient.invalidateQueries({ queryKey: ['creator'] });
+      await queryClient.invalidateQueries({ queryKey: ['automationGate'] });
+      refresh();
+    } catch (err: unknown) {
+      addLog(
+        `insights: reconnect failed — ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setIsReconnecting(false);
+    }
+  }, [user, queryClient, refresh]);
+
+  const isReconnectError = error === 'session_expired' || error === 'insights_permission';
+  const reachTotal = insights ? sumPoints(insights.reach) : null;
+  const reachAvg = insights && insights.reach.length > 0
+    ? Math.round(sumPoints(insights.reach) / insights.reach.length)
+    : null;
+  const followerSeries = insights?.followerCount ?? [];
+  const followerDelta =
+    followerSeries.length >= 2
+      ? followerSeries[followerSeries.length - 1].value - followerSeries[0].value
+      : null;
+
+  return (
+    <ScreenShell contentContainerStyle={{ gap: 16 }}>
+      {/* Header */}
+      <Entrance delay={0}>
+        <View style={{ gap: 6 }}>
+          <View className="flex-row items-center justify-between">
+            <Text
+              className="font-medium text-ink"
+              style={{ fontSize: 32, lineHeight: 37, letterSpacing: -0.5 }}
+            >
+              Insights
+            </Text>
+            <View className="flex-row items-center" style={{ gap: 10 }}>
+              {isRefreshing && !isLoading ? (
+                <View className="flex-row items-center" style={{ gap: 5 }}>
+                  <View
+                    className="bg-brand-ochre"
+                    style={{ width: 6, height: 6, borderRadius: 3 }}
+                  />
+                  <Text className="text-muted-soft" style={{ fontSize: 11.5 }}>
+                    Updating…
+                  </Text>
+                </View>
+              ) : null}
+              <PeriodToggle days={windowDays} onChange={setWindowDays} />
+            </View>
+          </View>
+          <Text className="text-muted" style={{ fontSize: 13 }}>
+            {profile?.username ? `@${profile.username} · ` : ''}Last {windowDays} days
+          </Text>
+        </View>
+      </Entrance>
+
+      {isLoading ? (
+        <Entrance delay={50}>
+          <DataSkeleton />
+        </Entrance>
+      ) : isReconnectError ? (
+        <Entrance delay={50}>
+          <ReconnectCard
+            variant={error as 'session_expired' | 'insights_permission'}
+            loading={isReconnecting}
+            onReconnect={handleReconnect}
+          />
+        </Entrance>
+      ) : (
+        <>
+          {error && (
+            <Entrance delay={50}>
+              <InlineErrorStrip message={error} onRetry={refresh} />
+            </Entrance>
+          )}
+
+          {/* KPI grid */}
+          <Entrance delay={60}>
+            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+              <KpiCard
+                label="Followers"
+                value={
+                  profile?.followers_count != null
+                    ? formatCompact(profile.followers_count)
+                    : followerSeries.length > 0
+                      ? formatCompact(followerSeries[followerSeries.length - 1].value)
+                      : '—'
+                }
+                sub={
+                  followerDelta != null
+                    ? followerDelta > 0
+                      ? `+${formatCompact(followerDelta)} this period`
+                      : followerDelta < 0
+                        ? `${formatCompact(followerDelta)} this period`
+                        : 'No change this period'
+                    : 'Trends at 100+ followers'
+                }
+              />
+              <KpiCard
+                label="Reach"
+                value={reachTotal != null ? formatCompact(reachTotal) : '—'}
+                sub={reachAvg != null ? `avg ${formatCompact(reachAvg)}/day` : `Last ${windowDays} days`}
+              />
+              <KpiCard
+                label="Views"
+                value={insights?.viewsTotal != null ? formatCompact(insights.viewsTotal) : '—'}
+                sub={insights?.viewsTotal != null ? `Last ${windowDays} days` : 'Unavailable yet'}
+              />
+              <KpiCard
+                label="Engaged"
+                value={
+                  insights?.accountsEngagedTotal != null
+                    ? formatCompact(insights.accountsEngagedTotal)
+                    : '—'
+                }
+                sub={
+                  insights?.accountsEngagedTotal != null
+                    ? `Accounts · ${windowDays}D`
+                    : 'Unavailable yet'
+                }
+              />
+            </View>
+          </Entrance>
+
+          {/* Reach chart */}
+          <Entrance delay={110}>
+            <ReachChartCard points={insights?.reach ?? []} windowDays={windowDays} />
+          </Entrance>
+
+          {/* Followers */}
+          <Entrance delay={160}>
+            <FollowersCard
+              followers={profile?.followers_count ?? null}
+              series={followerSeries}
+              windowDays={windowDays}
+            />
+          </Entrance>
+
+          {/* Top posts */}
+          <Entrance delay={210}>
+            <TopPostsCard items={topMedia} />
+          </Entrance>
+        </>
+      )}
     </ScreenShell>
   );
 }

@@ -113,7 +113,7 @@ function LogRow({ log }: { log: AutomationLog }) {
 }
 
 export default function AutomationDetail() {
-  const { automationId } = useLocalSearchParams<{ automationId: string }>();
+  const { automationId, created } = useLocalSearchParams<{ automationId: string; created?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { automations, toggleStatus, deleteAutomation } = useAutomations();
@@ -259,6 +259,31 @@ export default function AutomationDetail() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View className="gap-3 px-4 py-3">
+              {/* Post-creation guidance: the engine has no test endpoint, so
+                  the honest "test" is to comment on the targeted post and
+                  watch the activity feed below. */}
+              {created === 'live' && (
+                <View className="gap-1 rounded-lg border border-brand-mint bg-brand-mint/20 p-4">
+                  <Text className="text-title-sm font-semibold text-ink">You're live!</Text>
+                  <Text className="text-body-sm text-body">
+                    Test it now: comment{' '}
+                    {automation.match_any_word
+                      ? 'anything'
+                      : `one of your keywords (e.g. "${automation.keywords[0] ?? ''}")`}{' '}
+                    on your post — the DM fires automatically and shows up in
+                    Activity below.
+                  </Text>
+                </View>
+              )}
+              {created === 'paused' && (
+                <View className="gap-1 rounded-lg border border-brand-ochre bg-brand-ochre/20 p-4">
+                  <Text className="text-title-sm font-semibold text-ink">Saved as paused</Text>
+                  <Text className="text-body-sm text-body">
+                    Nothing fires while paused. Hit Resume below when you're ready to go live.
+                  </Text>
+                </View>
+              )}
+
               {/* Config summary card */}
               <View className="rounded-lg border border-hairline bg-canvas p-4 gap-2">
                 <Text className="text-title-sm font-semibold text-ink">Configuration</Text>
@@ -269,7 +294,7 @@ export default function AutomationDetail() {
                 <View className="flex-row justify-between">
                   <Text className="text-body-sm text-muted">Keywords</Text>
                   <Text className="text-body-sm text-ink" numberOfLines={1} style={{ maxWidth: '60%' }}>
-                    {automation.keywords.join(', ')}
+                    {automation.match_any_word ? 'Any word' : automation.keywords.join(', ')}
                   </Text>
                 </View>
                 <View className="flex-row justify-between">

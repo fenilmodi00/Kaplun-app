@@ -20,6 +20,7 @@ jest.mock('@/components/symbol-icon', () => ({
 }));
 
 import React from 'react';
+import { View, type View as RNView } from 'react-native';
 import { render, fireEvent, screen } from '@testing-library/react-native';
 import { ClayTabBar } from '@/components/clay/ClayTabBar';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
@@ -34,8 +35,8 @@ const TABS = [
 ];
 
 function createMockProps(
-  overrides: Partial<BottomTabBarProps> = {},
-): BottomTabBarProps {
+  overrides: Partial<BottomTabBarProps> & { blurTarget?: React.RefObject<RNView | null> } = {},
+): BottomTabBarProps & { blurTarget: React.RefObject<RNView | null> } {
   const routes = TABS.map((t, i) => ({
     key: `${t.name}-k`,
     name: t.name,
@@ -53,6 +54,8 @@ function createMockProps(
     history: routes.map((r) => ({ type: 'route' as const, key: r.key })),
     preloadedRouteKeys: [],
   };
+
+  const { blurTarget: overrideBlurTarget, ...restOverrides } = overrides;
 
   return {
     state,
@@ -72,7 +75,8 @@ function createMockProps(
       navigate: jest.fn(),
     } as unknown as BottomTabBarProps['navigation'],
     insets: { top: 0, right: 0, bottom: 0, left: 0 },
-    ...overrides,
+    blurTarget: overrideBlurTarget ?? React.createRef<RNView | null>(),
+    ...restOverrides,
   };
 }
 

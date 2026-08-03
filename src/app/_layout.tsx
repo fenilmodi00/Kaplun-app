@@ -6,7 +6,8 @@ import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
 import { tokenCache } from '@clerk/expo/token-cache';
@@ -23,16 +24,6 @@ if (!CLERK_PUBLISHABLE_KEY) {
 
 /** Clay canvas — matches auth screen & Android nav bar */
 const CANVAS = '#fffaf0';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      retry: false,
-    },
-  },
-});
 
 async function applyClaySystemChrome() {
   try {
@@ -154,11 +145,11 @@ export default function RootLayout() {
       <View style={styles.root}>
         <StatusBar style="dark" />
         <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-          <QueryClientProvider client={queryClient}>
+          <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
             <BridgeProvider>
               <AuthGate />
             </BridgeProvider>
-          </QueryClientProvider>
+          </PersistQueryClientProvider>
         </ClerkProvider>
       </View>
     </SafeAreaProvider>

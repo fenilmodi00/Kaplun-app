@@ -26,7 +26,11 @@ import { executeWithRetry } from './resilient';
 import { getCreatorByClerkId, updateCreatorToken } from './repository';
 import { addLog } from './logger';
 
-const GRAPH_API_BASE = 'https://graph.instagram.com/v21.0';
+// v22.0 is the FIRST version with account insights for the Instagram API with
+// Instagram Login (Business Login for Instagram) — shipped March 2025, see
+// developers.facebook.com/docs/graph-api/changelog/version22.0. On v21.0 every
+// /me/insights call fails regardless of Meta app configuration.
+const GRAPH_API_BASE = 'https://graph.instagram.com/v22.0';
 const FETCH_TIMEOUT_MS = 15_000;
 
 /** Media fields per Meta docs / openreply — thumbnail_url covers VIDEO+REELS. */
@@ -85,16 +89,38 @@ export interface InstagramMediaResponse {
 
 /**
  * Instagram insights response from the Graph API (`GET /me/insights`).
+ * Time-series metrics return `values`; `metric_type=total_value` metrics
+ * (e.g. `views`) return `total_value` instead.
  */
 export interface InstagramInsightsResponse {
   data: Array<{
     name: string;
     period: string;
-    values: Array<{ value: number; end_time: string }>;
+    values?: Array<{ value: number; end_time: string }>;
     total_value?: { value: number };
     id?: string;
   }>;
   error?: string;
+}
+
+/** A single day of a time-series insight metric. */
+export interface InsightPoint {
+  value: number;
+  endTime: string;
+}
+
+/**
+ * Parsed account insights over a rolling window. `reach` and `followerCount`
+ * are daily series (oldest → newest); `viewsTotal` / `accountsEngagedTotal`
+ * are window totals, `null` when Meta has no data for the metric.
+ * `followerCount` is empty for accounts under 100 followers (Meta limitation).
+ */
+export interface InstagramAccountInsights {
+  reach: InsightPoint[];
+  followerCount: InsightPoint[];
+  viewsTotal: number | null;
+  accountsEngagedTotal: number | null;
+  windowDays: number;
 }
 
 /** Thrown when Meta returns error code 190 (invalid/expired access token). */
@@ -312,6 +338,122 @@ export async function fetchInsights(): Promise<InstagramInsightsResponse> {
       )
     )
   );
+}
+
+const SERIES_INSIGHTS_METRICS = 'reach,follower_count';
+const TOTAL_INSIGHTS_METRICS = 'views,accounts_engaged';
+
+function seriesPoints(
+  body: InstagramInsightsResponse,
+  metric: string
+): InsightPoint[] {
+  const entry = body.data?.find((d) => d.name === metric);
+  return (entry?.values ?? [])
+    .map((v) => ({ value: v.value, endTime: v.end_time }))
+    .sort((a, b) => (a.endTime < b.endTime ? -1 : 1));
+}
+
+function totalOf(body: InstagramInsightsResponse, metric: string): number | null {
+  const entry = body.data?.find((d) => d.name === metric);
+  return entry?.total_value?.value ?? null;
+}
+
+/**
+ * Fetches `views` + `accounts_engaged` window totals. `views` replaced the
+ * deprecated `impressions` metric and only exists as `total_value`, so it
+ * cannot share a call with the time-series metrics. If Meta rejects the
+ * combined call (e.g. `accounts_engaged` unavailable for the token), retry
+ * with `views` alone, then degrade to nulls — a missing total must never
+ * sink the whole dashboard.
+ */
+async function fetchInsightsTotals(
+  token: string,
+  since: number,
+  until: number
+): Promise<{ views: number | null; accountsEngaged: number | null }> {
+  try {
+    const body = await graphGet<InstagramInsightsResponse>(
+      `/me/insights?metric=${TOTAL_INSIGHTS_METRICS}&period=day&metric_type=total_value&since=${since}&until=${until}`,
+      token
+    );
+    return {
+      views: totalOf(body, 'views'),
+      accountsEngaged: totalOf(body, 'accounts_engaged'),
+    };
+  } catch (err) {
+    if (err instanceof GraphTokenExpired) throw err;
+    addLog(
+      `instagram: combined insights totals failed — ${
+        err instanceof Error ? err.message : String(err)
+      } (retrying views only)`
+    );
+  }
+  try {
+    const body = await graphGet<InstagramInsightsResponse>(
+      `/me/insights?metric=views&period=day&metric_type=total_value&since=${since}&until=${until}`,
+      token
+    );
+    return { views: totalOf(body, 'views'), accountsEngaged: null };
+  } catch (err) {
+    if (err instanceof GraphTokenExpired) throw err;
+    addLog(
+      `instagram: views total unavailable — ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+    return { views: null, accountsEngaged: null };
+  }
+}
+
+function isInsightsPermissionError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    !(err instanceof GraphTokenExpired) &&
+    /permission/i.test(err.message)
+  );
+}
+
+/**
+ * Fetches account insights for a rolling window (`GET /me/insights`).
+ * Two calls share one token scope: a time-series call (daily `reach` +
+ * `follower_count`) and a totals call (`views` + `accounts_engaged`,
+ * `metric_type=total_value`). Requires Graph API v22.0+ and the
+ * `instagram_business_manage_insights` scope on the token.
+ *
+ * @throws Error("session_expired") when the stored token is unusable.
+ * @throws Error("insights_permission") when the token predates the insights
+ *   scope — reconnect Instagram to grant it.
+ */
+export async function fetchAccountInsights(
+  windowDays = 28
+): Promise<InstagramAccountInsights> {
+  const until = Math.floor(Date.now() / 1000);
+  const since = until - windowDays * 86_400;
+  try {
+    return await executeWithRetry(() =>
+      callWithFreshToken(async (token) => {
+        const [seriesBody, totals] = await Promise.all([
+          graphGet<InstagramInsightsResponse>(
+            `/me/insights?metric=${SERIES_INSIGHTS_METRICS}&period=day&since=${since}&until=${until}`,
+            token
+          ),
+          fetchInsightsTotals(token, since, until),
+        ]);
+        return {
+          reach: seriesPoints(seriesBody, 'reach'),
+          followerCount: seriesPoints(seriesBody, 'follower_count'),
+          viewsTotal: totals.views,
+          accountsEngagedTotal: totals.accountsEngaged,
+          windowDays,
+        };
+      })
+    );
+  } catch (err) {
+    if (isInsightsPermissionError(err)) {
+      throw new Error('insights_permission');
+    }
+    throw err;
+  }
 }
 
 /**

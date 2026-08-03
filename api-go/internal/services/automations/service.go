@@ -94,6 +94,11 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		matchMode = "whole_word"
 	}
 	// Match FastAPI create: opening_dm_mode is forced to "direct" on insert.
+	keywords := cleanKeywords(body.Keywords)
+	if body.MatchAnyWord {
+		// Any-word campaigns carry no keyword list — every comment matches.
+		keywords = []string{}
+	}
 	row := models.Automation{
 		ClerkUserID:        clerkUserID,
 		IGUserID:           creator.IGUserID,
@@ -101,8 +106,9 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		TargetType:         body.TargetType,
 		MediaIDs:           mediaIDs,
 		BoundMediaIDs:      []string{},
-		Keywords:           cleanKeywords(body.Keywords),
+		Keywords:           keywords,
 		MatchMode:          matchMode,
+		MatchAnyWord:       body.MatchAnyWord,
 		OpeningDMMode:      "direct",
 		DMMessage:          body.DMMessage,
 		ButtonText:         body.ButtonText,
@@ -342,8 +348,8 @@ func validateCreate(body models.AutomationCreate) error {
 		return &ValidationError{Message: "media_ids is required when target_type is specific_posts"}
 	}
 	cleaned := cleanKeywords(body.Keywords)
-	if len(cleaned) == 0 {
-		return &ValidationError{Message: "at least one non-empty keyword is required"}
+	if !body.MatchAnyWord && len(cleaned) == 0 {
+		return &ValidationError{Message: "at least one keyword is required, or enable match_any_word"}
 	}
 	matchMode := body.MatchMode
 	if matchMode == "" {
@@ -397,10 +403,18 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 	if body.Name != nil {
 		data["name"] = *body.Name
 	}
+	if body.MatchAnyWord != nil {
+		data["match_any_word"] = *body.MatchAnyWord
+		if *body.MatchAnyWord {
+			// Any-word clears the keyword list, mirroring create semantics.
+			data["keywords"] = []string{}
+		}
+	}
 	if body.Keywords != nil {
 		cleaned := cleanKeywords(body.Keywords)
-		if len(cleaned) == 0 {
-			return nil, &ValidationError{Message: "at least one non-empty keyword is required"}
+		anyWord := body.MatchAnyWord != nil && *body.MatchAnyWord
+		if len(cleaned) == 0 && !anyWord {
+			return nil, &ValidationError{Message: "at least one keyword is required, or enable match_any_word"}
 		}
 		data["keywords"] = cleaned
 	}

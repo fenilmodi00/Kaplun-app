@@ -10,6 +10,7 @@ export interface AutomationDraft {
   selectedMediaIds: string[];
   keywords: string[];
   matchMode: 'whole_word' | 'partial';
+  matchAnyWord: boolean;
   dmMessage: string;
   openingDmMode: 'direct' | 'button';
   buttonText: string;
@@ -29,7 +30,7 @@ export function validateAutomationDraft(draft: AutomationDraft): string[] {
     errors.push('Campaign name is required');
   }
 
-  if (draft.keywords.length === 0) {
+  if (!draft.matchAnyWord && draft.keywords.length === 0) {
     errors.push('At least one keyword is required');
   }
 

@@ -11,6 +11,7 @@
 | `useThreads` | `useThreads.ts` | Appwrite via `@/lib/repository` | `useQuery` | Yes (`deal_threads`) | `{ threads: ThreadWithPreview[], loading, error, refresh }` |
 | `useMessages` | `useMessages.ts` | Appwrite via `@/lib/repository` | `useQuery` + `useMutation` | Yes (`messages` create) | `{ messages, loading, error, sendMessage, markAsRead, refresh }` |
 | `useCreatorProfile` | `useCreatorProfile.ts` | Appwrite via `@/lib/repository` + Instagram via `@/lib/instagram` | `useQueries` (parallel) | No | `{ creator, dealThreads, recentReels, recentMedia, insights, isLoading, error, refresh }` |
+| `useInsights` | `useInsights.ts` | Instagram via `@/lib/instagram` (`fetchProfile` + `fetchAccountInsights` + `fetchMedia`) | `useQueries` (parallel) | No | `{ profile, insights, topMedia, isLoading, error, refresh }`; takes `windowDays` (7/28), surfaces `'session_expired'` / `'insights_permission'` |
 | `useAutomations` | `useAutomations.ts` | Gin/FastAPI via `@/lib/automations` | `useQuery` + `useMutation` | No | Automations CRUD + `useOverviewStats` / `useAutomationLogs` / `useAutomationStats` |
 | `useAutomationGate` | `useAutomationGate.ts` | Instagram OAuth | `useQuery` + `useMutation` | No | `{ connected, loading, connect }` |
 | `useClayAnimations` | `useClayAnimations.ts` | — | No | — | `usePressAnimation`, `useShakeAnimation`, `useEntranceAnimation` |

@@ -360,6 +360,7 @@ func automationToData(a models.Automation) map[string]any {
 		"bound_media_ids":      a.BoundMediaIDs,
 		"keywords":             a.Keywords,
 		"match_mode":           a.MatchMode,
+		"match_any_word":       a.MatchAnyWord,
 		"opening_dm_mode":      a.OpeningDMMode,
 		"dm_message":           a.DMMessage,
 		"button_text":          a.ButtonText,

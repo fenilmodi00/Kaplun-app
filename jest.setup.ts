@@ -169,11 +169,31 @@ jest.mock('expo-auth-session', () => ({
 
 // Mock expo-web-browser
 jest.mock('expo-web-browser', () => ({
-  openAuthSessionAsync: jest.fn().mockResolvedValue({ 
-    type: 'success', 
-    url: 'kaplun://instagram-callback?code=test_auth_code' 
+  openAuthSessionAsync: jest.fn().mockResolvedValue({
+    type: 'success',
+    url: 'kaplun://instagram-callback?code=test_auth_code'
   }),
 }));
+
+// Mock expo-blur
+jest.mock('expo-blur', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    BlurView: (props: any) => React.createElement(View, { ...props, style: [props.style, { backgroundColor: 'transparent' }] }, props.children),
+    BlurTargetView: React.forwardRef((props: any, ref: any) => React.createElement(View, { ...props, ref }, props.children)),
+  };
+});
+
+// Mock @react-native-masked-view/masked-view
+jest.mock('@react-native-masked-view/masked-view', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    __esModule: true,
+    default: (props: any) => React.createElement(View, props, props.children),
+  };
+});
 
 // Mock react-native-reanimated
 jest.mock('react-native-reanimated', () => {
@@ -306,3 +326,9 @@ jest.mock('react-native-css', () => ({
   useCssElement: (_: any, props: any) => props,
   useNativeVariable: () => '#000000',
 }));
+
+// Mock AsyncStorage globally — query cache persistence (src/lib/query-client.ts)
+// imports it at module load; the lib ships its own jest mock.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);

@@ -26,6 +26,7 @@ import {
   fetchProfile,
   fetchMedia,
   fetchInsights,
+  fetchAccountInsights,
   disconnectInstagram,
 } from '@/lib/instagram';
 
@@ -221,6 +222,124 @@ describe('fetchInsights', () => {
     expect(url).toContain('metric=reach,follower_count');
     expect(url).toContain('period=day');
     expect(result).toEqual(mockInsights);
+  });
+});
+
+describe('fetchAccountInsights', () => {
+  const mockSeries = {
+    data: [
+      {
+        name: 'reach',
+        period: 'day',
+        values: [
+          { value: 120, end_time: '2026-07-30T07:00:00+0000' },
+          { value: 150, end_time: '2026-07-29T07:00:00+0000' },
+        ],
+      },
+      {
+        name: 'follower_count',
+        period: 'day',
+        values: [
+          { value: 1490, end_time: '2026-07-29T07:00:00+0000' },
+          { value: 1500, end_time: '2026-07-30T07:00:00+0000' },
+        ],
+      },
+    ],
+  };
+
+  const mockTotals = {
+    data: [
+      { name: 'views', period: 'day', total_value: { value: 4200 } },
+      { name: 'accounts_engaged', period: 'day', total_value: { value: 310 } },
+    ],
+  };
+
+  it('happy: fetches series + totals and returns parsed window insights', async () => {
+    mockFetch
+      .mockResolvedValueOnce(graphOk(mockSeries))
+      .mockResolvedValueOnce(graphOk(mockTotals));
+
+    const result = await fetchAccountInsights(28);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    const [seriesUrl] = mockFetch.mock.calls[0];
+    expect(seriesUrl).toContain('/me/insights');
+    expect(seriesUrl).toContain('metric=reach,follower_count');
+    expect(seriesUrl).toContain('period=day');
+    expect(seriesUrl).toContain('since=');
+    expect(seriesUrl).toContain('until=');
+
+    const [totalsUrl] = mockFetch.mock.calls[1];
+    expect(totalsUrl).toContain('metric=views,accounts_engaged');
+    expect(totalsUrl).toContain('metric_type=total_value');
+
+    // Series are normalized to oldest → newest regardless of Meta's order.
+    expect(result.reach).toEqual([
+      { value: 150, endTime: '2026-07-29T07:00:00+0000' },
+      { value: 120, endTime: '2026-07-30T07:00:00+0000' },
+    ]);
+    expect(result.followerCount).toEqual([
+      { value: 1490, endTime: '2026-07-29T07:00:00+0000' },
+      { value: 1500, endTime: '2026-07-30T07:00:00+0000' },
+    ]);
+    expect(result.viewsTotal).toBe(4200);
+    expect(result.accountsEngagedTotal).toBe(310);
+    expect(result.windowDays).toBe(28);
+  });
+
+  it('falls back to views-only totals when the combined call is rejected', async () => {
+    mockFetch
+      .mockResolvedValueOnce(graphOk(mockSeries))
+      .mockResolvedValueOnce(graphError(100, 'Invalid metric accounts_engaged'))
+      .mockResolvedValueOnce(
+        graphOk({ data: [{ name: 'views', period: 'day', total_value: { value: 900 } }] })
+      );
+
+    const result = await fetchAccountInsights(7);
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    const [fallbackUrl] = mockFetch.mock.calls[2];
+    expect(fallbackUrl).toContain('metric=views');
+    expect(fallbackUrl).not.toContain('accounts_engaged');
+    expect(result.viewsTotal).toBe(900);
+    expect(result.accountsEngagedTotal).toBeNull();
+    expect(result.reach).toHaveLength(2);
+  });
+
+  it('degrades to null totals when every totals call fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce(graphOk(mockSeries))
+      .mockResolvedValueOnce(graphError(100, 'Invalid metric'))
+      .mockResolvedValueOnce(graphError(100, 'Invalid metric'));
+
+    const result = await fetchAccountInsights(28);
+
+    expect(result.viewsTotal).toBeNull();
+    expect(result.accountsEngagedTotal).toBeNull();
+    expect(result.reach).toHaveLength(2);
+  });
+
+  it('maps Meta permission errors to insights_permission', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        graphError(10, '(#10) Application does not have permission for this action')
+      )
+      .mockResolvedValueOnce(graphOk(mockTotals));
+
+    await expect(fetchAccountInsights(28)).rejects.toThrow('insights_permission');
+  });
+
+  it('returns empty series when Meta reports no data', async () => {
+    mockFetch
+      .mockResolvedValueOnce(graphOk({ data: [] }))
+      .mockResolvedValueOnce(graphOk(mockTotals));
+
+    const result = await fetchAccountInsights(28);
+
+    expect(result.reach).toEqual([]);
+    expect(result.followerCount).toEqual([]);
+    expect(result.viewsTotal).toBe(4200);
   });
 });
 
