@@ -42,6 +42,30 @@ export async function getCreatorByClerkId(
   return result.rows[0] as unknown as Creator;
 }
 
+/**
+ * Persist a refreshed Instagram OAuth token on a creator row.
+ * Called after a successful `ig_refresh_token` exchange.
+ */
+export async function updateCreatorToken(
+  rowId: string,
+  accessToken: string,
+  expiresAt: string,
+): Promise<void> {
+  await executeWithRetryAndTimeout(
+    () =>
+      tablesDB.updateRow({
+        databaseId: DATABASE_ID,
+        tableId: TABLES.CREATORS,
+        rowId,
+        data: {
+          access_token: accessToken,
+          token_expires_at: expiresAt,
+        },
+      }),
+    DEFAULT_TIMEOUT_MS,
+  );
+}
+
 // ── Deal Threads ─────────────────────────────────────────────────────────
 
 /**

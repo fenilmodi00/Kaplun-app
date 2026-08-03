@@ -9,6 +9,7 @@ import {
 import Animated from 'react-native-reanimated';
 import { CLAY_FONTS } from '@/lib/fonts';
 import { usePressAnimation } from '@/hooks/useClayAnimations';
+import { hapticImpactLight } from '@/lib/haptics';
 
 type Variant = 'primary' | 'secondary' | 'on-color' | 'text-link';
 
@@ -60,8 +61,11 @@ export function ClayAnimatedButton({
 }) {
   const { onPressIn, onPressOut, animatedStyle } = usePressAnimation(0.96);
   const handlePress = useCallback(() => {
-    if (!disabled && !loading) onPress();
-  }, [disabled, loading, onPress]);
+    if (!disabled && !loading) {
+      if (variant === 'primary') hapticImpactLight();
+      onPress();
+    }
+  }, [disabled, loading, onPress, variant]);
 
   return (
     <Pressable

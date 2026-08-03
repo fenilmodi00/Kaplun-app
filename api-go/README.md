@@ -12,9 +12,11 @@ go run ./cmd/server
 
 `cmd/server` loads `api-go/.env` automatically (like FastAPI's dotenv). Process env vars override `.env`.
 
-By default it also starts an **ngrok** HTTPS tunnel to `IG_API_PORT` (same reserved URL as `PUBLIC_BASE_URL` when that host contains `ngrok`). Disable with `NGROK_ENABLED=false` once the API is deployed. Requires the `ngrok` CLI on PATH.
+By default it also starts an **ngrok** HTTPS tunnel to `IG_API_PORT` in the background (same reserved URL as `PUBLIC_BASE_URL` when that host contains `ngrok`). The HTTP server listens immediately; ngrok readiness is logged a few seconds later. Disable with `NGROK_ENABLED=false` once the API is deployed. Requires the `ngrok` CLI on PATH.
 
-Default listen: `:8000` (`IG_API_PORT`). You should see JSON logs including `"msg":"loaded env file"`, `"msg":"ngrok tunnel ready"`, then `"msg":"server listening"`.
+Default listen: `:8000` (`IG_API_PORT`). You should see `"msg":"loaded env file"`, then `"msg":"server listening"`, then `"msg":"ngrok tunnel ready"`.
+
+Note: `go run ./cmd/server` compiles first — a cold build can take ~30–60s with no logs. Re-runs are much faster, or use `go build -o server.exe ./cmd/server && ./server.exe`.
 
 ## Test
 

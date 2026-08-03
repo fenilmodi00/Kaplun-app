@@ -1,6 +1,6 @@
 # src/components/clay/ — Clay Design System
 
-8 components implementing the Clay visual language: cream canvas (`#fffaf0`), saturated single-color cards, dark-navy CTAs, Inter display type, claymation press animations. Lineage: Clay design language (see user skill `Clay-design-analysis`).
+6 components (8 files incl. `.web.tsx` variants) implementing the Clay visual language: cream canvas (`#fffaf0`), saturated single-color cards, dark-navy CTAs, Inter display type, claymation press animations. Lineage: Clay design language (see user skill `Clay-design-analysis`).
 
 ## STRUCTURE
 

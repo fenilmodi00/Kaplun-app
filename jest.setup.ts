@@ -203,6 +203,11 @@ jest.mock('react-native-reanimated', () => {
 
   return {
     __esModule: true,
+    View: (props: any) => React.createElement(RNView, props),
+    Text: (props: any) => React.createElement(RNText, props),
+    ScrollView: (props: any) => React.createElement(RNScrollView, props),
+    FlatList: (props: any) => React.createElement(RNFlatList, props),
+    Image: (props: any) => React.createElement(RNImage, props),
     useSharedValue: (init: any) => ({ value: init }),
     useAnimatedStyle: (cb: any) => cb(),
     useAnimatedProps: (cb: any) => cb(),

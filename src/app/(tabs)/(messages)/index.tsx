@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect } from 'react';
-import { FlatList } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { FlatList, StyleProp, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from '@/lib/reanimated-platform';
 import { useRouter } from 'expo-router';
 import { View, Text } from '@/tw';
+import { ScreenShell, useScreenContentPadding } from '@/components/screen-shell';
 import { cn } from '@/tw/cn';
 import { useThreads } from '@/hooks/useThreads';
 import type { DealThread } from '@/lib/types';
@@ -46,7 +48,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
   return (
     <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={animatedStyle as StyleProp<ViewStyle>}>
         <View className="max-w-[320px] items-center gap-4">
           <Text className="text-center text-body-sm text-error">
             {error}
@@ -123,6 +125,8 @@ function ThreadRow({
 export default function MessagesScreen() {
   const { threads, loading, error, refresh } = useThreads();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const padding = useScreenContentPadding();
 
   const handlePress = useCallback(
     (thread: DealThread) => {
@@ -146,38 +150,59 @@ export default function MessagesScreen() {
   // Loading state — skeleton list, not a lag spinner wall
   if (loading) {
     return (
-      <View className="flex-1 bg-canvas p-4" style={{ gap: 10 }}>
-        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
-        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
-        <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
-      </View>
+      <ScreenShell>
+        <View className="bg-canvas p-4" style={{ gap: 10 }}>
+          <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
+          <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
+          <View className="bg-white border border-hairline" style={{ height: 72, borderRadius: 14 }} />
+        </View>
+      </ScreenShell>
     );
   }
 
   // Error state
   if (error) {
-    return <ErrorState error={error} onRetry={refresh} />;
+    return (
+      <ScreenShell center>
+        <ErrorState error={error} onRetry={refresh} />
+      </ScreenShell>
+    );
   }
 
   // Empty state
   if (threads.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-canvas p-4">
+      <ScreenShell center>
         <Text className="text-center text-body-sm text-muted">
           No deal threads yet — your agent will start outreach soon
         </Text>
-      </View>
+      </ScreenShell>
     );
   }
 
   // Threads list
   return (
     <View className="flex-1 bg-canvas">
+      {/* In-screen header */}
+      <View
+        className="px-4 pb-2"
+        style={{ paddingTop: insets.top + 12 }}
+      >
+        <Text
+          className="font-semibold text-ink"
+          style={{ fontSize: 21, letterSpacing: -0.4 }}
+        >
+          Messages
+        </Text>
+      </View>
       <FlatList
         data={threads}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        contentContainerStyle={{ paddingVertical: 8 }}
+        contentContainerStyle={{
+          paddingVertical: 8,
+          paddingBottom: insets.bottom + 110,
+        }}
         showsVerticalScrollIndicator={false}
       />
     </View>

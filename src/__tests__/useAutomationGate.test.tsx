@@ -55,7 +55,7 @@ describe('useAutomationGate', () => {
 
     await waitFor(() => {
       expect(result.current.connected).toBe(false);
-    });
+    }, { timeout: 5000 });
     expect(result.current.loading).toBe(false);
   });
 

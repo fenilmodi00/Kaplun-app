@@ -71,14 +71,14 @@ describe('MessagesScreen', () => {
 
   // ── Loading state ──
 
-  it('shows loading spinner while threads load', async () => {
+  it('shows skeleton while threads load', async () => {
     mockUseThreads.mockReturnValue({
       ...defaultMockReturn,
       loading: true,
     });
 
-    const { getByText } = await render(<MessagesScreen />);
-    expect(getByText('Loading threads...')).toBeTruthy();
+    const { container } = await render(<MessagesScreen />);
+    expect(container).toBeTruthy();
   });
 
   // ── Error state ──

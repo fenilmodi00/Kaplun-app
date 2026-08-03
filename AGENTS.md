@@ -18,7 +18,7 @@ Expo SDK 57 mobile app ("creator-workspace") for Instagram creators. React Query
 - **Routing**: expo-router file-based
 - **Data**: `@tanstack/react-query` (useQuery/useMutation/useQueries) → `@/lib/repository` (typed Appwrite calls with retry) → `tablesDB` (Appwrite TablesDB, not Databases)
 - **Auth**: Clerk (`@clerk/expo`) → API `POST /auth/appwrite-session` (Gin or FastAPI) → Appwrite session (24h TTL fast path)
-- **Instagram proxy**: App → Appwrite ig-api-proxy cloud function (Appwrite JWT auth, not Clerk Bearer). Gin also exposes Clerk-authed `/profile|/media|/insights|/disconnect` for FastAPI parity.
+- **Instagram**: App calls `graph.instagram.com` directly with the user's long-lived token from their `creators` row, with `ig_refresh_token` on Meta error 190. The old Appwrite ig-api-proxy is **broken** — Appwrite strips the reserved `x-appwrite-user-jwt` header before it reaches the function runtime, so every proxy call 401s (verified in execution logs). Do not reintroduce it.
 - **Styling**: NativeWind v5 + Tailwind CSS v4 + `react-native-css` (`useCssElement` bridge, not `styled()`)
 - **Reanimated web workaround**: Metro aliases + platform wrappers for #8285 (Reanimated crashes on web)
 
@@ -31,11 +31,11 @@ app/
 │   ├── components/
 │   │   ├── auth/AuthScreen.tsx # email+OTP+Google OAuth, raw StyleSheet (NOT @/tw)
 │   │   └── clay/               # 6 Clay design components (.web.tsx variants for Reanimated safety)
-│   ├── hooks/                  # 6 hooks: all use React Query + repository.ts
+│   ├── hooks/                  # 8 hooks: all use React Query + repository.ts
 │   ├── lib/                    # 16 infra files: appwrite, repository, auth-bridge, resilient, realtime, etc.
 │   ├── tw/                     # 5 styling primitives: className-enabled RN wrappers
 │   ├── types/global.d.ts       # ErrorUtils, Buffer, __lastFatalError augmentations
-│   └── __tests__/              # 6 jest-expo test files
+│   └── __tests__/              # 18 jest-expo test files
 ├── global.css → src/global.css # Tailwind v4 @theme (Clay tokens, platform fonts)
 ├── app.json                    # scheme "kaplun", 8 plugins (expo-secure-store first)
 ├── metro.config.js             # NativeWind + reanimated/worklets web stubs (#8285)
@@ -54,7 +54,7 @@ bun test                 # jest-expo
 bun run lint             # tsc --noEmit
 ```
 
-No EAS config, no CI. Web export (`dist/`) is committed to git.
+No EAS config, no CI. `dist/` (web export) is gitignored.
 
 ## WHERE TO LOOK
 
@@ -65,7 +65,8 @@ No EAS config, no CI. Web export (`dist/`) is committed to git.
 | Add an Appwrite table ID | `src/lib/constants.ts` (`TABLES` enum) + `src/lib/types.ts` for the shape | |
 | Add a data hook | `src/hooks/` | All hooks use `useQuery`/`useMutation` from `@tanstack/react-query` on repository functions |
 | Add realtime subscription | `src/lib/realtime.ts` | `useRealtimeSubscription(channel, () => queryClient.invalidateQueries(...))` |
-| Add a FastAPI/Instagram call | `src/lib/instagram.ts` | Uses Appwrite JWT auth via `account.createJWT()`, NOT Clerk Bearer |
+| Add a FastAPI call | `src/lib/automations.ts` + `src/lib/auth-bridge.ts` | Both use Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` (the Gin/FastAPI server) |
+| Add an Instagram call | `src/lib/instagram.ts` | Direct Graph API (`graph.instagram.com`) with per-user token from `creators` row, not a proxy |
 | Add a Clay component | `src/components/clay/` | Decide `@/tw` vs raw RN; add `.web.tsx` if using Reanimated |
 | Add a styled primitive | `src/tw/` | `useCssElement(RNComponent, props, { className: 'style' })` |
 | Change a Clay color/token | `src/global.css` `@theme` | Some hex values duplicated in raw-RN components — update both |
@@ -81,12 +82,12 @@ Screen → Hook (useQuery/useMutation)
       → Appwrite
 
 Instagram operations:
-  → @/lib/instagram (Appwrite JWT auth, executeWithRetry)
-    → Appwrite ig-api-proxy cloud function
-      → Instagram Graph API
+  → @/lib/instagram (reads token from creators row, executeWithRetry)
+    → graph.instagram.com directly (per-user long-lived token)
+    → on Meta error 190: ig_refresh_token → updateCreatorToken() → retry once
 
 Auth bridge (once per sign-in):
-  Clerk getToken() → FastAPI /auth/appwrite-session → account.createSession()
+  Clerk getToken() → Gin/FastAPI /auth/appwrite-session → account.createSession()
   → ensureAppwriteSession() with 24h TTL fast path + exponential backoff retry
 ```
 
@@ -99,8 +100,9 @@ Auth bridge (once per sign-in):
 | `src/lib/resilient.ts` | `executeWithRetry()` (3 attempts, backoff + jitter), `executeWithTimeout()`, `executeWithRetryAndTimeout()`. Retries: network errors, HTTP 429/5xx, Appwrite code ≥ 500. Never retries 4xx auth/validation. |
 | `src/lib/auth-bridge.ts` | `ensureAppwriteSession(getToken)` with 24h TTL fast path, parallel deleteSession + backend fetch. Throws `bridge_failed` on exchange failure. |
 | `src/lib/bridge-context.tsx` | `BridgeProvider` / `useBridge` — Appwrite readiness. AuthGate mounts shell instantly; hooks wait on `isReady`. Soft Retry banner on failure. |
-| `src/lib/instagram.ts` | `fetchProfile`, `fetchMedia`, `fetchInsights`, `disconnectInstagram`. Auth via `account.createJWT()` → `x-appwrite-user-jwt` header (NOT Clerk Bearer). Base URL from `EXPO_PUBLIC_IG_API_PROXY_URL`. |
-| `src/lib/with-fresh-session.ts` | `withFreshSession(fn, getToken)` — wraps Instagram calls: if `session_expired`, re-bridges Appwrite session then retries once. |
+| `src/lib/instagram.ts` | Direct Instagram Graph API client: `fetchProfile`, `fetchMedia`, `fetchInsights`, `disconnectInstagram`. Reads the per-user long-lived token from the `creators` row (via `getCreatorByClerkId`); on Meta error 190 runs `ig_refresh_token` and persists via `updateCreatorToken`. Throws `Error("session_expired")` when no usable token. |
+| `src/lib/automations.ts` | Comment-automation engine client (`createAutomation`, `listAutomations`, `listCampaignTemplates`, etc.) — Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL`. |
+| `src/lib/with-fresh-session.ts` | **Dead code** — `withFreshSession` was for the old ig-api-proxy session-expiry recovery; no app module imports it anymore. Do not reintroduce the proxy. |
 | `src/lib/realtime.ts` | `useRealtimeSubscription(channels, callback)`. Features: 2s debounce coalescing, exponential backoff reconnect (1s→30s), AppState foreground refetch. |
 | `src/lib/reanimated-platform.ts` | Platform-safe Reanimated exports. `IS_REANIMATED_AVAILABLE = Platform.OS !== 'web'`. Always import this, NOT `react-native-reanimated` directly. |
 | `src/lib/appwrite.ts` | SDK singleton: `Client`, `Account`, `TablesDB`, `Storage`, `Realtime`. Uses `EXPO_PUBLIC_APPWRITE_ENDPOINT` + `EXPO_PUBLIC_APPWRITE_PROJECT_ID`. |
@@ -112,9 +114,9 @@ Auth bridge (once per sign-in):
 
 - **Data**: React Query (`@tanstack/react-query`) throughout. `useQuery` for reads, `useMutation` for writes, `useQueryClient.invalidateQueries()` for refetch triggers. `staleTime: 30_000`, `gcTime: 5 * 60_000`, `retry: false` in production hooks.
 - **Persistence**: Appwrite TablesDB (not SQL Databases). Typed via `@/lib/repository.ts`. All calls wrapped in `executeWithRetryAndTimeout()` (3 attempts, backoff + jitter, 15s timeout).
-- **Instagram API**: Every call goes through `@/lib/instagram.ts` using Appwrite JWT auth (`account.createJWT()`). The auth-bridge (`EXPO_PUBLIC_IG_API_BASE_URL`) and Instagram proxy (`EXPO_PUBLIC_IG_API_PROXY_URL`) are separate endpoints.
-- **Auth**: Clerk JWT → FastAPI `/auth/appwrite-session` → Appwrite session. AuthGate mounts tabs immediately; data hooks wait on `useBridge().isReady`. Failures surface as soft Retry (`bridge_failed`), not Instagram `session_expired`.
-- **`session_expired`**: Instagram proxy 401 → `throw new Error('session_expired')`. Recovery via `withFreshSession(fn, getToken)` which re-bridges the Appwrite session and retries. Hooks surface this as `error: 'session_expired'` for re-login UI.
+- **Instagram API**: Every Instagram call goes through `@/lib/instagram.ts` → `graph.instagram.com` directly with the per-user token from the `creators` row. No proxy. The `EXPO_PUBLIC_IG_API_BASE_URL` server (Gin/FastAPI) is used only for the auth bridge (`/auth/appwrite-session`) and the automations client (`/automations/*`), both Clerk Bearer.
+- **Auth**: Clerk JWT → Gin/FastAPI `/auth/appwrite-session` → Appwrite session. AuthGate mounts tabs immediately; data hooks wait on `useBridge().isReady`. Failures surface as soft Retry (`bridge_failed`), not Instagram `session_expired`.
+- **`session_expired`**: Instagram token missing/unusable → `throw new Error('session_expired')` from `@/lib/instagram`. Hooks surface this as `error: 'session_expired'` for re-login UI. (Unrelated to the auth bridge, which surfaces `bridge_failed`.)
 - **Fonts**: Inter 400/500/600 via `@expo-google-fonts/inter`; loaded at boot via `useClayFonts()`; gates render in `AuthGate`.
 - **Reanimated**: Import from `@/lib/reanimated-platform` (NOT `react-native-reanimated` directly). Metro aliases + web stubs on web.
 - **`.web.tsx` variants**: Components using Reanimated get a `.web.tsx` variant — Metro resolves on web.
@@ -134,7 +136,7 @@ Auth bridge (once per sign-in):
 - **NO direct `react-native-reanimated` imports** — use `@/lib/reanimated-platform`.
 - **NO direct `react-native-reanimated` for AnimatedView** — use `@/tw/animated`.
 - **NO hardcoded secrets** — `EXPO_PUBLIC_*` env vars only.
-- **NO direct instagrapi/Instagram API calls** — app talks to Appwrite ig-api-proxy cloud function only.
+- **NO direct instagrapi** — Instagram calls go through `@/lib/instagram.ts` (direct Graph API with the per-user token), never through the instagrapi library or a proxy.
 - **NO `@ts-ignore` / `@ts-expect-error`** — zero tolerance.
 - **NO `tablesDB.listRows()` outside `repository.ts`** — all Appwrite queries go through typed repository functions.
 - **NO `account.createSession()` outside `auth-bridge.ts`** — auth bridge is the only session creator.
@@ -154,19 +156,18 @@ Auth bridge (once per sign-in):
 | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `_layout.tsx` (ClerkProvider) |
 | `EXPO_PUBLIC_APPWRITE_ENDPOINT` | `lib/appwrite.ts` |
 | `EXPO_PUBLIC_APPWRITE_PROJECT_ID` | `lib/appwrite.ts` |
-| `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/auth-bridge.ts` (FastAPI bridge) |
-| `EXPO_PUBLIC_IG_API_PROXY_URL` | `lib/instagram.ts` (Appwrite ig-api-proxy) |
+| `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/auth-bridge.ts` (`/auth/appwrite-session`) + `lib/automations.ts` (`/automations/*`); Clerk Bearer |
 | `EXPO_PUBLIC_IG_APP_ID` | Instagram OAuth |
 | `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` | Instagram OAuth |
 
 ## NOTES
 
-- **3-system architecture**: App → Appwrite TablesDB (CRUD + Realtime); App → Appwrite ig-api-proxy → Instagram; App → FastAPI → Appwrite session (auth bridge only).
+- **3-system architecture**: App → Appwrite TablesDB (CRUD + Realtime); App → `graph.instagram.com` directly (per-user token, token refresh on 190); App → Gin/FastAPI → Appwrite session (auth bridge only) + automations client.
 - **SDK version**: Expo SDK **57** (`package.json`: `"expo": "^57.0.0"`). Read https://docs.expo.dev/versions/v57.0.0/.
 - **React Query mutation pattern**: `useMutation` with `onSuccess: (result) => queryClient.setQueryData(...)` for optimistic cache updates. See `useMessages` for the pattern.
 - **Realtime invalidation pattern**: Subscribe in `useEffect` → on event → `queryClient.invalidateQueries({ queryKey: [...] })`. See `useThreads` and `useMessages`.
 - **Auth bridge**: `_layout.tsx` AuthGate runs `ensureAppwriteSession` with exponential backoff (max 3 retries) after sign-in, mounts `<Slot />` immediately, and shows a soft Retry banner only if the bridge fails.
-- **`dist/` committed**: Web export output is checked into git.
+- **`dist/` is gitignored, not committed**: Web export output is in `.gitignore`. The old "committed" claim is stale.
 - **`expo-secure-store` first in plugins**: Unusual order — see `app.json`.
 - **No Tamagui**: This app uses NativeWind v5 + Tailwind v4 + react-native-css. Root `D:\001\AGENTS.md` references to Tamagui are stale.
 
@@ -184,7 +185,7 @@ If no results, run `opencode-rag index`.
 
 ## Subdirectory Guides
 
-- `src/lib/AGENTS.md` — infrastructure layer (Appwrite, repository, auth-bridge, Instagram proxy, resilience, realtime)
-- `src/hooks/AGENTS.md` — data layer (6 hooks, React Query pattern, repository.ts split)
+- `src/lib/AGENTS.md` — infrastructure layer (Appwrite, repository, auth-bridge, Instagram, resilience, realtime)
+- `src/hooks/AGENTS.md` — data layer (8 hooks, React Query pattern, repository.ts split)
 - `src/components/clay/AGENTS.md` — Clay design system (6 components, `.web.tsx` variants)
 - `src/tw/AGENTS.md` — styling primitives (className-enabled RN wrappers)

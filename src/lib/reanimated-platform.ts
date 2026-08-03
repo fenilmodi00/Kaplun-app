@@ -47,11 +47,12 @@ const fallbacks = {
   },
   useAnimatedScrollHandler: () => ({}),
   withTiming: <T,>(v: T) => v,
-  withSpring: <T,>(v: T) => v,
+  withSpring: <T,>(v: T, _config?: Record<string, unknown>) => v,
   withSequence: <T,>(...args: T[]) => args[0],
   withRepeat: <T,>(v: T) => v,
   withDelay: <T,>(_d: number, v: T) => v,
   Easing: FallbackEasing,
+  SlideInUp: {},
 };
 
 const NativeReanimated = IS_REANIMATED_AVAILABLE

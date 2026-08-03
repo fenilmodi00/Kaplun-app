@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -59,31 +60,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.NgrokEnabled {
-		tunnelURL := ngrok.ResolveURL(cfg.NgrokDomain, cfg.PublicBaseURL)
-		tunnel, err := ngrok.Start(ctx, ngrok.Options{
-			Port:   cfg.Port,
-			URL:    tunnelURL,
-			Logger: logger,
-		})
-		if err != nil {
-			logger.Warn("ngrok start failed (server continues locally)", "error", err)
-		} else {
-			defer func() {
-				if stopErr := tunnel.Stop(); stopErr != nil {
-					logger.Warn("ngrok stop", "error", stopErr)
-				}
-			}()
-			logger.Info("ngrok public URL",
-				"url", tunnel.PublicURL,
-				"oauth_callback", strings.TrimRight(tunnel.PublicURL, "/")+"/instagram/callback",
-				"webhook", strings.TrimRight(tunnel.PublicURL, "/")+"/webhooks/instagram",
-			)
-		}
-	} else {
-		logger.Info("ngrok disabled (set NGROK_ENABLED=true for local HTTPS tunnel)")
-	}
-
+	// Listen immediately — do not block on ngrok (it can take several seconds).
 	go func() {
 		logger.Info("server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -92,8 +69,47 @@ func main() {
 		}
 	}()
 
+	var (
+		tunnelMu sync.Mutex
+		tunnel   *ngrok.Tunnel
+	)
+	if cfg.NgrokEnabled {
+		tunnelURL := ngrok.ResolveURL(cfg.NgrokDomain, cfg.PublicBaseURL)
+		logger.Info("ngrok starting in background", "url", tunnelURL, "local", ":"+cfg.Port)
+		go func() {
+			t, err := ngrok.Start(ctx, ngrok.Options{
+				Port:   cfg.Port,
+				URL:    tunnelURL,
+				Logger: logger,
+			})
+			if err != nil {
+				logger.Warn("ngrok start failed (server continues locally)", "error", err)
+				return
+			}
+			tunnelMu.Lock()
+			tunnel = t
+			tunnelMu.Unlock()
+			logger.Info("ngrok public URL",
+				"url", t.PublicURL,
+				"oauth_callback", strings.TrimRight(t.PublicURL, "/")+"/instagram/callback",
+				"webhook", strings.TrimRight(t.PublicURL, "/")+"/webhooks/instagram",
+			)
+		}()
+	} else {
+		logger.Info("ngrok disabled (set NGROK_ENABLED=true for local HTTPS tunnel)")
+	}
+
 	<-ctx.Done()
 	logger.Info("shutting down")
+
+	tunnelMu.Lock()
+	t := tunnel
+	tunnelMu.Unlock()
+	if t != nil {
+		if stopErr := t.Stop(); stopErr != nil {
+			logger.Warn("ngrok stop", "error", stopErr)
+		}
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

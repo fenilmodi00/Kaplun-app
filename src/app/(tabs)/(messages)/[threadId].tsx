@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import Animated, { SlideInUp } from 'react-native-reanimated';
-import { useLocalSearchParams } from 'expo-router';
+import { FlatList, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import Animated, { Reanimated } from '@/lib/reanimated-platform';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TextInput } from '@/tw';
 import { cn, clayInput } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
@@ -10,6 +11,8 @@ import { useMessages } from '@/hooks/useMessages';
 import { tablesDB } from '@/lib/appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
 import type { DealThread, Message } from '@/lib/types';
+import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Status chip colors per DESIGN.md §3.3 & §5.4 */
 const STATUS_META: Record<string, { bg: string; text: string }> = {
@@ -55,7 +58,7 @@ function MessageBubble({ message }: { message: Message }) {
   }
 
   return (
-    <Animated.View entering={SlideInUp}>
+    <Reanimated.View entering={Reanimated.SlideInUp as any}>
       <View
         className={cn(
           'my-1 px-4',
@@ -86,7 +89,7 @@ function MessageBubble({ message }: { message: Message }) {
           {formatRelativeTime(message.timestamp)}
         </Text>
       </View>
-    </Animated.View>
+    </Reanimated.View>
   );
 }
 
@@ -99,7 +102,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
   return (
     <View className="flex-1 items-center justify-center bg-canvas p-4">
-      <Animated.View style={animatedStyle}>
+      <Reanimated.View style={animatedStyle}>
         <View className="items-center gap-4 p-4">
           <Text className="text-center text-body-sm text-error">
             {error}
@@ -108,13 +111,15 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
             Retry
           </ClayAnimatedButton>
         </View>
-      </Animated.View>
+    </Reanimated.View>
     </View>
   );
 }
 
 export default function ThreadDetail() {
   const { threadId } = useLocalSearchParams<{ threadId: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { messages, loading, error, sendMessage, markAsRead, refresh } = useMessages(threadId ?? '');
   const [thread, setThread] = useState<DealThread | null>(null);
   const [inputText, setInputText] = useState('');
@@ -204,11 +209,21 @@ export default function ThreadDetail() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View className="flex-1 bg-canvas">
-        {/* Header: campaign_title, agent_assigned, status chip */}
-        <View className="flex-row items-center justify-between border-b border-hairline bg-canvas px-4 py-3">
+        {/* Header: back, campaign_title, agent_assigned, status chip */}
+        <View
+          className="flex-row items-center justify-between border-b border-hairline bg-canvas px-4 py-3"
+          style={{ paddingTop: insets.top + 12 }}
+        >
+          <TouchableOpacity
+            onPress={() => router.back()}
+            accessibilityLabel="Back"
+            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
+          </TouchableOpacity>
           <View className="flex-1 gap-1">
             <Text className="text-title-md font-semibold text-ink" numberOfLines={1}>
               {thread?.campaign_title ?? 'Thread'}
@@ -242,7 +257,10 @@ export default function ThreadDetail() {
         </View>
 
         {/* Input bar */}
-        <View className="flex-row items-center gap-2 border-t border-hairline bg-canvas px-4 py-2">
+        <View
+          className="flex-row items-center gap-2 border-t border-hairline bg-canvas px-4 py-2"
+          style={{ paddingBottom: insets.bottom + TAB_BAR_OVERLAY }}
+        >
           <TextInput
             placeholder="Type a message..."
             value={inputText}

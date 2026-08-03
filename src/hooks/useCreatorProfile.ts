@@ -1,9 +1,8 @@
 import { useRef, useEffect, useMemo } from 'react';
-import { useUser, useAuth } from "@clerk/expo";
+import { useUser } from "@clerk/expo";
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listPosts } from '@/lib/repository';
 import { fetchMedia, fetchInsights } from '@/lib/instagram';
-import { withFreshSession } from '@/lib/with-fresh-session';
 import { useBridge } from '@/lib/bridge-context';
 import type { Creator, DealThread } from '@/lib/types';
 import type { InstagramMediaResponse, InstagramInsightsResponse } from '@/lib/instagram';
@@ -31,7 +30,6 @@ interface UseCreatorProfileResult {
 
 export function useCreatorProfile(): UseCreatorProfileResult {
   const { user } = useUser();
-  const { getToken } = useAuth();
   const clerkUserId = user?.id ?? '';
   const queryClient = useQueryClient();
   const cancelledRef = useRef(false);
@@ -86,7 +84,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
         queryFn: async (): Promise<InstagramMediaResponse[]> => {
           if (!clerkUserId) return [];
           try {
-            return await withFreshSession(() => fetchMedia(), getToken);
+            return await fetchMedia();
           } catch (err) {
             if (err instanceof Error && err.message === 'session_expired') {
               throw err; // surface to error state
@@ -105,7 +103,7 @@ export function useCreatorProfile(): UseCreatorProfileResult {
         queryFn: async (): Promise<InstagramInsightsResponse | null> => {
           if (!clerkUserId) return null;
           try {
-            const data = await withFreshSession(() => fetchInsights(), getToken);
+            const data = await fetchInsights();
             if (data.error) return null; // business account required
             return data;
           } catch (err) {

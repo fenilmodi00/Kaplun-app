@@ -2,14 +2,16 @@ import React, { useCallback, useMemo } from 'react';
 import {
   FlatList,
   Alert,
-  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { View, Text } from '@/tw';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, Pressable } from '@/tw';
 import { cn } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 import type { Automation, AutomationLog } from '@/lib/automations';
+import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
 
 /** Action badge colors per DESIGN.md §3.3 */
 const ACTION_META: Record<
@@ -113,6 +115,7 @@ function LogRow({ log }: { log: AutomationLog }) {
 export default function AutomationDetail() {
   const { automationId } = useLocalSearchParams<{ automationId: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { automations, toggleStatus, deleteAutomation } = useAutomations();
   const { logs, loading, error, refresh } = useAutomationLogs(automationId ?? '');
   const { stats: apiStats, loading: statsLoading } = useAutomationStats(automationId ?? '');
@@ -196,10 +199,10 @@ export default function AutomationDetail() {
   return (
     <View className="flex-1 bg-canvas">
       {/* Header: back + name + status */}
-      <View className="flex-row items-center justify-between border-b border-hairline bg-canvas px-4 py-3">
+      <View className="flex-row items-center justify-between border-b border-hairline bg-canvas px-4" style={{ paddingTop: insets.top + 12, paddingBottom: 12 }}>
         <View className="flex-row items-center gap-2 flex-1">
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text className="text-title-md text-ink">{'<'}</Text>
+          <Pressable onPress={() => router.back()} accessibilityLabel="Back" style={{ minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
           </Pressable>
           <Text className="flex-1 text-title-md font-semibold text-ink" numberOfLines={1}>
             {automation.name}
@@ -303,7 +306,7 @@ export default function AutomationDetail() {
       </View>
 
       {/* Actions row */}
-      <View className="flex-row items-center gap-3 border-t border-hairline bg-canvas px-4 py-3">
+      <View className="flex-row items-center gap-3 border-t border-hairline bg-canvas px-4 py-3" style={{ paddingBottom: insets.bottom + TAB_BAR_OVERLAY }}>
         <View className="flex-1">
           <ClayAnimatedButton
             variant="secondary"

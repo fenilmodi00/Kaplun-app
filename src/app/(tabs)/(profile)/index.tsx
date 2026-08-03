@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-} from 'react-native-reanimated';
+} from '@/lib/reanimated-platform';
 import { useUser, useAuth, useClerk } from "@clerk/expo";
 import { View, Text, ScrollView } from '@/tw';
 import { Image } from '@/tw/image';
@@ -15,6 +16,7 @@ import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';import { C
 import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
 import { ClayAvatar } from '@/components/clay/ClayAvatar';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
+import { ScreenShell } from '@/components/screen-shell';
 
 /** Status chip color styling per DESIGN.md §3.3 & §5.4 */
 const STATUS_META: Record<string, { bg: string; text: string }> = {
@@ -42,7 +44,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
   return (
     <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={animatedStyle as StyleProp<ViewStyle>}>
         <View className="max-w-[320px] items-center gap-4">
           <Text className="text-center text-body-md text-error">
             {error}
@@ -92,7 +94,7 @@ export default function ProfileScreen() {
   // Loading state — skeleton, not a full-screen spinner
   if (isLoading || dashboardLoading) {
     return (
-      <View className="flex-1 bg-canvas p-4" style={{ gap: 12 }}>
+      <ScreenShell>
         <View className="items-center" style={{ gap: 10, marginTop: 24 }}>
           <View className="bg-white border border-hairline" style={{ width: 88, height: 88, borderRadius: 44 }} />
           <View className="bg-white border border-hairline" style={{ height: 20, width: 140, borderRadius: 8 }} />
@@ -100,7 +102,7 @@ export default function ProfileScreen() {
         </View>
         <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16, marginTop: 16 }} />
         <View className="bg-white border border-hairline" style={{ height: 96, borderRadius: 16 }} />
-      </View>
+      </ScreenShell>
     );
   }
 
@@ -112,184 +114,182 @@ export default function ProfileScreen() {
   // Empty state — no creator connected
   if (!creator) {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-canvas p-4">
+      <ScreenShell center>
         <Text className="text-center text-body-md text-body">
           Connect your Instagram to see your profile
         </Text>
         <ClayAnimatedButton variant="secondary" onPress={refresh}>
           Refresh
         </ClayAnimatedButton>
-      </View>
+      </ScreenShell>
     );
   }
 
   return (
-    <ScrollView className="flex-1 bg-canvas">
-      <View className="gap-4 p-4">
-        {/* Creator Card */}
-        <ClayAnimatedCard delay={0}>
-          <View className="flex-row items-center gap-4">
-            <Animated.View style={avatarAnimatedStyle}>
-              <ClayAvatar src={creator.profile_pic_url} size={64} />
-            </Animated.View>
-            <View className="flex-1 gap-1">
-              <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-                {creator.full_name}
+    <ScreenShell contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}>
+      {/* Creator Card */}
+      <ClayAnimatedCard delay={0}>
+        <View className="flex-row items-center gap-4">
+          <Animated.View style={avatarAnimatedStyle}>
+            <ClayAvatar src={creator.profile_pic_url} size={64} />
+          </Animated.View>
+          <View className="flex-1 gap-1">
+            <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
+              {creator.full_name}
+            </Text>
+            <Text className="text-body-sm text-muted">
+              @{creator.ig_username}
+            </Text>
+            <View className="mt-1 flex-row flex-wrap gap-2">
+              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+                {formatCount(creator.follower_count)} followers
               </Text>
-              <Text className="text-body-sm text-muted">
-                @{creator.ig_username}
+              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+                {formatCount(creator.following_count)} following
               </Text>
-              <View className="mt-1 flex-row flex-wrap gap-2">
-                <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
-                  {formatCount(creator.follower_count)} followers
-                </Text>
-                <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
-                  {formatCount(creator.following_count)} following
-                </Text>
-                <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
-                  {formatCount(creator.media_count)} posts
-                </Text>
-              </View>
+              <Text className="rounded-pill bg-surface-card px-2 py-1 text-caption text-body">
+                {formatCount(creator.media_count)} posts
+              </Text>
             </View>
           </View>
-
-          {/* Badges */}
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            <Text className="rounded-pill bg-brand-mint px-3 py-1 text-caption font-semibold text-ink">
-              {creator.engagement_rate.toFixed(1)}% engagement
-            </Text>
-            <Text className="rounded-pill bg-brand-lavender px-3 py-1 text-caption font-semibold text-on-dark">
-              {creator.creator_tier.replace(/_/g, ' ')}
-            </Text>
-            <Text className="rounded-pill bg-brand-peach px-3 py-1 text-caption font-semibold text-on-dark">
-              {creator.niche}
-            </Text>
-          </View>
-        </ClayAnimatedCard>
-
-        {/* Recent Reels */}
-        <View className="gap-2">
-          <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-            Recent Reels
-          </Text>
-          {recentReels.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-3 pb-2">
-                {recentReels.map((reel, index) => (
-                  <ClayAnimatedCard
-                    key={reel.$id ?? index}
-                    delay={index * 100}
-                    padding="p-0"
-                  >
-                    <View className="w-40">
-                      <Image
-                        source={{ uri: reel.display_url ?? '' }}
-                        className="h-[200px] w-40 rounded-sm"
-                      />
-                      <View className="p-2">
-                        <Text className="text-caption text-muted">
-                          {formatCount(reel.video_view_count)} views
-                        </Text>
-                      </View>
-                    </View>
-                  </ClayAnimatedCard>
-                ))}
-              </View>
-            </ScrollView>
-          ) : (
-            <Text className="text-body-sm text-muted">
-              No recent reels
-            </Text>
-          )}
         </View>
 
-        {/* Insights Summary */}
-        <View className="gap-2">
-          {insights?.data ? (
-            <ClayFeatureCard color="cream" title="Insights" delay={200}>
-              <View className="gap-2">
-                {insights.data.map((metric, index) => (
-                  <View key={index} className="flex-row justify-between">
-                    <Text className="text-body-sm capitalize text-body">
-                      {metric.name.replace(/_/g, ' ')}
-                    </Text>
-                    <Text className="text-body-sm font-semibold text-ink">
-                      {metric.values[0]?.value ?? '—'}
-                    </Text>
+        {/* Badges */}
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          <Text className="rounded-pill bg-brand-mint px-3 py-1 text-caption font-semibold text-ink">
+            {creator.engagement_rate.toFixed(1)}% engagement
+          </Text>
+          <Text className="rounded-pill bg-brand-lavender px-3 py-1 text-caption font-semibold text-on-dark">
+            {creator.creator_tier.replace(/_/g, ' ')}
+          </Text>
+          <Text className="rounded-pill bg-brand-peach px-3 py-1 text-caption font-semibold text-on-dark">
+            {creator.niche}
+          </Text>
+        </View>
+      </ClayAnimatedCard>
+
+      {/* Recent Reels */}
+      <View className="gap-2">
+        <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
+          Recent Reels
+        </Text>
+        {recentReels.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View className="flex-row gap-3 pb-2">
+              {recentReels.map((reel, index) => (
+                <ClayAnimatedCard
+                  key={reel.$id ?? index}
+                  delay={index * 100}
+                  padding="p-0"
+                >
+                  <View className="w-40">
+                    <Image
+                      source={{ uri: reel.display_url ?? '' }}
+                      className="h-[200px] w-40 rounded-sm"
+                    />
+                    <View className="p-2">
+                      <Text className="text-caption text-muted">
+                        {formatCount(reel.video_view_count)} views
+                      </Text>
+                    </View>
                   </View>
-                ))}
-              </View>
-            </ClayFeatureCard>
-          ) : (
-            <View className="gap-2">
-              <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-                Insights
-              </Text>
-              <Text className="text-body-sm text-muted">
-                Insights available for business accounts only
-              </Text>
+                </ClayAnimatedCard>
+              ))}
             </View>
-          )}
-        </View>
-
-        {/* Active Deals */}
-        <View className="gap-2">
-          <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
-            Active Deals
+          </ScrollView>
+        ) : (
+          <Text className="text-body-sm text-muted">
+            No recent reels
           </Text>
-          {dealThreads.length > 0 ? (
-            <View className="gap-2">
-              {dealThreads.map((thread, index) => {
-                const meta = STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' };
-                return (
-                  <ClayAnimatedCard
-                    key={thread.$id ?? thread.thread_id}
-                    delay={index * 100}
-                    padding="p-4"
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-body-sm font-semibold text-ink">
-                          {thread.campaign_title}
-                        </Text>
-                        <Text className="text-caption text-muted">
-                          {thread.agent_assigned}
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-2">
-                        <View className={cn('rounded-pill px-2.5 py-1', meta.bg)}>
-                          <Text className={cn('text-caption-uppercase font-semibold', meta.text)}>
-                            {thread.status.replace(/_/g, ' ')}
-                          </Text>
-                        </View>
-                        {thread.unread_count > 0 && (
-                          <Text className="h-[22px] min-w-[22px] rounded-pill bg-error px-1.5 text-center text-caption leading-[22px] text-on-primary">
-                            {thread.unread_count}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  </ClayAnimatedCard>
-                );
-              })}
-            </View>
-          ) : (
-            <Text className="text-body-sm text-muted">
-              No active deals
-            </Text>
-          )}
-        </View>
-
-        {/* Action Buttons */}
-        <View className="mt-4 gap-3">
-          <ClayAnimatedButton variant="secondary" onPress={handleDisconnect} fullWidth>
-            Disconnect Instagram
-          </ClayAnimatedButton>
-          <ClayAnimatedButton variant="primary" onPress={() => signOut()} fullWidth>
-            Sign Out
-          </ClayAnimatedButton>
-        </View>
+        )}
       </View>
-    </ScrollView>
+
+      {/* Insights Summary */}
+      <View className="gap-2">
+        {insights?.data ? (
+          <ClayFeatureCard color="cream" title="Insights" delay={200}>
+            <View className="gap-2">
+              {insights.data.map((metric, index) => (
+                <View key={index} className="flex-row justify-between">
+                  <Text className="text-body-sm capitalize text-body">
+                    {metric.name.replace(/_/g, ' ')}
+                  </Text>
+                  <Text className="text-body-sm font-semibold text-ink">
+                    {metric.values[0]?.value ?? '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ClayFeatureCard>
+        ) : (
+          <View className="gap-2">
+            <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
+              Insights
+            </Text>
+            <Text className="text-body-sm text-muted">
+              Insights available for business accounts only
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Active Deals */}
+      <View className="gap-2">
+        <Text className="text-title-md font-semibold tracking-[-0.3px] text-ink">
+          Active Deals
+        </Text>
+        {dealThreads.length > 0 ? (
+          <View className="gap-2">
+            {dealThreads.map((thread, index) => {
+              const meta = STATUS_META[thread.status] ?? { bg: 'bg-surface-card', text: 'text-muted' };
+              return (
+                <ClayAnimatedCard
+                  key={thread.$id ?? thread.thread_id}
+                  delay={index * 100}
+                  padding="p-4"
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-body-sm font-semibold text-ink">
+                        {thread.campaign_title}
+                      </Text>
+                      <Text className="text-caption text-muted">
+                        {thread.agent_assigned}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center gap-2">
+                      <View className={cn('rounded-pill px-2.5 py-1', meta.bg)}>
+                        <Text className={cn('text-caption-uppercase font-semibold', meta.text)}>
+                          {thread.status.replace(/_/g, ' ')}
+                        </Text>
+                      </View>
+                      {thread.unread_count > 0 && (
+                        <Text className="h-[22px] min-w-[22px] rounded-pill bg-error px-1.5 text-center text-caption leading-[22px] text-on-primary">
+                          {thread.unread_count}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                </ClayAnimatedCard>
+              );
+            })}
+          </View>
+        ) : (
+          <Text className="text-body-sm text-muted">
+            No active deals
+          </Text>
+        )}
+      </View>
+
+      {/* Action Buttons */}
+      <View className="mt-4 gap-3">
+        <ClayAnimatedButton variant="secondary" onPress={handleDisconnect} fullWidth>
+          Disconnect Instagram
+        </ClayAnimatedButton>
+        <ClayAnimatedButton variant="primary" onPress={() => signOut()} fullWidth>
+          Sign Out
+        </ClayAnimatedButton>
+      </View>
+    </ScreenShell>
   );
 }

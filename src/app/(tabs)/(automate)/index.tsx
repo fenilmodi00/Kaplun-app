@@ -11,6 +11,8 @@ import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import type { Automation } from '@/lib/automations';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenShell, useScreenContentPadding } from '@/components/screen-shell';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -209,8 +211,12 @@ function AutomationRow({
 }
 
 function Header({ onAdd }: { onAdd: () => void }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View className="flex-row items-start justify-between px-4 pt-4 pb-2">
+    <View
+      className="flex-row items-start justify-between px-4 pb-2"
+      style={{ paddingTop: insets.top + 12 }}
+    >
       <View className="flex-1">
         <Text
           className="font-semibold text-ink"
@@ -305,17 +311,21 @@ export default function AutomateScreen() {
 
   const keyExtractor = useCallback((item: Automation) => item.$id, []);
 
+  const listPadding = useScreenContentPadding();
+
   // Connection-check loading state
   if (gateLoading) {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <StatsCard />
-        <View style={{ gap: 10, paddingVertical: 8 }}>
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </View>
+        <ScreenShell contentContainerStyle={{ paddingTop: 0 }}>
+          <StatsCard />
+          <View style={{ gap: 10, paddingVertical: 8 }}>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </View>
+        </ScreenShell>
       </View>
     );
   }
@@ -325,7 +335,9 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ConnectionGate onConnect={handleConnect} isConnecting={isConnecting} />
+        <ScreenShell contentContainerStyle={{ paddingTop: 0 }}>
+          <ConnectionGate onConnect={handleConnect} isConnecting={isConnecting} />
+        </ScreenShell>
       </View>
     );
   }
@@ -335,12 +347,14 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <StatsCard />
-        <View style={{ gap: 10, paddingVertical: 8 }}>
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </View>
+        <ScreenShell contentContainerStyle={{ paddingTop: 0 }}>
+          <StatsCard />
+          <View style={{ gap: 10, paddingVertical: 8 }}>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </View>
+        </ScreenShell>
       </View>
     );
   }
@@ -349,8 +363,10 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <StatsCard />
-        <ErrorState error={automationsError} onRetry={refresh} />
+        <ScreenShell center contentContainerStyle={{ paddingTop: 0 }}>
+          <StatsCard />
+          <ErrorState error={automationsError} onRetry={refresh} />
+        </ScreenShell>
       </View>
     );
   }
@@ -359,8 +375,10 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <StatsCard />
-        <EmptyState />
+        <ScreenShell center contentContainerStyle={{ paddingTop: 0 }}>
+          <StatsCard />
+          <EmptyState />
+        </ScreenShell>
       </View>
     );
   }
@@ -378,7 +396,8 @@ export default function AutomateScreen() {
             <StatsCard />
           </>
         }
-        contentContainerStyle={{ paddingVertical: 8, paddingBottom: 100 }}
+        contentContainerStyle={{ ...listPadding, paddingTop: 0 }}
+        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       />
     </View>

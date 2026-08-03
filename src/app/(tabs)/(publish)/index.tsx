@@ -1,21 +1,11 @@
 import React from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, ScrollView } from '@/tw';
+import { View, Text } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
+import { ScreenShell } from '@/components/screen-shell';
 
 export default function PublishScreen() {
-  const insets = useSafeAreaInsets();
   return (
-    <ScrollView
-      className="flex-1 bg-canvas"
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        paddingTop: insets.top + 24,
-        paddingBottom: insets.bottom + 24,
-        paddingHorizontal: 18,
-        gap: 16,
-      }}
-    >
+    <ScreenShell contentContainerStyle={{ paddingHorizontal: 18, gap: 16 }}>
       <Text
         className="font-medium text-ink"
         style={{ fontSize: 32, lineHeight: 37, letterSpacing: -0.5 }}
@@ -28,6 +18,6 @@ export default function PublishScreen() {
           Publishing is coming soon — connect Instagram to get ready.
         </Text>
       </View>
-    </ScrollView>
+    </ScreenShell>
   );
 }

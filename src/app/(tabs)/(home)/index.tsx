@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth } from "@clerk/expo";
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, ScrollView, Pressable } from '@/tw';
+import { View, Text, Pressable } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+import { ScreenShell } from '@/components/screen-shell';
 import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
@@ -348,7 +348,6 @@ export default function HomeScreen() {
   const { getToken } = useAuth();
   const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<InstagramProfileResponse | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
@@ -439,15 +438,7 @@ export default function HomeScreen() {
   // Once we have a profile (or skip), keep the real page even if bridge status flickers.
   if ((isCheckingConnection || !bridgeReady) && !profile && !skipped) {
     return (
-      <ScrollView
-        className="flex-1 bg-canvas"
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          paddingHorizontal: 18,
-          paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 110,
-        }}
-      >
+      <ScreenShell>
         <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
           <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
             Kaplun
@@ -470,22 +461,14 @@ export default function HomeScreen() {
           <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
           <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
         </View>
-      </ScrollView>
+      </ScreenShell>
     );
   }
 
   const isConnected = !!profile || skipped;
 
   return (
-    <ScrollView
-      className="flex-1 bg-canvas"
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        paddingHorizontal: 18,
-        paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + 110,
-      }}
-    >
+    <ScreenShell>
       {/* Header */}
       <Entrance delay={0}>
         <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
@@ -680,6 +663,6 @@ export default function HomeScreen() {
           <QuickActions />
         </Entrance>
       )}
-    </ScrollView>
+    </ScreenShell>
   );
 }

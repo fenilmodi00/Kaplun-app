@@ -16,8 +16,12 @@ jest.mock('@/lib/instagram', () => ({
   fetchMedia: jest.fn(),
 }));
 
-jest.mock('@/lib/with-fresh-session', () => ({
-  withFreshSession: jest.fn((_fn: any, _getToken: any) => _fn()),
+jest.mock('@/lib/automations', () => ({
+  listCampaignTemplates: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: jest.fn().mockReturnValue({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 import React from 'react';
@@ -162,11 +166,11 @@ describe('NewAutomationScreen', () => {
 
   it('renders all form sections', async () => {
     const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
-    expect(getByLabelText('Campaign name')).toBeTruthy();
-    expect(getByLabelText('Keyword input')).toBeTruthy();
+    expect(getByLabelText('Automation name')).toBeTruthy();
+    expect(getByLabelText('Keywords')).toBeTruthy();
     expect(getByLabelText('DM message')).toBeTruthy();
     expect(getByLabelText('Enable public reply')).toBeTruthy();
-    expect(getByText('Activate campaign')).toBeTruthy();
+    expect(getByText('Preview And Go Live')).toBeTruthy();
   });
 
   it('does not submit when required fields are empty', async () => {
@@ -177,7 +181,7 @@ describe('NewAutomationScreen', () => {
     });
 
     const { getByText } = await render(<NewAutomationScreen />);
-    await fireEvent(getByText('Activate campaign'), 'press');
+    await fireEvent(getByText('Preview And Go Live'), 'press');
 
     expect(mockCreate).not.toHaveBeenCalled();
   });
@@ -191,37 +195,35 @@ describe('NewAutomationScreen', () => {
 
     const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
 
-    await fireEvent.changeText(getByLabelText('Campaign name'), 'Test Campaign');
-    await fireEvent.changeText(getByLabelText('Keyword input'), 'hello');
-    await fireEvent(getByText('Add'), 'press');
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
+    await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
+    await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks for your comment!');
 
-    await fireEvent(getByText('Activate campaign'), 'press');
+    await fireEvent(getByText('Preview And Go Live'), 'press');
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
     });
   });
 
-  it('shows media picker when Specific posts is selected', async () => {
+  it('shows media picker when specific post or reel is selected', async () => {
     mockFetchMedia.mockResolvedValue([
       { id: 'media_1', caption: 'First post', media_type: 'IMAGE' },
       { id: 'media_2', caption: 'Second post', media_type: 'VIDEO' },
     ]);
 
-    const { getByText } = await render(<NewAutomationScreen />);
-
-    await fireEvent(getByText('Specific posts'), 'press');
+    const { getByLabelText } = await render(<NewAutomationScreen />);
 
     await waitFor(() => {
-      expect(getByText('First post')).toBeTruthy();
-      expect(getByText('Second post')).toBeTruthy();
+      expect(getByLabelText('First post')).toBeTruthy();
+      expect(getByLabelText('Second post')).toBeTruthy();
     });
   });
 
-  it('shows explainer when Next reel is selected', async () => {
+  it('shows explainer when next post or reel is selected', async () => {
     const { getByText } = await render(<NewAutomationScreen />);
-    await fireEvent(getByText('Next reel'), 'press');
+    await fireEvent(getByText('next post or reel'), 'press');
     expect(
       getByText('Automatically applies to every new reel you post')
     ).toBeTruthy();
@@ -245,14 +247,14 @@ describe('NewAutomationScreen', () => {
 
     const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
 
-    await fireEvent.changeText(getByLabelText('Campaign name'), 'Test');
-    await fireEvent.changeText(getByLabelText('Keyword input'), 'hello');
-    await fireEvent(getByText('Add'), 'press');
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
+    await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
+    await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Hi!');
 
     await fireEvent(getByLabelText('Enable public reply'), 'valueChange', true);
 
-    await fireEvent(getByText('Activate campaign'), 'press');
+    await fireEvent(getByText('Preview And Go Live'), 'press');
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -265,12 +267,12 @@ describe('NewAutomationScreen', () => {
 
     const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
 
-    await fireEvent.changeText(getByLabelText('Campaign name'), 'Test Campaign');
-    await fireEvent.changeText(getByLabelText('Keyword input'), 'hello');
-    await fireEvent(getByText('Add'), 'press');
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
+    await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
+    await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks!');
 
-    await fireEvent(getByText('Activate campaign'), 'press');
+    await fireEvent(getByText('Preview And Go Live'), 'press');
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -295,12 +297,12 @@ describe('NewAutomationScreen', () => {
 
     const { getByLabelText, getByText, findByText } = await render(<NewAutomationScreen />);
 
-    await fireEvent.changeText(getByLabelText('Campaign name'), 'Test');
-    await fireEvent.changeText(getByLabelText('Keyword input'), 'hello');
-    await fireEvent(getByText('Add'), 'press');
+    await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
+    await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
+    await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Thanks!');
 
-    await fireEvent(getByText('Activate campaign'), 'press');
+    await fireEvent(getByText('Preview And Go Live'), 'press');
 
     expect(
       await findByText(/Instagram account not connected/)
