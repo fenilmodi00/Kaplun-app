@@ -6,7 +6,7 @@
 
 | Component | File | LOC | `@/tw`? | Reanimated? | `.web.tsx`? |
 |-----------|------|-----|---------|-------------|-------------|
-| `ClayTabBar` | `ClayTabBar.tsx` | 75 | Yes (View, Text) | Yes (withSpring) | No |
+| `ClayTabBar` | `ClayTabBar.tsx` | 129 | Yes (View, Text, Pressable) | No — uses `SymbolIcon`, `hapticSelection`, `EdgeBlur` | No |
 | `ClaySpinner` | `ClaySpinner.tsx` | 78 | No — raw RN | Yes (withRepeat) | Yes (`.web.tsx` → ActivityIndicator) |
 | `ClayFeatureCard` | `ClayFeatureCard.tsx` | 41 | Yes (View, Text) | Yes (useEntranceAnimation) | No |
 | `ClayAvatar` | `ClayAvatar.tsx` | 13 | Yes (`@/tw/image`) | No | No |
@@ -33,7 +33,7 @@
 
 ## ANTI-PATTERNS
 
-- **NO direct `react-native-reanimated` imports** — use `@/lib/reanimated-platform` or the `useClayAnimations` hooks. (Currently violated in this directory — all 6 animated components import reanimated directly. Should be migrated.)
+- **NO direct `react-native-reanimated` imports** — use `@/lib/reanimated-platform` or the `useClayAnimations` hooks. (Currently violated by ClayAnimatedCard, ClayFeatureCard, ClayAnimatedButton, ClaySpinner — migrate these.)
 - **NO new hex color values** — add colors to `src/global.css` `@theme` first. If a raw-RN component needs them, duplicate with a comment referencing the token.
 - **NO `StyleSheet.create()` in `@/tw`-based components** — use Tailwind `className` + `cn()`. Raw-RN components are the exception, not the rule.
 - **NO Reanimated in `.web.tsx` files** — web variants must be pure RN.
@@ -41,4 +41,4 @@
 ## KNOWN DEBT
 
 - **Duplicated hex values** — `#fffaf0`, `#0a0a0a`, `#e5e5e5`, `#6a6a6a` hardcoded in ClaySpinner, ClayAnimatedButton, AuthScreen instead of referencing `global.css` tokens. Centralize when possible.
-- **Direct reanimated imports** — all 6 animated Clay components import `react-native-reanimated` directly instead of `@/lib/reanimated-platform`. Migrate to the platform wrapper.
+- **Direct reanimated imports** — ClayAnimatedCard, ClayFeatureCard, ClayAnimatedButton, ClaySpinner import `react-native-reanimated` directly instead of `@/lib/reanimated-platform`. Migrate to the platform wrapper.
