@@ -7,11 +7,10 @@ import type { BottomTabBarProps } from "expo-router/js-tabs";
 import type { View as RNView } from 'react-native';
 import { EdgeBlur } from '@/components/edge-blur';
 
-const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'publish' | 'insights' | 'profile'> = {
+const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights' | 'profile'> = {
   '(home)': 'home',
   '(automate)': 'automate',
   '(messages)': 'messages',
-  '(publish)': 'publish',
   '(insights)': 'insights',
   '(profile)': 'profile',
 };
@@ -20,7 +19,6 @@ const TABS = [
   { name: '(home)', label: 'Home' },
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
-  { name: '(publish)', label: 'Publish' },
   { name: '(insights)', label: 'Insights' },
   { name: '(profile)', label: 'Profile' },
 ];

@@ -2,7 +2,7 @@
  * ClayTabBar unit tests.
  *
  * Verifies:
- * - All 6 tab labels render
+ * - All 5 tab labels render
  * - Pressing a tab calls navigation.navigate with the correct route
  * - Every tab Pressable node receives a className containing "flex-1"
  *   (the @/tw jest passthrough forwards className as a plain prop;
@@ -29,7 +29,6 @@ const TABS = [
   { name: '(home)', label: 'Home' },
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
-  { name: '(publish)', label: 'Publish' },
   { name: '(insights)', label: 'Insights' },
   { name: '(profile)', label: 'Profile' },
 ];
@@ -81,7 +80,7 @@ function createMockProps(
 }
 
 describe('ClayTabBar', () => {
-  it('renders all 6 tab labels', async () => {
+  it('renders all 5 tab labels', async () => {
     const props = createMockProps();
     await render(<ClayTabBar {...props} />);
 

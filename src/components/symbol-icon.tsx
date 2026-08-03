@@ -6,7 +6,6 @@ export type SymbolName =
   | 'home'
   | 'automate'
   | 'messages'
-  | 'publish'
   | 'insights'
   | 'profile';
 
@@ -14,7 +13,6 @@ const SF_SYMBOLS: Record<SymbolName, { inactive: string; active: string }> = {
   home: { inactive: 'house', active: 'house.fill' },
   automate: { inactive: 'bolt', active: 'bolt.fill' },
   messages: { inactive: 'bubble.left', active: 'bubble.left.fill' },
-  publish: { inactive: 'plus.circle', active: 'plus.circle.fill' },
   insights: { inactive: 'chart.bar', active: 'chart.bar.fill' },
   profile: { inactive: 'person', active: 'person.fill' },
 };
@@ -26,7 +24,6 @@ const IONICONS_MAP: Record<
   home: { inactive: 'home-outline', active: 'home' },
   automate: { inactive: 'flash-outline', active: 'flash' },
   messages: { inactive: 'chatbubble-outline', active: 'chatbubble' },
-  publish: { inactive: 'add-circle-outline', active: 'add-circle' },
   insights: { inactive: 'stats-chart-outline', active: 'stats-chart' },
   profile: { inactive: 'person-outline', active: 'person' },
 };
