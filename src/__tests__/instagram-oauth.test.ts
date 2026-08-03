@@ -45,6 +45,7 @@ describe('startInstagramOAuth', () => {
     expect(authUrl).toContain('client_id=test_app_id');
     expect(authUrl).toContain('response_type=code');
     expect(authUrl).toContain('redirect_uri=https%3A%2F%2Ftest-callback.example.com%2F');
+    expect(authUrl).toContain('force_reauth=true');
     expect(authUrl).toContain('state=');
     expect(redirectUrl).toBe('kaplun://instagram-callback');
   });

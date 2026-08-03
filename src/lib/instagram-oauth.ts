@@ -88,6 +88,9 @@ export async function startInstagramOAuth(
     redirect_uri: IG_OAUTH_REDIRECT_URI!,
     response_type: 'code',
     scope: SCOPES.join(','),
+    // Force a fresh Instagram login even when the browser already has a
+    // session — required after disconnect so reconnect is not a silent reuse.
+    force_reauth: 'true',
     state,
   });
 
