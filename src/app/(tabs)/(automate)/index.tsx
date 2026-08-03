@@ -143,7 +143,7 @@ function EmptyState() {
       <Text style={styles.stateMuted}>No automations yet</Text>
       <ClayAnimatedButton
         variant="primary"
-        onPress={() => router.push('/(tabs)/(automate)/new' as never)}
+        onPress={() => router.push('./new' as never)}
       >
         Create your first
       </ClayAnimatedButton>
@@ -209,7 +209,8 @@ function Header({ onAdd }: { onAdd: () => void }) {
       <Pressable
         onPress={onAdd}
         accessibilityLabel="Create automation"
-        style={styles.addBtn}
+        hitSlop={8}
+        style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
       >
         <Ionicons name="add" size={22} color={COLORS.ink} />
       </Pressable>
@@ -261,7 +262,7 @@ export default function AutomateScreen() {
   );
 
   const handleAdd = useCallback(() => {
-    router.push('/(tabs)/(automate)/new' as never);
+    router.push('./new' as never);
   }, [router]);
 
   const renderItem = useCallback(
@@ -426,12 +427,15 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(10,10,10,0.06)',
+  },
+  addBtnPressed: {
+    backgroundColor: 'rgba(10,10,10,0.14)',
   },
 
   /* Cards */

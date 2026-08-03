@@ -510,7 +510,7 @@ export default function NewAutomationScreen() {
         await updateAutomation(getToken, created.$id, { status: 'paused' });
         refreshAutomations();
       }
-      router.replace(
+      router.dismissTo(
         `/(tabs)/(automate)/${created.$id}?created=${goLive ? 'live' : 'paused'}` as never,
       );
     } catch (err) {
