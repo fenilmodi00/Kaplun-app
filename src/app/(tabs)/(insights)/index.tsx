@@ -440,7 +440,7 @@ function TopPostsCard({ items }: { items: TopMediaItem[] }) {
         <View className="items-center" style={{ paddingVertical: 18, gap: 6 }}>
           <Ionicons name="images-outline" size={22} color="#9a9a9a" />
           <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
-            No posts yet — publish your first post and its performance lands here.
+            No posts yet — share a post on Instagram and its performance lands here.
           </Text>
         </View>
       )}

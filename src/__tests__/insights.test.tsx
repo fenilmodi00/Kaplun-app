@@ -135,7 +135,7 @@ describe('InsightsScreen', () => {
       screen.getByText('Daily follower trends unlock at 100 followers — a Meta threshold.')
     ).toBeTruthy();
     expect(
-      screen.getByText('No posts yet — publish your first post and its performance lands here.')
+      screen.getByText('No posts yet — share a post on Instagram and its performance lands here.')
     ).toBeTruthy();
   });
 
