@@ -1,36 +1,70 @@
+/**
+ * Automation detail screen — status, stats, config summary, activity feed.
+ *
+ * NOTE: raw React Native + StyleSheet instead of `@/tw` className primitives.
+ * The useCssElement bridge drops layout classes on Android (same ballooning
+ * the builder had). See src/tw/AGENTS.md for the documented escape hatch.
+ */
+
 import React, { useCallback, useMemo } from 'react';
 import {
-  FlatList,
   Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, Pressable } from '@/tw';
-import { cn } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 import type { Automation, AutomationLog } from '@/lib/automations';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
+
+const COLORS = {
+  canvas: '#fffaf0',
+  ink: '#0a0a0a',
+  muted: '#6a6a6a',
+  mutedSoft: '#9a9a9a',
+  hairline: '#e5e5e5',
+  surfaceCard: '#f5f0e0',
+  surfaceSoft: '#faf5e8',
+  teal: '#1a3a3a',
+  ochre: '#e8b94a',
+  pink: '#ff4d8b',
+  mint: '#a4d4c5',
+  mintTint: 'rgba(164, 212, 197, 0.25)',
+  ochreTint: 'rgba(232, 185, 74, 0.20)',
+  error: '#ef4444',
+  white: '#ffffff',
+};
+
+const FONT = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+};
 
 /** Action badge colors per DESIGN.md §3.3 */
 const ACTION_META: Record<
   string,
   { bg: string; text: string; label: string }
 > = {
-  dm_sent: { bg: 'bg-brand-teal', text: 'text-on-dark', label: 'Sent' },
-  button_dm_sent: { bg: 'bg-brand-teal', text: 'text-on-dark', label: 'Sent' },
-  reveal_sent: { bg: 'bg-brand-teal', text: 'text-on-dark', label: 'Sent' },
-  reply_sent: { bg: 'bg-brand-teal', text: 'text-on-dark', label: 'Sent' },
-  skipped: { bg: 'bg-brand-ochre', text: 'text-ink', label: 'Skipped' },
-  failed: { bg: 'bg-brand-pink', text: 'text-on-dark', label: 'Failed' },
-  pending: { bg: 'bg-surface-card', text: 'text-muted', label: 'Pending' },
+  dm_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
+  button_dm_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
+  reveal_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
+  reply_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
+  skipped: { bg: COLORS.ochre, text: COLORS.ink, label: 'Skipped' },
+  failed: { bg: COLORS.pink, text: COLORS.white, label: 'Failed' },
+  pending: { bg: COLORS.surfaceCard, text: COLORS.muted, label: 'Pending' },
 };
 
 const STATUS_META: Record<string, { bg: string; text: string }> = {
-  active: { bg: 'bg-brand-mint', text: 'text-ink' },
-  paused: { bg: 'bg-brand-ochre', text: 'text-ink' },
-  error: { bg: 'bg-brand-pink', text: 'text-on-dark' },
+  active: { bg: COLORS.mint, text: COLORS.ink },
+  paused: { bg: COLORS.ochre, text: COLORS.ink },
+  error: { bg: COLORS.pink, text: COLORS.white },
 };
 
 function formatRelativeTime(iso: string): string {
@@ -78,31 +112,38 @@ function targetLabel(automation: Automation): string {
   }
 }
 
+function StatCell({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function LogRow({ log }: { log: AutomationLog }) {
   const meta = ACTION_META[log.action] ?? ACTION_META.pending;
 
   return (
-    <View className="flex-row items-start gap-3 border-b border-hairline px-4 py-3">
-      <View className="flex-1 gap-1">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-body-sm font-semibold text-ink" numberOfLines={1}>
+    <View style={styles.logRow}>
+      <View style={styles.logBody}>
+        <View style={styles.logTopRow}>
+          <Text style={styles.logUsername} numberOfLines={1}>
             {log.commenter_username ?? 'Unknown'}
           </Text>
-          <Text className="text-caption text-muted-soft">
-            {formatRelativeTime(log.created_at)}
-          </Text>
+          <Text style={styles.logTime}>{formatRelativeTime(log.created_at)}</Text>
         </View>
-        <Text className="text-body-sm text-muted" numberOfLines={1}>
+        <Text style={styles.logComment} numberOfLines={1}>
           {log.comment_text ?? '—'}
         </Text>
-        <View className="mt-1 flex-row items-center gap-2">
+        <View style={styles.logBadgeRow}>
           {log.matched_keyword ? (
-            <View className="rounded-pill bg-surface-card px-2 py-[2px]">
-              <Text className="text-caption text-muted">{log.matched_keyword}</Text>
+            <View style={styles.keywordChip}>
+              <Text style={styles.keywordChipText}>{log.matched_keyword}</Text>
             </View>
           ) : null}
-          <View className={cn('rounded-pill px-2 py-[2px]', meta.bg)}>
-            <Text className={cn('text-caption font-semibold', meta.text)}>
+          <View style={[styles.actionBadge, { backgroundColor: meta.bg }]}>
+            <Text style={[styles.actionBadgeText, { color: meta.text }]}>
               {meta.label}
             </Text>
           </View>
@@ -159,16 +200,16 @@ export default function AutomationDetail() {
   );
 
   const statusMeta = automation
-    ? (STATUS_META[automation.status] ?? { bg: 'bg-surface-card', text: 'text-muted' })
-    : { bg: 'bg-surface-card', text: 'text-muted' };
+    ? (STATUS_META[automation.status] ?? { bg: COLORS.surfaceCard, text: COLORS.muted })
+    : { bg: COLORS.surfaceCard, text: COLORS.muted };
 
   const isPaused = automation?.status === 'paused';
 
   // Loading state
   if (loading && !automation) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas p-4">
-        <Text className="text-body-md text-muted">Loading automation...</Text>
+      <View style={styles.centerState}>
+        <Text style={styles.stateMuted}>Loading automation...</Text>
       </View>
     );
   }
@@ -176,8 +217,8 @@ export default function AutomationDetail() {
   // Error state
   if (error) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas p-4">
-        <Text className="text-center text-body-sm text-error">{error}</Text>
+      <View style={styles.centerState}>
+        <Text style={styles.stateError}>{error}</Text>
         <ClayAnimatedButton variant="secondary" onPress={refresh}>
           Retry
         </ClayAnimatedButton>
@@ -188,69 +229,59 @@ export default function AutomationDetail() {
   // Not found state
   if (!automation) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas p-4">
-        <Text className="text-center text-body-md text-muted">
-          Automation not found
-        </Text>
+      <View style={styles.centerState}>
+        <Text style={styles.stateMuted}>Automation not found</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-canvas">
+    <View style={styles.screen}>
       {/* Header: back + name + status */}
-      <View className="flex-row items-center justify-between border-b border-hairline bg-canvas px-4" style={{ paddingTop: insets.top + 12, paddingBottom: 12 }}>
-        <View className="flex-row items-center gap-2 flex-1">
-          <Pressable onPress={() => router.back()} accessibilityLabel="Back" style={{ minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' }}>
-            <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
-          </Pressable>
-          <Text className="flex-1 text-title-md font-semibold text-ink" numberOfLines={1}>
-            {automation.name}
-          </Text>
-        </View>
-        <View className={cn('rounded-pill px-2.5 py-[3px]', statusMeta.bg)}>
-          <Text className={cn('text-caption-uppercase font-semibold capitalize', statusMeta.text)}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+          style={styles.backBtn}
+        >
+          <Ionicons name="chevron-back" size={24} color={COLORS.ink} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {automation.name}
+        </Text>
+        <View style={[styles.statusBadge, { backgroundColor: statusMeta.bg }]}>
+          <Text style={[styles.statusBadgeText, { color: statusMeta.text }]}>
             {automation.status}
           </Text>
         </View>
       </View>
 
       {/* Stats strip */}
-      <View className="flex-row items-center justify-around border-b border-hairline bg-canvas px-4 py-3">
-        <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">
-            {statsLoading ? '--' : apiStats?.sent ?? stats.sent}
-          </Text>
-          <Text className="text-caption text-muted">Sent</Text>
-        </View>
-        <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">
-            {statsLoading ? '--' : apiStats?.skipped ?? stats.skipped}
-          </Text>
-          <Text className="text-caption text-muted">Skipped</Text>
-        </View>
-        <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">
-            {statsLoading ? '--' : apiStats?.failed ?? stats.failed}
-          </Text>
-          <Text className="text-caption text-muted">Failed</Text>
-        </View>
-        <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">
-            {statsLoading ? '--' : apiStats?.clicks ?? 0}
-          </Text>
-          <Text className="text-caption text-muted">Clicks</Text>
-        </View>
-        <View className="items-center gap-1">
-          <Text className="text-title-sm font-semibold text-ink">
-            {statsLoading ? '--' : apiStats ? `${(apiStats.ctr * 100).toFixed(0)}%` : '0%'}
-          </Text>
-          <Text className="text-caption text-muted">CTR</Text>
-        </View>
+      <View style={styles.statsStrip}>
+        <StatCell
+          value={statsLoading ? '--' : String(apiStats?.sent ?? stats.sent)}
+          label="Sent"
+        />
+        <StatCell
+          value={statsLoading ? '--' : String(apiStats?.skipped ?? stats.skipped)}
+          label="Skipped"
+        />
+        <StatCell
+          value={statsLoading ? '--' : String(apiStats?.failed ?? stats.failed)}
+          label="Failed"
+        />
+        <StatCell
+          value={statsLoading ? '--' : String(apiStats?.clicks ?? 0)}
+          label="Clicks"
+        />
+        <StatCell
+          value={statsLoading ? '--' : apiStats ? `${(apiStats.ctr * 100).toFixed(0)}%` : '0%'}
+          label="CTR"
+        />
       </View>
 
       {/* Activity feed */}
-      <View className="flex-1">
+      <View style={styles.feedWrap}>
         <FlatList
           data={logs}
           renderItem={renderItem}
@@ -258,14 +289,14 @@ export default function AutomationDetail() {
           contentContainerStyle={{ paddingBottom: 12 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <View className="gap-3 px-4 py-3">
+            <View style={styles.feedHeader}>
               {/* Post-creation guidance: the engine has no test endpoint, so
                   the honest "test" is to comment on the targeted post and
                   watch the activity feed below. */}
               {created === 'live' && (
-                <View className="gap-1 rounded-lg border border-brand-mint bg-brand-mint/20 p-4">
-                  <Text className="text-title-sm font-semibold text-ink">You're live!</Text>
-                  <Text className="text-body-sm text-body">
+                <View style={[styles.noticeCard, styles.noticeLive]}>
+                  <Text style={styles.noticeTitle}>You're live!</Text>
+                  <Text style={styles.noticeBody}>
                     Test it now: comment{' '}
                     {automation.match_any_word
                       ? 'anything'
@@ -276,53 +307,55 @@ export default function AutomationDetail() {
                 </View>
               )}
               {created === 'paused' && (
-                <View className="gap-1 rounded-lg border border-brand-ochre bg-brand-ochre/20 p-4">
-                  <Text className="text-title-sm font-semibold text-ink">Saved as paused</Text>
-                  <Text className="text-body-sm text-body">
+                <View style={[styles.noticeCard, styles.noticePaused]}>
+                  <Text style={styles.noticeTitle}>Saved as paused</Text>
+                  <Text style={styles.noticeBody}>
                     Nothing fires while paused. Hit Resume below when you're ready to go live.
                   </Text>
                 </View>
               )}
 
               {/* Config summary card */}
-              <View className="rounded-lg border border-hairline bg-canvas p-4 gap-2">
-                <Text className="text-title-sm font-semibold text-ink">Configuration</Text>
-                <View className="flex-row justify-between">
-                  <Text className="text-body-sm text-muted">Target</Text>
-                  <Text className="text-body-sm text-ink">{targetLabel(automation)}</Text>
+              <View style={styles.configCard}>
+                <Text style={styles.configTitle}>Configuration</Text>
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Target</Text>
+                  <Text style={styles.configValue}>{targetLabel(automation)}</Text>
                 </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-body-sm text-muted">Keywords</Text>
-                  <Text className="text-body-sm text-ink" numberOfLines={1} style={{ maxWidth: '60%' }}>
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Keywords</Text>
+                  <Text style={styles.configValue} numberOfLines={1}>
                     {automation.match_any_word ? 'Any word' : automation.keywords.join(', ')}
                   </Text>
                 </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-body-sm text-muted">Match mode</Text>
-                  <Text className="text-body-sm text-ink capitalize">{automation.match_mode.replace(/_/g, ' ')}</Text>
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Match mode</Text>
+                  <Text style={[styles.configValue, styles.capitalize]}>
+                    {automation.match_mode.replace(/_/g, ' ')}
+                  </Text>
                 </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-body-sm text-muted">DM text</Text>
-                  <Text className="text-body-sm text-ink" numberOfLines={1} style={{ maxWidth: '60%' }}>
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>DM text</Text>
+                  <Text style={styles.configValue} numberOfLines={1}>
                     {automation.dm_message}
                   </Text>
                 </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-body-sm text-muted">Public reply</Text>
-                  <Text className="text-body-sm text-ink">
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Public reply</Text>
+                  <Text style={styles.configValue}>
                     {automation.public_reply_enabled ? 'On' : 'Off'}
                   </Text>
                 </View>
               </View>
 
               {logs.length > 0 ? (
-                <Text className="text-title-sm font-semibold text-ink mt-1">Activity</Text>
+                <Text style={styles.activityTitle}>Activity</Text>
               ) : null}
             </View>
           }
           ListEmptyComponent={
-            <View className="items-center justify-center py-8">
-              <Text className="text-center text-body-md text-muted">
+            <View style={styles.emptyState}>
+              <Text style={styles.stateMuted}>
                 No activity yet — comments will appear here
               </Text>
             </View>
@@ -331,8 +364,13 @@ export default function AutomationDetail() {
       </View>
 
       {/* Actions row */}
-      <View className="flex-row items-center gap-3 border-t border-hairline bg-canvas px-4 py-3" style={{ paddingBottom: insets.bottom + TAB_BAR_OVERLAY }}>
-        <View className="flex-1">
+      <View
+        style={[
+          styles.actionsRow,
+          { paddingBottom: insets.bottom + TAB_BAR_OVERLAY },
+        ]}
+      >
+        <View style={styles.actionCell}>
           <ClayAnimatedButton
             variant="secondary"
             onPress={handlePauseResume}
@@ -341,7 +379,7 @@ export default function AutomationDetail() {
             {isPaused ? 'Resume' : 'Pause'}
           </ClayAnimatedButton>
         </View>
-        <View className="flex-1">
+        <View style={styles.actionCell}>
           <ClayAnimatedButton
             variant="primary"
             onPress={handleDelete}
@@ -354,3 +392,268 @@ export default function AutomationDetail() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.canvas,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 16,
+    backgroundColor: COLORS.canvas,
+  },
+  stateMuted: {
+    textAlign: 'center',
+    fontFamily: FONT.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: COLORS.muted,
+  },
+  stateError: {
+    textAlign: 'center',
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.error,
+  },
+
+  /* Header */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+    backgroundColor: COLORS.canvas,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.hairline,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontFamily: FONT.semibold,
+    fontSize: 18,
+    lineHeight: 25,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  statusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statusBadgeText: {
+    fontFamily: FONT.semibold,
+    fontSize: 12,
+    lineHeight: 17,
+    letterSpacing: 1.5,
+    textTransform: 'capitalize',
+    includeFontPadding: false,
+  },
+
+  /* Stats strip */
+  statsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.canvas,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.hairline,
+  },
+  statCell: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: {
+    fontFamily: FONT.semibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  statLabel: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+
+  /* Feed */
+  feedWrap: {
+    flex: 1,
+  },
+  feedHeader: {
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  noticeCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 4,
+  },
+  noticeLive: {
+    backgroundColor: COLORS.mintTint,
+    borderColor: COLORS.mint,
+  },
+  noticePaused: {
+    backgroundColor: COLORS.ochreTint,
+    borderColor: COLORS.ochre,
+  },
+  noticeTitle: {
+    fontFamily: FONT.semibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  noticeBody: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.ink,
+  },
+  configCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.canvas,
+    padding: 14,
+    gap: 8,
+  },
+  configTitle: {
+    fontFamily: FONT.semibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  configRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  configLabel: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.muted,
+  },
+  configValue: {
+    maxWidth: '60%',
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.ink,
+  },
+  capitalize: {
+    textTransform: 'capitalize',
+  },
+  activityTitle: {
+    marginTop: 4,
+    fontFamily: FONT.semibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+
+  /* Log rows */
+  logRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.hairline,
+  },
+  logBody: {
+    gap: 4,
+  },
+  logTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  logUsername: {
+    flexShrink: 1,
+    fontFamily: FONT.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.ink,
+    includeFontPadding: false,
+  },
+  logTime: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.mutedSoft,
+    includeFontPadding: false,
+  },
+  logComment: {
+    fontFamily: FONT.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.muted,
+  },
+  logBadgeRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  keywordChip: {
+    borderRadius: 999,
+    backgroundColor: COLORS.surfaceCard,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  keywordChipText: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    color: COLORS.muted,
+    includeFontPadding: false,
+  },
+  actionBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  actionBadgeText: {
+    fontFamily: FONT.semibold,
+    fontSize: 13,
+    includeFontPadding: false,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+
+  /* Actions row */
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: COLORS.canvas,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.hairline,
+  },
+  actionCell: {
+    flex: 1,
+  },
+});
