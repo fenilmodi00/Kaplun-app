@@ -75,8 +75,17 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),
+    dismissTo: jest.fn(),
     back: jest.fn(),
   }),
+  // Run the focus callback once on mount (same contract as useEffect for tests).
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = require('react');
+    React.useEffect(() => {
+      const cleanup = callback();
+      return typeof cleanup === 'function' ? cleanup : undefined;
+    }, [callback]);
+  },
   useLocalSearchParams: () => ({}),
   Link: ({ children }: { children: React.ReactNode }) => children,
   Slot: ({ children }: { children?: React.ReactNode }) => children || null,

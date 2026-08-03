@@ -59,7 +59,20 @@ jest.mock('@/lib/bridge-context', () => ({
 }));
 
 jest.mock('@/lib/repository', () => ({
-  getCreatorByClerkId: jest.fn().mockResolvedValue(null),
+  getCreatorByClerkId: jest.fn().mockResolvedValue({
+    $id: 'creator-1',
+    clerk_user_id: 'test-user-id',
+    ig_user_id: '12345',
+    username: 'test_creator',
+    full_name: 'Test Creator',
+    follower_count: 1500,
+    following_count: 500,
+    media_count: 42,
+    profile_pic_url: '',
+    access_token: 'ig-token-plaintext',
+    token_expires_at: '2099-01-01T00:00:00.000Z',
+    is_onboarded: true,
+  }),
 }));
 
 const mockDashboardData = {
@@ -155,11 +168,12 @@ describe('HomeScreen — Connected state', () => {
   });
 
   it('shows quick action buttons (Reply to DMs, View insights)', async () => {
-    const { getByText } = await render(<HomeScreen />);
+    const { getByText, getAllByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
       expect(getByText('Reply to DMs')).toBeTruthy();
-      expect(getByText('View insights')).toBeTruthy();
+      // "View insights" appears on the module CTA and the quick-action chip.
+      expect(getAllByText('View insights').length).toBeGreaterThanOrEqual(1);
     }, { timeout: 5000, interval: 100 });
   });
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth } from "@clerk/expo";
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -369,50 +369,57 @@ export default function HomeScreen() {
   const [showPermissions, setShowPermissions] = useState(false);
   const [skipped, setSkipped] = useState(false);
 
-  // Wait for Appwrite bridge, then check Instagram connection — no race.
-  useEffect(() => {
-    let cancelled = false;
-    async function checkConnection() {
-      if (!user) {
-        setIsCheckingConnection(false);
-        return;
-      }
-      if (!bridgeReady) {
-        setIsCheckingConnection(true);
-        return;
-      }
-      try {
-        // Prefer Appwrite TablesDB as source of truth. Only call Graph when we
-        // already have a usable plaintext token — otherwise fetchProfile throws
-        // session_expired and the catch below used to wipe the row.
-        const creator = await getCreatorByClerkId(user.id);
-        if (creator?.access_token?.startsWith('enc1:')) {
-          // Legacy encrypted tokens cannot be used by the direct Graph client.
-          await clearInstagramTokenSilently();
-        } else if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
-          if (!cancelled) setProfile(profileFromCreator(creator));
-        } else if (hasUsableToken(creator)) {
-          const p = await fetchProfile();
-          if (!cancelled) setProfile(p);
+  // Re-check on every focus so Profile → Disconnect immediately shows
+  // the connect UI when the user returns to Home (tabs stay mounted).
+  const clerkUserId = user?.id;
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      async function checkConnection() {
+        if (!clerkUserId) {
+          setIsCheckingConnection(false);
+          return;
         }
-        // else: no usable token — leave profile null so the connect UI shows.
-      } catch (_err: unknown) {
-        // Do not clear the stored token here. Graph 190 cleanup belongs in
-        // @/lib/instagram (after a failed ig_refresh_token). Wiping on every
-        // session_expired made reconnect appear to succeed while leaving an
-        // empty access_token on the creators row.
-        if (!(_err instanceof Error && _err.message === 'session_expired')) {
-          // non-session errors are ignored for the connect gate
+        if (!bridgeReady) {
+          setIsCheckingConnection(true);
+          return;
         }
-      } finally {
-        if (!cancelled) setIsCheckingConnection(false);
+        try {
+          // Prefer Appwrite TablesDB as source of truth. Only call Graph when we
+          // already have a usable plaintext token — otherwise fetchProfile throws
+          // session_expired and the catch below used to wipe the row.
+          const creator = await getCreatorByClerkId(clerkUserId);
+          if (creator?.access_token?.startsWith('enc1:')) {
+            // Legacy encrypted tokens cannot be used by the direct Graph client.
+            await clearInstagramTokenSilently();
+            if (!cancelled) setProfile(null);
+          } else if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
+            if (!cancelled) setProfile(profileFromCreator(creator));
+          } else if (hasUsableToken(creator)) {
+            const p = await fetchProfile();
+            if (!cancelled) setProfile(p);
+          } else if (!cancelled) {
+            // Token cleared (e.g. Profile disconnect) — show connect UI.
+            setProfile(null);
+          }
+        } catch (_err: unknown) {
+          // Do not clear the stored token here. Graph 190 cleanup belongs in
+          // @/lib/instagram (after a failed ig_refresh_token). Wiping on every
+          // session_expired made reconnect appear to succeed while leaving an
+          // empty access_token on the creators row.
+          if (!(_err instanceof Error && _err.message === 'session_expired')) {
+            // non-session errors are ignored for the connect gate
+          }
+        } finally {
+          if (!cancelled) setIsCheckingConnection(false);
+        }
       }
-    }
-    checkConnection();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, bridgeReady]);
+      checkConnection();
+      return () => {
+        cancelled = true;
+      };
+    }, [clerkUserId, bridgeReady]),
+  );
 
   const handleConnect = useCallback(async () => {
     if (!user) return;
