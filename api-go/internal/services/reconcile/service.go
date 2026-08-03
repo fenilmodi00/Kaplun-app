@@ -17,6 +17,7 @@ type Automation struct {
 	TargetType    string
 	Keywords      []string
 	MatchMode     string
+	MatchAnyWord  bool
 	MediaIDs      []string
 	BoundMediaIDs []string
 }
@@ -134,9 +135,9 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 				if exists {
 					continue
 				}
-				if s.Matcher != nil && !s.Matcher.Matched(c.Text, auto.Keywords, wholeWord) {
-					continue
-				}
+			if !auto.MatchAnyWord && s.Matcher != nil && !s.Matcher.Matched(c.Text, auto.Keywords, wholeWord) {
+				continue
+			}
 
 				payload := map[string]any{
 					"instagram_account_id": auto.IgUserID,

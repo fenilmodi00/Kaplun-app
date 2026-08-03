@@ -66,8 +66,7 @@ type neverMatch struct{}
 
 func (neverMatch) Matched(string, []string, bool) bool { return false }
 
-func TestReconcileOnceEnqueues(t *testing.T) {
-	t.Parallel()
+func TestReconcileOnceEnqueues(t *testing.T) {	t.Parallel()
 
 	store := &fakeStore{
 		autos: []reconcile.Automation{{
@@ -151,6 +150,34 @@ func TestAttachNextReels(t *testing.T) {
 	bound := store.updates[0]["bound_media_ids"].([]string)
 	if len(bound) != 2 || bound[1] != "newest" {
 		t.Fatalf("bound: %v", bound)
+	}
+}
+
+func TestReconcileOnceMatchAnyWordBypassesMatcher(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		autos: []reconcile.Automation{{
+			ID: "a1", ClerkUserID: "u1", IgUserID: "ig1", TargetType: "specific_posts",
+			MediaIDs: []string{"m1"}, Keywords: []string{}, MatchAnyWord: true,
+		}},
+		creator:    reconcile.Creator{AccessToken: "tok"},
+		hasCreator: true,
+		logs:       map[string]bool{},
+	}
+	graph := &fakeGraph{
+		comments: []reconcile.Comment{{
+			ID: "c1", Text: "anything at all", From: map[string]string{"id": "u2", "username": "bob"},
+		}},
+	}
+	svc := reconcile.NewService(store, graph, plainCrypto{}, neverMatch{})
+
+	res, err := svc.ReconcileOnce(context.Background())
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.Enqueued != 1 {
+		t.Fatalf("enqueued=%d jobs=%v", res.Enqueued, store.jobs)
 	}
 }
 
