@@ -154,12 +154,12 @@ describe('HomeScreen — Connected state', () => {
     }, { timeout: 5000, interval: 100 });
   });
 
-  it('shows quick action buttons (New post, Reply to DMs)', async () => {
+  it('shows quick action buttons (Reply to DMs, View insights)', async () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByText('New post')).toBeTruthy();
       expect(getByText('Reply to DMs')).toBeTruthy();
+      expect(getByText('View insights')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
   });
 

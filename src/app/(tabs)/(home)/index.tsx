@@ -164,7 +164,6 @@ function PermissionsPanel({ open }: { open: boolean }) {
     { label: 'See your profile and media', code: 'instagram_business_basic' },
     { label: 'Read and reply to your DMs', code: 'instagram_business_manage_messages' },
     { label: 'Read your analytics', code: 'instagram_business_manage_insights' },
-    { label: 'Publish posts you approve', code: 'instagram_business_content_publish' },
     { label: 'Read and reply to comments', code: 'instagram_business_manage_comments' },
   ];
 
@@ -332,7 +331,6 @@ function Module({
 function QuickActions() {
   const router = useRouter();
   const actions = [
-    { label: 'New post', icon: 'add-circle-outline' as const, route: '/(tabs)/(publish)' },
     { label: 'Reply to DMs', icon: 'chatbubble-outline' as const, route: '/(tabs)/(messages)' },
     { label: 'View insights', icon: 'stats-chart-outline' as const, route: '/(tabs)/(insights)' },
   ];
@@ -594,10 +592,6 @@ export default function HomeScreen() {
                 icon="stats-chart-outline"
                 text="See post & audience insights without switching apps"
               />
-              <ValueBullet
-                icon="calendar-outline"
-                text="Publish and schedule content in one place"
-              />
             </View>
 
             {/* Error strip */}
@@ -691,7 +685,7 @@ export default function HomeScreen() {
             title="Latest post performance"
             subtitle="Reach, likes and comments"
             emptyTitle="No posts synced yet"
-            emptyBody="Publish your first post from Kaplun and its insights will land here."
+            emptyBody="Share a post on Instagram and its performance will land here."
             buttonText="View insights"
             buttonRoute="/(tabs)/(insights)"
             bgClass="bg-brand-teal"
