@@ -23,7 +23,11 @@
 
 import { account } from './appwrite';
 import { executeWithRetry } from './resilient';
-import { getCreatorByClerkId, updateCreatorToken } from './repository';
+import {
+  clearCreatorInstagramAuth,
+  getCreatorByClerkId,
+  updateCreatorToken,
+} from './repository';
 import { addLog } from './logger';
 
 // v22.0 is the FIRST version with account insights for the Instagram API with
@@ -457,13 +461,15 @@ export async function fetchAccountInsights(
 }
 
 /**
- * Disconnects Instagram by clearing the stored OAuth token on the creators
- * row. After this, token resolution fails and the app routes to the
- * connect/reconnect flow. No-op if no creator row exists.
+ * Disconnects Instagram fully: clears OAuth token, session JSON, and
+ * onboarding flag on the creators row. After this, token resolution fails
+ * and reconnect must run a fresh OAuth authorize (with force_reauth).
+ * No-op if no creator row exists.
  */
 export async function disconnectInstagram(): Promise<void> {
   const user = await account.get();
   const creator = await getCreatorByClerkId(user.$id);
   if (!creator || !creator.$id) return;
-  await updateCreatorToken(creator.$id, '', '');
+  await clearCreatorInstagramAuth(creator.$id);
+  addLog(`ig: disconnected creator_row=${creator.$id.slice(0, 12)}…`);
 }

@@ -66,6 +66,28 @@ export async function updateCreatorToken(
   );
 }
 
+/**
+ * Fully clear Instagram auth on a creator row so reconnect starts clean.
+ * Wipes the token fields and marks not onboarded. (Do not write
+ * `ig_session_json` — that attribute is not on the live creators table.)
+ */
+export async function clearCreatorInstagramAuth(rowId: string): Promise<void> {
+  await executeWithRetryAndTimeout(
+    () =>
+      tablesDB.updateRow({
+        databaseId: DATABASE_ID,
+        tableId: TABLES.CREATORS,
+        rowId,
+        data: {
+          access_token: '',
+          token_expires_at: '',
+          is_onboarded: false,
+        },
+      }),
+    DEFAULT_TIMEOUT_MS,
+  );
+}
+
 // ── Deal Threads ─────────────────────────────────────────────────────────
 
 /**

@@ -17,9 +17,12 @@ jest.mock('@/lib/appwrite', () => ({
 
 const mockGetCreatorByClerkId = jest.fn();
 const mockUpdateCreatorToken = jest.fn();
+const mockClearCreatorInstagramAuth = jest.fn();
 jest.mock('@/lib/repository', () => ({
   getCreatorByClerkId: (...args: unknown[]) => mockGetCreatorByClerkId(...args),
   updateCreatorToken: (...args: unknown[]) => mockUpdateCreatorToken(...args),
+  clearCreatorInstagramAuth: (...args: unknown[]) =>
+    mockClearCreatorInstagramAuth(...args),
 }));
 
 import {
@@ -42,6 +45,7 @@ beforeEach(() => {
   mockAccountGet.mockReset().mockResolvedValue({ $id: 'user_test' });
   mockGetCreatorByClerkId.mockReset().mockResolvedValue(CREATOR_ROW);
   mockUpdateCreatorToken.mockReset().mockResolvedValue(undefined);
+  mockClearCreatorInstagramAuth.mockReset().mockResolvedValue(undefined);
 });
 
 function graphOk(body: unknown) {
@@ -198,7 +202,7 @@ describe('token refresh on 190', () => {
       .mockResolvedValueOnce(graphError(190, 'Session has expired'));
 
     await expect(fetchMedia()).rejects.toThrow('session_expired');
-    expect(mockUpdateCreatorToken).toHaveBeenCalledWith('row-1', '', '');
+    expect(mockClearCreatorInstagramAuth).toHaveBeenCalledWith('row-1');
   });
 
   it('throws session_expired when the retry after refresh is still 190', async () => {
@@ -344,10 +348,11 @@ describe('fetchAccountInsights', () => {
 });
 
 describe('disconnectInstagram', () => {
-  it('clears the stored token on the creators row', async () => {
+  it('fully clears Instagram auth on the creators row', async () => {
     await disconnectInstagram();
 
-    expect(mockUpdateCreatorToken).toHaveBeenCalledWith('row-1', '', '');
+    expect(mockClearCreatorInstagramAuth).toHaveBeenCalledWith('row-1');
+    expect(mockUpdateCreatorToken).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -355,6 +360,6 @@ describe('disconnectInstagram', () => {
     mockGetCreatorByClerkId.mockResolvedValueOnce(null);
 
     await expect(disconnectInstagram()).resolves.toBeUndefined();
-    expect(mockUpdateCreatorToken).not.toHaveBeenCalled();
+    expect(mockClearCreatorInstagramAuth).not.toHaveBeenCalled();
   });
 });
