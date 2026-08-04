@@ -37,11 +37,12 @@ type CommentStore interface {
 	UpdateLog(ctx context.Context, logID string, data map[string]any) error
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
 	GetCreatorByClerkID(ctx context.Context, clerkUserID string) (map[string]any, error)
+	UpdateCreatorToken(ctx context.Context, creatorID, token, expiresAt string) error
 	GetAutomation(ctx context.Context, automationID string) (map[string]any, error)
 	GetJob(ctx context.Context, jobID string) (map[string]any, error)
 	UpdateJob(ctx context.Context, jobID string, data map[string]any) error
-	CountRecentDMActions(igUserID, since string) int
-	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error)
+	CountRecentDMActions(ctx context.Context, igUserID, since string) (int, error)
+	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt, dedupKey string) (string, error)
 	HasPendingFollowUp(ctx context.Context, automationID, userID string) (bool, error)
 }
 
@@ -55,25 +56,20 @@ type GraphSender interface {
 	SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) error
 	SendDirectMessageWithLinkButton(ctx context.Context, igAccountID, userID, text, buttonTitle, url, accessToken string) error
 	GetUserFollowStatus(ctx context.Context, accessToken, recipientID string) (*bool, error)
-}
-
-// TokenDecryptor decrypts stored access tokens (or returns plaintext legacy values).
-type TokenDecryptor interface {
-	DecryptOrPlaintext(stored string) string
+	RefreshLongLivedToken(ctx context.Context, token string) (accessToken string, expiresIn int, err error)
 }
 
 // CommentRunner implements JobRunner for process_comment / send_reveal jobs.
 type CommentRunner struct {
 	Store         CommentStore
 	Graph         GraphSender
-	Crypto        TokenDecryptor
 	PublicBaseURL string
 	Log           *slog.Logger
 	Now           func() time.Time
 }
 
 // NewCommentRunner constructs a CommentRunner with UTC clock defaults.
-func NewCommentRunner(store CommentStore, graph GraphSender, crypto TokenDecryptor) *CommentRunner {
+func NewCommentRunner(store CommentStore, graph GraphSender) *CommentRunner {
 	base := strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL"))
 	if base == "" {
 		base = "https://api.example.com"
@@ -81,7 +77,6 @@ func NewCommentRunner(store CommentStore, graph GraphSender, crypto TokenDecrypt
 	return &CommentRunner{
 		Store:         store,
 		Graph:         graph,
-		Crypto:        crypto,
 		PublicBaseURL: strings.TrimRight(base, "/"),
 		Now:           func() time.Time { return time.Now().UTC() },
 	}
@@ -167,7 +162,7 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 		}
 		if existing != nil {
 			action := mapString(existing, "action")
-			if action == "dm_sent" || action == "button_dm_sent" || action == "skipped" {
+			if action == "dm_sent" || action == "button_dm_sent" || action == "skipped" || mapString(existing, "dm_sent_at") != "" {
 				continue
 			}
 		}
@@ -183,15 +178,18 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 			continue
 		}
 
-		token, derr := r.decryptToken(mapString(creator, "access_token"))
-		if derr != nil {
-			if err := r.failLog(ctx, existing, auto, event, "token_decrypt_failed"); err != nil {
-				return "done", err
+		rate, rateErr := ratelimit.CheckDMRate(ctx, r.Store, igID, requeueAttempt)
+		if rateErr != nil {
+			// Fail-open like the pre-ctx counter (which counted 0 on error),
+			// but never silently.
+			if r.Log != nil {
+				r.Log.WarnContext(ctx, "dm rate check failed, allowing send",
+					"automation_id", mapString(auto, "$id"),
+					"error", rateErr,
+				)
 			}
-			continue
+			rate = ratelimit.RateDecision{Allowed: true}
 		}
-
-		rate := ratelimit.CheckDMRate(r.Store, igID, requeueAttempt)
 		if !rate.Allowed {
 			if rate.ShouldSkip {
 				if err := r.failLog(ctx, existing, auto, event, "skipped_rate_limit"); err != nil {
@@ -208,19 +206,19 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 			if len(commentTrim) > 1000 {
 				commentTrim = commentTrim[:1000]
 			}
-		created, cerr := r.Store.CreateLog(ctx, map[string]any{
-			"automation_id":      mapString(auto, "$id"),
-			"clerk_user_id":      mapString(auto, "clerk_user_id"),
-			"ig_user_id":         igID,
-			"media_id":           mediaID,
-			"comment_id":         commentID,
-			"commenter_id":       nilIfEmpty(mapString(event, "commenter_id")),
-			"commenter_username": nilIfEmpty(commenterName),
-			"comment_text":       commentTrim,
-			"matched_keyword":    nilIfEmpty(matchedKeyword),
-			"action":             "pending",
-			"created_at":         r.nowISO(),
-		})
+			created, cerr := r.Store.CreateLog(ctx, map[string]any{
+				"automation_id":      mapString(auto, "$id"),
+				"clerk_user_id":      mapString(auto, "clerk_user_id"),
+				"ig_user_id":         igID,
+				"media_id":           mediaID,
+				"comment_id":         commentID,
+				"commenter_id":       nilIfEmpty(mapString(event, "commenter_id")),
+				"commenter_username": nilIfEmpty(commenterName),
+				"comment_text":       commentTrim,
+				"matched_keyword":    nilIfEmpty(matchedKeyword),
+				"action":             "pending",
+				"created_at":         r.nowISO(),
+			})
 			if cerr != nil {
 				if IsDuplicateKey(cerr) {
 					continue
@@ -230,7 +228,9 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 			logRow = created
 		}
 
-		if err := r.sendAutomationMessages(ctx, auto, event, logRow, token, commenterName); err != nil {
+		if err := r.sendWithFreshToken(ctx, auto, creator, func(token string) error {
+			return r.sendAutomationMessages(ctx, auto, event, logRow, token, commenterName)
+		}); err != nil {
 			if meta.IsTokenExpired(err) {
 				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
 					"status":     "error",
@@ -263,9 +263,13 @@ func (r *CommentRunner) sendAutomationMessages(
 
 	commentID := mapString(event, "comment_id")
 	igID := mapString(event, "instagram_account_id")
+	logID := mapString(logRow, "$id")
 
-	// STEP 7: public reply FIRST — MetaApiError never blocks the DM.
-	if mapBool(auto, "public_reply_enabled") {
+	// STEP 7: public reply first — the log row already exists at this point, so
+	// a successful send is stamped (public_reply_sent_at) and never double-posts
+	// across job retries. ANY failure is recorded (public_reply_error) and never
+	// blocks the DM leg.
+	if mapBool(auto, "public_reply_enabled") && mapString(logRow, "public_reply_sent_at") == "" {
 		msg := ""
 		if msgs := mapStringSlice(auto, "public_reply_messages"); len(msgs) > 0 {
 			msg = msgs[rand.Intn(len(msgs))]
@@ -274,18 +278,42 @@ func (r *CommentRunner) sendAutomationMessages(
 		}
 		if msg != "" {
 			if err := r.Graph.SendCommentReply(ctx, commentID, Personalize(msg, commenterName), token); err != nil {
-				if meta.IsMetaAPIError(err) {
-					if r.Log != nil {
-						r.Log.WarnContext(ctx, "public reply failed",
-							"automation_id", mapString(auto, "$id"),
-							"error", err,
-						)
-					}
-				} else {
-					return err
+				if r.Log != nil {
+					r.Log.WarnContext(ctx, "public reply failed",
+						"automation_id", mapString(auto, "$id"),
+						"error", err,
+					)
 				}
+				reason := err.Error()
+				if len(reason) > 500 {
+					reason = reason[:500]
+				}
+				if uerr := r.Store.UpdateLog(ctx, logID, map[string]any{
+					"public_reply_error": reason,
+				}); uerr != nil && r.Log != nil {
+					r.Log.WarnContext(ctx, "failed to record public reply error",
+						"automation_id", mapString(auto, "$id"),
+						"error", uerr,
+					)
+				}
+			} else if uerr := r.Store.UpdateLog(ctx, logID, map[string]any{
+				"public_reply_sent_at": r.nowISO(),
+				"public_reply_error":   nil,
+			}); uerr != nil && r.Log != nil {
+				// The reply was posted; a missed stamp risks a re-post on retry,
+				// but failing the job here would guarantee one. Log only.
+				r.Log.WarnContext(ctx, "failed to stamp public_reply_sent_at",
+					"automation_id", mapString(auto, "$id"),
+					"error", uerr,
+				)
 			}
 		}
+	}
+
+	// Crash-safe dedup: dm_sent_at is stamped in the same UpdateLog that flips
+	// the action, so a set timestamp proves the DM leg already delivered.
+	if mapString(logRow, "dm_sent_at") != "" {
+		return nil
 	}
 
 	// Cross-campaign dedup: Meta allows exactly one private reply per comment.
@@ -352,9 +380,10 @@ func (r *CommentRunner) sendAutomationMessages(
 				); err != nil {
 					return err
 				}
-				return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-					"action": "dm_sent",
-					"reason": "follow_prompt_sent",
+				return r.Store.UpdateLog(ctx, logID, map[string]any{
+					"action":     "dm_sent",
+					"reason":     "follow_prompt_sent",
+					"dm_sent_at": r.nowISO(),
 				})
 			}
 		}
@@ -386,9 +415,10 @@ func (r *CommentRunner) sendAutomationMessages(
 				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
 					return err
 				}
-				if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-					"action": "dm_sent",
-					"reason": nil,
+				if err := r.Store.UpdateLog(ctx, logID, map[string]any{
+					"action":     "dm_sent",
+					"reason":     nil,
+					"dm_sent_at": r.nowISO(),
 				}); err != nil {
 					return err
 				}
@@ -397,9 +427,10 @@ func (r *CommentRunner) sendAutomationMessages(
 			}
 			return err
 		}
-		if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-			"action": "button_dm_sent",
-			"reason": nil,
+		if err := r.Store.UpdateLog(ctx, logID, map[string]any{
+			"action":     "button_dm_sent",
+			"reason":     nil,
+			"dm_sent_at": r.nowISO(),
 		}); err != nil {
 			return err
 		}
@@ -410,9 +441,10 @@ func (r *CommentRunner) sendAutomationMessages(
 	if err := r.Graph.SendPrivateReply(ctx, igID, commentID, Personalize(dmText, commenterName), token); err != nil {
 		return err
 	}
-	if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-		"action": "dm_sent",
-		"reason": nil,
+	if err := r.Store.UpdateLog(ctx, logID, map[string]any{
+		"action":     "dm_sent",
+		"reason":     nil,
+		"dm_sent_at": r.nowISO(),
 	}); err != nil {
 		return err
 	}
@@ -521,12 +553,7 @@ func (r *CommentRunner) sendRevealWithFallback(ctx context.Context, auto map[str
 		return fmt.Errorf("no access_token for automation %s", automationID)
 	}
 
-	token, derr := r.decryptToken(mapString(creator, "access_token"))
-	if derr != nil {
-		return derr
-	}
-
-	return r.sendRevealMessage(ctx, auto, igID, userID, "read_fallback:"+userID, token, "")
+	return r.sendRevealMessage(ctx, auto, igID, userID, "read_fallback:"+userID, mapString(creator, "access_token"), "")
 }
 
 // sendRevealStandard handles the standard postback path.
@@ -557,10 +584,7 @@ func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]
 		return fmt.Errorf("no access_token for automation %s", automationID)
 	}
 
-	token, err := r.decryptToken(mapString(creator, "access_token"))
-	if err != nil {
-		return err
-	}
+	token := mapString(creator, "access_token")
 
 	// Follow gate check: if requireFollow is true, verify follow status before revealing.
 	// Fail-open: if unverifiable (null), send the reveal anyway.
@@ -605,6 +629,7 @@ func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]
 				"matched_keyword":    nil,
 				"action":             "dm_sent",
 				"reason":             "follow_prompt_resent",
+				"dm_sent_at":         r.nowISO(),
 				"created_at":         r.nowISO(),
 			})
 			return err
@@ -651,8 +676,9 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 
 	if logID != "" {
 		if err := r.Store.UpdateLog(ctx, logID, map[string]any{
-			"action": "reveal_sent",
-			"reason": nil,
+			"action":     "reveal_sent",
+			"reason":     nil,
+			"dm_sent_at": r.nowISO(),
 		}); err != nil {
 			return err
 		}
@@ -670,6 +696,7 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 		"comment_text":       nil,
 		"matched_keyword":    nil,
 		"action":             "reveal_sent",
+		"dm_sent_at":         r.nowISO(),
 		"created_at":         r.nowISO(),
 	})
 	if err != nil {
@@ -684,6 +711,7 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 				_ = r.Store.UpdateLog(ctx, mapString(existing, "$id"), map[string]any{
 					"action":     "reveal_sent",
 					"reason":     nil,
+					"dm_sent_at": r.nowISO(),
 					"created_at": r.nowISO(),
 				})
 			}
@@ -730,7 +758,7 @@ func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]an
 		"user_id":              userID,
 		"automation_id":        mapString(auto, "$id"),
 		"commenter_name":       commenterName,
-	}, runAt)
+	}, runAt, mapString(auto, "$id")+":"+userID)
 	if err != nil && r.Log != nil {
 		r.Log.WarnContext(ctx, "failed to schedule follow-up job", "automation_id", mapString(auto, "$id"), "error", err)
 	}
@@ -814,7 +842,7 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 		}
 		if existing != nil {
 			action := mapString(existing, "action")
-			if action == "dm_sent" || action == "reveal_sent" || action == "skipped" {
+			if action == "dm_sent" || action == "reveal_sent" || action == "skipped" || mapString(existing, "dm_sent_at") != "" {
 				continue
 			}
 		}
@@ -825,14 +853,6 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 		}
 		if creator == nil || mapString(creator, "access_token") == "" {
 			if err := r.failLog(ctx, existing, auto, payload, "no_access_token"); err != nil {
-				return err
-			}
-			continue
-		}
-
-		token, derr := r.decryptToken(mapString(creator, "access_token"))
-		if derr != nil {
-			if err := r.failLog(ctx, existing, auto, payload, "token_decrypt_failed"); err != nil {
 				return err
 			}
 			continue
@@ -869,7 +889,9 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 		// Send the reveal directly via sendRevealMessage, updating the pending
 		// log row in place (no second insert on the unique index).
 		// The DM path skips the opening DM entirely and delivers the reveal.
-		if err := r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token, mapString(logRow, "$id")); err != nil {
+		if err := r.sendWithFreshToken(ctx, auto, creator, func(token string) error {
+			return r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token, mapString(logRow, "$id"))
+		}); err != nil {
 			if meta.IsTokenExpired(err) {
 				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
 					"status":     "error",
@@ -916,6 +938,17 @@ func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any)
 		return fmt.Errorf("automation %s ig_user_id mismatch", automationID)
 	}
 
+	// Idempotency: a prior attempt that already delivered the follow-up stamped
+	// the row (reply_sent / dm_sent_at). 'pending' stays OUT of the skip set so
+	// crash-before-send retries still run.
+	existing, err := r.Store.FindLog(ctx, automationID, "followup:"+userID)
+	if err != nil {
+		return err
+	}
+	if existing != nil && (mapString(existing, "action") == "reply_sent" || mapString(existing, "dm_sent_at") != "") {
+		return nil
+	}
+
 	creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
 	if err != nil {
 		return err
@@ -924,10 +957,7 @@ func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any)
 		return fmt.Errorf("no access_token for automation %s", automationID)
 	}
 
-	token, err := r.decryptToken(mapString(creator, "access_token"))
-	if err != nil {
-		return err
-	}
+	token := mapString(creator, "access_token")
 
 	followUpMessage := mapString(auto, "follow_up_message")
 	if followUpMessage == "" {
@@ -949,8 +979,13 @@ func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any)
 		"comment_text":       nil,
 		"matched_keyword":    nil,
 		"action":             "reply_sent",
+		"dm_sent_at":         r.nowISO(),
 		"created_at":         r.nowISO(),
 	})
+	if IsDuplicateKey(err) {
+		// A racing attempt already recorded the send.
+		return nil
+	}
 	return err
 }
 
@@ -1134,19 +1169,57 @@ func (r *CommentRunner) failLog(ctx context.Context, existing, auto, event map[s
 	return err
 }
 
-func (r *CommentRunner) decryptToken(stored string) (string, error) {
-	if r.Crypto == nil {
-		return stored, nil
+// sendWithFreshToken runs send with the creator's stored token. On a Meta 190
+// (token expired) it refreshes the long-lived token once, persists the new
+// token + expiry, reactivates the automation, and retries the send exactly
+// once — mirroring the app-side callWithFreshToken contract. If the refresh
+// itself fails, the original expiry error is returned so the caller falls back
+// to marking the automation status=error.
+func (r *CommentRunner) sendWithFreshToken(ctx context.Context, auto, creator map[string]any, send func(token string) error) error {
+	token := mapString(creator, "access_token")
+	err := send(token)
+	if !meta.IsTokenExpired(err) {
+		return err
 	}
-	// Match Python: decrypt_or_plaintext never raises on bad ciphertext, but
-	// crypto construction failures are surfaced by injectable wrappers.
-	type fallible interface {
-		DecryptOrPlaintextErr(stored string) (string, error)
+
+	refreshed, expiresIn, refreshErr := r.Graph.RefreshLongLivedToken(ctx, token)
+	if refreshErr != nil {
+		if r.Log != nil {
+			r.Log.WarnContext(ctx, "token refresh failed after 190",
+				"automation_id", mapString(auto, "$id"),
+				"error", refreshErr,
+			)
+		}
+		return err
 	}
-	if f, ok := r.Crypto.(fallible); ok {
-		return f.DecryptOrPlaintextErr(stored)
+
+	now := time.Now().UTC()
+	if r.Now != nil {
+		now = r.Now().UTC()
 	}
-	return r.Crypto.DecryptOrPlaintext(stored), nil
+	expiresAt := now.Add(time.Duration(expiresIn) * time.Second).Format(time.RFC3339Nano)
+	if perr := r.Store.UpdateCreatorToken(ctx, mapString(creator, "$id"), refreshed, expiresAt); perr != nil && r.Log != nil {
+		// Best-effort: the in-memory token still works for the retry below.
+		r.Log.WarnContext(ctx, "failed to persist refreshed token",
+			"creator_id", mapString(creator, "$id"),
+			"error", perr,
+		)
+	}
+	if uerr := r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
+		"status":     "active",
+		"updated_at": r.nowISO(),
+	}); uerr != nil && r.Log != nil {
+		r.Log.WarnContext(ctx, "failed to reactivate automation after token refresh",
+			"automation_id", mapString(auto, "$id"),
+			"error", uerr,
+		)
+	}
+	if r.Log != nil {
+		r.Log.InfoContext(ctx, "token refreshed after 190, retrying send",
+			"automation_id", mapString(auto, "$id"),
+		)
+	}
+	return send(refreshed)
 }
 
 func (r *CommentRunner) nowISO() string {
@@ -1207,13 +1280,21 @@ func logTime(m map[string]any) time.Time {
 	return time.Time{}
 }
 
-// igAccountMatches accepts either the professional user_id (webhook entry.id)
-// or the app-scoped id. Meta Instagram Login uses user_id in webhooks while
-// older Kaplun rows stored the app-scoped id — both refer to one account.
-// When both IDs are set and differ, still accept: ListActiveForIG / GetAutomation
-// already scoped the row; Meta signs the webhook.
+// igAccountMatches verifies the webhook/job IG account against the automation
+// row's stored identifiers. Meta Instagram Login uses the professional user_id
+// in webhook entry.id while older rows may store the app-scoped id — either
+// matches. Rows with neither identifier are trusted: ListActiveForIG /
+// GetAutomation already scoped them and Meta signs the webhook.
 func igAccountMatches(auto map[string]any, eventIG string) bool {
-	return eventIG != ""
+	if eventIG == "" {
+		return false
+	}
+	igUserID := mapString(auto, "ig_user_id")
+	igScopedID := mapString(auto, "ig_scoped_id")
+	if igUserID == "" && igScopedID == "" {
+		return true
+	}
+	return eventIG == igUserID || eventIG == igScopedID
 }
 
 func preferredAccountID(auto map[string]any, eventIG string) string {
@@ -1296,4 +1377,3 @@ func nilIfEmpty(s string) any {
 	}
 	return s
 }
-

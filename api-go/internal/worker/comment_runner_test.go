@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -155,7 +156,20 @@ func (f *fakeStore) UpdateLog(_ context.Context, logID string, data map[string]a
 	return nil
 }
 
-func (f *fakeStore) CountRecentDMActions(string, string) int { return f.dmCount }
+func (f *fakeStore) CountRecentDMActions(context.Context, string, string) (int, error) {
+	return f.dmCount, nil
+}
+
+func (f *fakeStore) UpdateCreatorToken(_ context.Context, creatorID, token, expiresAt string) error {
+	for _, c := range f.creators {
+		if c["$id"] == creatorID {
+			c["access_token"] = token
+			c["token_expires_at"] = expiresAt
+			return nil
+		}
+	}
+	return nil
+}
 
 func (f *fakeStore) GetCreatorByClerkID(_ context.Context, clerkID string) (map[string]any, error) {
 	return f.creators[clerkID], nil
@@ -195,7 +209,7 @@ func (f *fakeStore) GetJob(_ context.Context, jobID string) (map[string]any, err
 	return f.jobs[jobID], nil
 }
 
-func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
+func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[string]any, runAt, dedupKey string) (string, error) {
 	f.seq++
 	jobID := "job" + strconv.Itoa(f.seq)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -230,43 +244,59 @@ type graphCall struct {
 }
 
 type fakeGraph struct {
-	calls []graphCall
-	dmErr error
+	calls            []graphCall
+	dmErr            error
+	dmErrOnce        bool
+	replyErr         error
+	refreshToken     string
+	refreshExpiresIn int
+	refreshErr       error
+	refreshCalls     int
+}
+
+// dmError returns the configured DM failure, clearing it after the first call
+// when dmErrOnce is set (190-then-recover scenarios).
+func (g *fakeGraph) dmError() error {
+	err := g.dmErr
+	if g.dmErrOnce {
+		g.dmErr = nil
+	}
+	return err
 }
 
 func (g *fakeGraph) SendCommentReply(_ context.Context, commentID, message, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "reply", Args: []any{commentID, message, accessToken}})
-	return nil
+	return g.replyErr
 }
 
 func (g *fakeGraph) SendPrivateReply(_ context.Context, ig, commentID, text, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "dm", Args: []any{ig, commentID, text, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) SendPrivateReplyWithButton(_ context.Context, ig, commentID, text, buttonTitle, payload, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "button_dm", Args: []any{ig, commentID, text, buttonTitle, payload, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) SendPrivateReplyWithLinkButton(_ context.Context, ig, commentID, text, buttonTitle, url, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "link_button_dm", Args: []any{ig, commentID, text, buttonTitle, url, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) SendDirectMessage(_ context.Context, ig, userID, text, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_dm", Args: []any{ig, userID, text, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) SendDirectMessageWithButton(_ context.Context, ig, userID, text, buttonTitle, payload, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_button_dm", Args: []any{ig, userID, text, buttonTitle, payload, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) SendDirectMessageWithLinkButton(_ context.Context, ig, userID, text, buttonTitle, url, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_link_button_dm", Args: []any{ig, userID, text, buttonTitle, url, accessToken}})
-	return g.dmErr
+	return g.dmError()
 }
 
 func (g *fakeGraph) GetUserFollowStatus(_ context.Context, accessToken, recipientID string) (*bool, error) {
@@ -275,12 +305,20 @@ func (g *fakeGraph) GetUserFollowStatus(_ context.Context, accessToken, recipien
 	return &following, nil
 }
 
-type plainCrypto struct{}
-
-func (plainCrypto) DecryptOrPlaintext(stored string) string { return stored }
+func (g *fakeGraph) RefreshLongLivedToken(_ context.Context, token string) (string, int, error) {
+	g.refreshCalls++
+	g.calls = append(g.calls, graphCall{Kind: "refresh", Args: []any{token}})
+	if g.refreshErr != nil {
+		return "", 0, g.refreshErr
+	}
+	if g.refreshToken == "" {
+		return "", 0, errors.New("refresh not configured")
+	}
+	return g.refreshToken, g.refreshExpiresIn, nil
+}
 
 func newRunner(store *fakeStore, graph *fakeGraph) *worker.CommentRunner {
-	r := worker.NewCommentRunner(store, graph, plainCrypto{})
+	r := worker.NewCommentRunner(store, graph)
 	r.Now = func() time.Time { return time.Now().UTC() }
 	return r
 }
@@ -719,7 +757,7 @@ func TestFollowUpJobDedupsExistingPending(t *testing.T) {
 		"instagram_account_id": "ig1",
 		"user_id":              "u99",
 		"automation_id":        "a1",
-	}, "")
+	}, "", "")
 	if err != nil {
 		t.Fatalf("seed job: %v", err)
 	}
@@ -1006,5 +1044,184 @@ func TestReadFallbackSkipsUserWithoutButtonDM(t *testing.T) {
 	}
 	if store.jobs["j_fb"]["status"] != "done" {
 		t.Fatalf("job status: %#v", store.jobs["j_fb"]["status"])
+	}
+}
+
+func TestTokenExpiredRefreshesTokenAndRetriesSend(t *testing.T) {
+	t.Parallel()
+	// Copy the shared fixture: the refresh persists into the creator row and
+	// must not leak into parallel tests.
+	creator := map[string]any{}
+	for k, v := range testCreator {
+		creator[k] = v
+	}
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": creator}, 0)
+	graph := &fakeGraph{
+		dmErr:            &meta.TokenExpiredError{MetaAPIError: &meta.MetaAPIError{Code: 190, Message: "Session expired"}},
+		dmErrOnce:        true,
+		refreshToken:     "fresh-token",
+		refreshExpiresIn: 5184000,
+	}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if graph.refreshCalls != 1 {
+		t.Fatalf("expected 1 refresh, got %d", graph.refreshCalls)
+	}
+	if got := kinds(graph.calls); len(got) != 4 || got[0] != "reply" || got[1] != "dm" || got[2] != "refresh" || got[3] != "dm" {
+		t.Fatalf("calls: %v", got)
+	}
+	retry := graph.calls[3]
+	if retry.Args[3] != "fresh-token" {
+		t.Fatalf("retry token: %#v", retry.Args)
+	}
+	if got := store.creators["user1"]["access_token"]; got != "fresh-token" {
+		t.Fatalf("creator token: %#v", got)
+	}
+	if store.creators["user1"]["token_expires_at"] == nil {
+		t.Fatalf("creator token_expires_at not persisted: %#v", store.creators["user1"])
+	}
+	if store.automations[0]["status"] != "active" {
+		t.Fatalf("automation status: %#v", store.automations[0]["status"])
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["action"] != "dm_sent" {
+		t.Fatalf("log: %#v", log)
+	}
+	if log["dm_sent_at"] == nil || log["dm_sent_at"] == "" {
+		t.Fatalf("dm_sent_at missing: %#v", log)
+	}
+}
+
+func TestTokenExpiredRefreshFailureKeepsMarkErrorBehavior(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{
+		dmErr:      &meta.TokenExpiredError{MetaAPIError: &meta.MetaAPIError{Code: 190, Message: "Session expired"}},
+		refreshErr: errors.New("refresh rejected"),
+	}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if graph.refreshCalls != 1 {
+		t.Fatalf("expected 1 refresh attempt, got %d", graph.refreshCalls)
+	}
+	if store.automations[0]["status"] != "error" {
+		t.Fatalf("automation status: %#v", store.automations[0]["status"])
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["action"] != "failed" || log["reason"] != "token_expired" {
+		t.Fatalf("log: %#v", log)
+	}
+}
+
+func TestDMSentAtSkipsSendEvenWhenActionStillPending(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": testCreator}, 0)
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id": "a1",
+		"comment_id":    "c1",
+		"action":        "pending",
+		"dm_sent_at":    time.Now().UTC().Format(time.RFC3339Nano),
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no sends when dm_sent_at is set, got %v", kinds(graph.calls))
+	}
+}
+
+func TestPublicReplyErrorRecordedAndDMStillSent(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{replyErr: errors.New("transport boom")}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if got := kinds(graph.calls); len(got) != 2 || got[0] != "reply" || got[1] != "dm" {
+		t.Fatalf("calls: %v", got)
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["action"] != "dm_sent" {
+		t.Fatalf("log: %#v", log)
+	}
+	if log["public_reply_error"] != "transport boom" {
+		t.Fatalf("public_reply_error: %#v", log["public_reply_error"])
+	}
+	if log["public_reply_sent_at"] != nil && log["public_reply_sent_at"] != "" {
+		t.Fatalf("public_reply_sent_at should be empty: %#v", log["public_reply_sent_at"])
+	}
+}
+
+func TestPublicReplyNotResentWhenAlreadyStamped(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": testCreator}, 0)
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id":        "a1",
+		"comment_id":           "c1",
+		"action":               "pending",
+		"public_reply_sent_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"created_at":           time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "dm" {
+		t.Fatalf("expected DM only (public reply already stamped), got %v", got)
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["action"] != "dm_sent" || log["dm_sent_at"] == nil || log["dm_sent_at"] == "" {
+		t.Fatalf("log: %#v", log)
+	}
+}
+
+func TestFollowUpSkipsWhenAlreadySent(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"follow_up_message": "Later {username}!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id": "a1",
+		"comment_id":    "followup:u99",
+		"action":        "reply_sent",
+		"dm_sent_at":    time.Now().UTC().Format(time.RFC3339Nano),
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	store.addJob("j_fu", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u99",
+		"automation_id":        "a1",
+	}, "pending", 0, worker.JobTypeFollowUp)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_fu"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no duplicate follow-up send, got %v", kinds(graph.calls))
+	}
+	if store.jobs["j_fu"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_fu"]["status"])
 	}
 }
