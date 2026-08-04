@@ -51,7 +51,7 @@ export interface AutomationLog {
   commenter_username: string | null;
   comment_text: string | null;
   matched_keyword: string | null;
-  action: 'pending' | 'dm_sent' | 'button_dm_sent' | 'reveal_sent' | 'reply_sent' | 'skipped' | 'skipped_dedup' | 'skipped_no_match' | 'failed';
+  action: 'pending' | 'dm_sent' | 'button_dm_sent' | 'reveal_sent' | 'reply_sent' | 'skipped' | 'failed';
   reason: string | null;
   created_at: string;
 }

@@ -1,16 +1,20 @@
 package models
 
-// AutomationLog action constants.
+// AutomationLog action constants — must match the Appwrite enum on automations_logs.action.
 const (
-	ActionPending        = "pending"
-	ActionDMSent         = "dm_sent"
-	ActionButtonDMSent   = "button_dm_sent"
-	ActionRevealSent     = "reveal_sent"
-	ActionReplySent      = "reply_sent"
-	ActionSkipped        = "skipped"
-	ActionSkippedDedup   = "skipped_dedup"
-	ActionSkippedNoMatch = "skipped_no_match"
-	ActionFailed         = "failed"
+	ActionPending      = "pending"
+	ActionDMSent       = "dm_sent"
+	ActionButtonDMSent = "button_dm_sent"
+	ActionRevealSent   = "reveal_sent"
+	ActionReplySent    = "reply_sent"
+	ActionSkipped      = "skipped"
+	ActionFailed       = "failed"
+)
+
+// AutomationLog reason values for skipped/failed rows (not part of the action enum).
+const (
+	ReasonSkippedDedup   = "skipped_dedup"
+	ReasonSkippedNoMatch = "skipped_no_match"
 )
 
 // Automation matches Expo Automation / FastAPI automation row shape.

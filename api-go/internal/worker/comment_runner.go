@@ -286,9 +286,11 @@ func (r *CommentRunner) sendAutomationMessages(
 					"other_automation_id", mapString(other, "automation_id"),
 				)
 			}
+			// Appwrite enum only allows: pending|dm_sent|button_dm_sent|reveal_sent|reply_sent|skipped|failed.
+			// Put the specific skip cause in reason, not action.
 			return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-				"action": "skipped_dedup",
-				"reason": "another campaign already sent a DM for this comment",
+				"action": "skipped",
+				"reason": "skipped_dedup",
 			})
 		}
 	}
@@ -993,10 +995,10 @@ func (r *CommentRunner) failJobUnexpected(ctx context.Context, jobID string, job
 }
 
 func (r *CommentRunner) failLog(ctx context.Context, existing, auto, event map[string]any, reason string) error {
+	// Appwrite `action` enum: pending|dm_sent|button_dm_sent|reveal_sent|reply_sent|skipped|failed.
+	// Specific skip causes (skipped_no_match, skipped_dedup, skipped_rate_limit, …) live in `reason`.
 	action := "failed"
-	if reason == "skipped_no_match" || reason == "skipped_dedup" {
-		action = reason
-	} else if strings.HasPrefix(reason, "skipped") {
+	if strings.HasPrefix(reason, "skipped") {
 		action = "skipped"
 	}
 	if existing != nil {

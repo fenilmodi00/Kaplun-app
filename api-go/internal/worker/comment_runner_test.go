@@ -297,8 +297,8 @@ func TestNoKeywordMatchCreatesNoLogsAndSendsNothing(t *testing.T) {
 	for _, l := range store.logs {
 		logEntry = l
 	}
-	if logEntry["action"] != "skipped_no_match" || logEntry["reason"] != "skipped_no_match" {
-		t.Fatalf("expected skipped_no_match log, got action=%v reason=%v", logEntry["action"], logEntry["reason"])
+	if logEntry["action"] != "skipped" || logEntry["reason"] != "skipped_no_match" {
+		t.Fatalf("expected action=skipped reason=skipped_no_match, got action=%v reason=%v", logEntry["action"], logEntry["reason"])
 	}
 }
 
@@ -386,8 +386,8 @@ func TestCrossCampaignDedupSkipsDMWhenAnotherCampaignAlreadySent(t *testing.T) {
 	if a2Log == nil {
 		t.Fatal("expected a log for a2")
 	}
-	if a2Log["action"] != "skipped_dedup" {
-		t.Fatalf("expected a2 log action=skipped_dedup, got %v", a2Log["action"])
+	if a2Log["action"] != "skipped" || a2Log["reason"] != "skipped_dedup" {
+		t.Fatalf("expected a2 log action=skipped reason=skipped_dedup, got action=%v reason=%v", a2Log["action"], a2Log["reason"])
 	}
 }
 
