@@ -3,6 +3,7 @@ package automations_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"kaplun/api-go/internal/models"
@@ -125,6 +126,11 @@ func TestCreateValidation(t *testing.T) {
 	t.Parallel()
 
 	svc := automations.NewService(newFakeStore())
+	bigPool := make([]string, 11)
+	for i := range bigPool {
+		bigPool[i] = "ok"
+	}
+	longDelay := 1441
 	cases := []struct {
 		name string
 		body models.AutomationCreate
@@ -132,6 +138,10 @@ func TestCreateValidation(t *testing.T) {
 		{"empty keywords", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{}, DMMessage: "Hi"}},
 		{"empty dm", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: ""}},
 		{"specific posts empty media", models.AutomationCreate{Name: "T", TargetType: "specific_posts", Keywords: []string{"kw"}, DMMessage: "Hi", MediaIDs: []string{}}},
+		{"invalid status", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi", Status: "draft"}},
+		{"follow-up delay too high", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi", FollowUpEnabled: true, FollowUpMessage: strPtr("Hi"), FollowUpDelayMinutes: &longDelay}},
+		{"public reply pool too large", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi", PublicReplyEnabled: true, PublicReplyMessages: bigPool}},
+		{"public reply entry too long", models.AutomationCreate{Name: "T", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi", PublicReplyEnabled: true, PublicReplyMessages: []string{strings.Repeat("x", 1001)}}},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -271,3 +281,35 @@ func TestAutomationStatsShape(t *testing.T) {
 		t.Fatalf("unexpected counters: %#v", stats)
 	}
 }
+
+func TestCreateStatusDefaultAndPaused(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore()
+	store.creators["clerk_1"] = models.CreatorRow{
+		ClerkUserID: "clerk_1", IGUserID: "ig_123", AccessToken: "tok",
+	}
+	svc := automations.NewService(store)
+
+	defaultRow, err := svc.Create(context.Background(), "clerk_1", models.AutomationCreate{
+		Name: "Default", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi",
+	})
+	if err != nil {
+		t.Fatalf("create default: %v", err)
+	}
+	if defaultRow.Status != "active" {
+		t.Fatalf("expected default active, got %q", defaultRow.Status)
+	}
+
+	pausedRow, err := svc.Create(context.Background(), "clerk_1", models.AutomationCreate{
+		Name: "Paused", TargetType: "all_posts", Keywords: []string{"kw"}, DMMessage: "Hi", Status: "paused",
+	})
+	if err != nil {
+		t.Fatalf("create paused: %v", err)
+	}
+	if pausedRow.Status != "paused" {
+		t.Fatalf("expected paused, got %q", pausedRow.Status)
+	}
+}
+
+func strPtr(s string) *string { return &s }

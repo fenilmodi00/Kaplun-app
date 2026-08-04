@@ -84,6 +84,7 @@ type AutomationCreate struct {
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
 	DMTriggerEnabled        bool     `json:"dm_trigger_enabled"`
+	Status                  string   `json:"status"`
 }
 
 // AutomationPatch is the PATCH /automations/:id body.
@@ -148,9 +149,9 @@ type AutomationStats struct {
 
 // OverviewStats matches Expo OverviewStats (bare object, not wrapped).
 type OverviewStats struct {
-	Sent7d            int     `json:"sent_7d"`
-	TopKeyword7d      string  `json:"top_keyword_7d"`
-	ActiveAutomations int     `json:"active_automations"`
+	Sent7d            int    `json:"sent_7d"`
+	TopKeyword7d      string `json:"top_keyword_7d"`
+	ActiveAutomations int    `json:"active_automations"`
 }
 
 // CreatorRow is the subset of creators needed for automation create checks.

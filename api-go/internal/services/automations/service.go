@@ -3,6 +3,7 @@ package automations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,9 +12,9 @@ import (
 )
 
 var (
-	ErrNotFound               = errors.New("automation not found")
-	ErrValidation             = errors.New("validation")
-	ErrInstagramNotConnected  = errors.New("instagram_not_connected")
+	ErrNotFound              = errors.New("automation not found")
+	ErrValidation            = errors.New("validation")
+	ErrInstagramNotConnected = errors.New("instagram_not_connected")
 )
 
 // ValidationError carries a client-facing validation message.
@@ -21,7 +22,7 @@ type ValidationError struct {
 	Message string
 }
 
-func (e *ValidationError) Error() string { return e.Message }
+func (e *ValidationError) Error() string        { return e.Message }
 func (e *ValidationError) Is(target error) bool { return target == ErrValidation }
 
 // Store is the persistence interface for automations (Appwrite impl later).
@@ -88,6 +89,10 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 	if opening == "" {
 		opening = "direct"
 	}
+	status := body.Status
+	if status == "" {
+		status = "active"
+	}
 	keywords := cleanKeywords(body.Keywords)
 	if body.MatchAnyWord {
 		// Any-word campaigns carry no keyword list — every comment matches.
@@ -117,7 +122,7 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		FollowUpMessage:         body.FollowUpMessage,
 		FollowUpDelayMinutes:    body.FollowUpDelayMinutes,
 		DMTriggerEnabled:        body.DMTriggerEnabled,
-		Status:                  "active",
+		Status:                  status,
 		CreatedAt:               now,
 		UpdatedAt:               now,
 	}
@@ -285,19 +290,30 @@ func validateCreate(body models.AutomationCreate) error {
 			return &ValidationError{Message: "reveal_message is required when opening_dm_mode is 'button'"}
 		}
 	}
+	if body.Status != "" && body.Status != "active" && body.Status != "paused" {
+		return &ValidationError{Message: "status must be active or paused"}
+	}
 	if body.PublicReplyEnabled {
 		hasSingle := body.PublicReplyMessage != nil && strings.TrimSpace(*body.PublicReplyMessage) != ""
 		hasPool := len(body.PublicReplyMessages) > 0
 		if !hasSingle && !hasPool {
 			return &ValidationError{Message: "public_reply_message or public_reply_messages is required when public replies are enabled"}
 		}
+		if len(body.PublicReplyMessages) > 10 {
+			return &ValidationError{Message: "public_reply_messages may contain at most 10 entries"}
+		}
+		for i, msg := range body.PublicReplyMessages {
+			if len(msg) > 1000 {
+				return &ValidationError{Message: fmt.Sprintf("public_reply_messages[%d] must be at most 1000 characters", i)}
+			}
+		}
 	}
 	if body.FollowUpEnabled {
 		if body.FollowUpMessage == nil || strings.TrimSpace(*body.FollowUpMessage) == "" {
 			return &ValidationError{Message: "follow_up_message is required when follow-up is enabled"}
 		}
-		if body.FollowUpDelayMinutes == nil || *body.FollowUpDelayMinutes < 1 {
-			return &ValidationError{Message: "follow_up_delay_minutes must be at least 1 when follow-up is enabled"}
+		if body.FollowUpDelayMinutes == nil || *body.FollowUpDelayMinutes < 1 || *body.FollowUpDelayMinutes > 1440 {
+			return &ValidationError{Message: "follow_up_delay_minutes must be between 1 and 1440 when follow-up is enabled"}
 		}
 	}
 	return nil
@@ -362,26 +378,26 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 		data["public_reply_message"] = *body.PublicReplyMessage
 	}
 	if body.PublicReplyMessages != nil {
-			data["public_reply_messages"] = body.PublicReplyMessages
-		}
-		if body.RequireFollow != nil {
-			data["require_follow"] = *body.RequireFollow
-		}
-		if body.FollowPromptMessage != nil {
-			data["follow_prompt_message"] = *body.FollowPromptMessage
-		}
-		if body.FollowPromptButtonLabel != nil {
-			data["follow_prompt_button_label"] = *body.FollowPromptButtonLabel
-		}
-		if body.FollowUpEnabled != nil {
-			data["follow_up_enabled"] = *body.FollowUpEnabled
-		}
-		if body.FollowUpMessage != nil {
-			data["follow_up_message"] = *body.FollowUpMessage
-		}
-		if body.FollowUpDelayMinutes != nil {
-			data["follow_up_delay_minutes"] = *body.FollowUpDelayMinutes
-		}
+		data["public_reply_messages"] = body.PublicReplyMessages
+	}
+	if body.RequireFollow != nil {
+		data["require_follow"] = *body.RequireFollow
+	}
+	if body.FollowPromptMessage != nil {
+		data["follow_prompt_message"] = *body.FollowPromptMessage
+	}
+	if body.FollowPromptButtonLabel != nil {
+		data["follow_prompt_button_label"] = *body.FollowPromptButtonLabel
+	}
+	if body.FollowUpEnabled != nil {
+		data["follow_up_enabled"] = *body.FollowUpEnabled
+	}
+	if body.FollowUpMessage != nil {
+		data["follow_up_message"] = *body.FollowUpMessage
+	}
+	if body.FollowUpDelayMinutes != nil {
+		data["follow_up_delay_minutes"] = *body.FollowUpDelayMinutes
+	}
 	if body.DMTriggerEnabled != nil {
 		data["dm_trigger_enabled"] = *body.DMTriggerEnabled
 	}
