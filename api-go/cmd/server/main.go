@@ -21,7 +21,6 @@ import (
 	"kaplun/api-go/internal/platform/appwrite"
 	"kaplun/api-go/internal/platform/clerk"
 	"kaplun/api-go/internal/platform/cloudflare"
-	"kaplun/api-go/internal/platform/crypto"
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/platform/ngrok"
 	"kaplun/api-go/internal/router"
@@ -70,9 +69,9 @@ func main() {
 	}()
 
 	var (
-		tunnelMu   sync.Mutex
-		ngrokTun   *ngrok.Tunnel
-		cfTun      *cloudflare.Tunnel
+		tunnelMu sync.Mutex
+		ngrokTun *ngrok.Tunnel
+		cfTun    *cloudflare.Tunnel
 	)
 
 	logPublicEndpoints := func(publicURL string) {
@@ -223,18 +222,9 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		logger.Info("route enabled", "path", "POST /auth/appwrite-session")
 	}
 
-	var tokCrypto *crypto.TokenCrypto
-	if cfg.TokenEncryptionKey != "" {
-		tc, err := crypto.New(cfg.TokenEncryptionKey)
-		if err != nil {
-			logger.Warn("token crypto init failed", "error", err)
-		} else {
-			tokCrypto = tc
-		}
-	}
-
 	graphClient := meta.NewClient(nil)
 	graphSender := meta.NewSender(graphClient)
+	tokenRefresher := &metaTokenRefresher{client: graphClient}
 
 	var autoStore *store.AutomationsStore
 	var commentRunner *worker.CommentRunner
@@ -245,7 +235,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			Logs:        cfg.AppwriteAutomationLogsTableID,
 			Jobs:        cfg.AppwriteAutomationJobsTableID,
 		})
-		commentRunner = worker.NewCommentRunner(autoStore.AsWorker(), graphSender, tokCrypto)
+		commentRunner = worker.NewCommentRunner(autoStore.AsWorker(), graphRefreshSender{graphSender})
 		if cfg.PublicBaseURL != "" {
 			commentRunner.PublicBaseURL = strings.TrimRight(cfg.PublicBaseURL, "/")
 		}
@@ -259,9 +249,15 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	var pool *worker.Pool
 	if cfg.AutomationSweeperEnabled && autoStore != nil {
 		pool = worker.NewPool(4, 64)
+		poolCtx, poolCancel := context.WithCancel(context.Background())
+		pool.SetContext(poolCtx)
+		// Cleanup order is LIFO: sweeper.Stop -> poolCancel -> pool.Shutdown, so
+		// submissions stop first, then in-flight jobs cancel, then the pool drains.
 		cleanups = append(cleanups, pool.Shutdown)
+		cleanups = append(cleanups, poolCancel)
 		sweeper := worker.NewSweeper(autoStore, commentRunner, time.Minute)
 		sweeper.Log = logger
+		sweeper.Pool = pool
 		sweeper.Start()
 		cleanups = append(cleanups, sweeper.Stop)
 		logger.Info("automation sweeper started")
@@ -282,7 +278,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		reconcileSvc = reconcile.NewService(
 			autoStore.AsReconcile(),
 			reconcileGraph{client: graphClient},
-			safeTokenDecryptor{c: tokCrypto},
+			plaintextTokenDecryptor{},
 			keywordMatcherAdapter{},
 		)
 	}
@@ -290,6 +286,9 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		loopCtx, loopCancel := context.WithCancel(context.Background())
 		cleanups = append(cleanups, loopCancel)
 		startReconcileLoop(loopCtx, reconcileSvc, reconcilePollInterval(), reconcileEnqueuer, logger)
+		// Daily in-process token refresh: creators' long-lived tokens never reach
+		// expiry while the server runs, no external scheduler required.
+		startTokenRefreshLoop(loopCtx, autoStore, tokenRefresher, 24*time.Hour, logger)
 	}
 
 	if autoStore != nil && deps.ClerkAuth != nil {
@@ -330,18 +329,16 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 
 	if cfg.CronSecret != "" && autoStore != nil {
 		deps.CronAuth = middleware.CronSecret(cfg.CronSecret)
-		// Keep cron-refreshed tokens plaintext: the Expo app reads access_token
-		// directly and cannot decrypt enc1: values.
 		var cronReconciler handlers.ReconcileService
 		if reconcileSvc != nil {
 			cronReconciler = cronReconcileAdapter{svc: reconcileSvc}
 		}
 		deps.Cron = handlers.NewCronHandler(
 			autoStore,
-			&metaTokenRefresher{client: graphClient},
-			nil, // no encryption: app uses the token directly
+			tokenRefresher,
 			cronReconciler,
 		)
+		deps.Cron.Log = logger
 		logger.Info("route enabled", "path", "/cron/* (store + token refresh + reconcile wired)")
 	} else if cfg.CronSecret != "" {
 		logger.Warn("cron skipped: automation store unavailable (set APPWRITE_*_TABLE_ID env vars)")
@@ -355,19 +352,16 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			AppSecret:   cfg.InstagramAppSecret,
 			RedirectURI: cfg.RedirectURI,
 		})
-		var oauthCrypto handlers.OAuthTokenCrypto
-		if tokCrypto != nil {
-			oauthCrypto = tokCrypto
-		}
 		var creatorStore handlers.CreatorProfileStore
 		if awClient != nil {
 			creatorStore = awClient
 		}
 		if creatorStore != nil {
+			// Tokens are stored plaintext by design: the Expo app reads
+			// access_token directly and calls graph.instagram.com.
 			oauthHandler := handlers.NewInstagramOAuthHandler(
 				oauthSvc,
 				creatorStore,
-				oauthCrypto,
 				cfg.InstagramAppID,
 				cfg.InstagramAppSecret,
 				cfg.RedirectURI,

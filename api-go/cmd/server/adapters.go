@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
 	"time"
 
-	"kaplun/api-go/internal/platform/crypto"
+	"kaplun/api-go/internal/handlers"
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/services/keywords"
 	"kaplun/api-go/internal/services/reconcile"
@@ -101,18 +102,24 @@ func (a cronReconcileAdapter) AttachNextReels(ctx context.Context) (int, error) 
 	return a.svc.AttachNextReels(ctx)
 }
 
-// safeTokenDecryptor tolerates a missing encryption key (tokens stored
-// plaintext), matching CommentRunner's nil-crypto fallback.
-type safeTokenDecryptor struct {
-	c *crypto.TokenCrypto
+// graphRefreshSender exposes RefreshLongLivedToken alongside the send methods
+// so the worker can self-heal on Meta error 190 (refresh once + retry once).
+type graphRefreshSender struct {
+	*meta.Sender
 }
 
-func (d safeTokenDecryptor) DecryptOrPlaintext(stored string) string {
-	if d.c == nil {
-		return stored
+func (g graphRefreshSender) RefreshLongLivedToken(ctx context.Context, token string) (string, int, error) {
+	if g.Sender == nil || g.Client == nil {
+		return "", 0, fmt.Errorf("meta sender not configured")
 	}
-	return d.c.DecryptOrPlaintext(stored)
+	return g.Client.RefreshLongLivedToken(ctx, token)
 }
+
+// plaintextTokenDecryptor satisfies reconcile.TokenDecryptor; creator tokens
+// are stored plaintext by design (the Expo app reads access_token directly).
+type plaintextTokenDecryptor struct{}
+
+func (plaintextTokenDecryptor) DecryptOrPlaintext(stored string) string { return stored }
 
 // reconcilePollInterval mirrors openreply's COMMENT_POLL_INTERVAL_MS.
 // Default 5 minutes; set COMMENT_POLL_INTERVAL_MS=5000 for fast local polling.
@@ -188,4 +195,41 @@ func startReconcileLoop(ctx context.Context, svc *reconcile.Service, interval ti
 		}
 	}()
 	logger.Info("comment reconcile loop started", "interval", interval.String())
+}
+
+// startTokenRefreshLoop refreshes Instagram long-lived creator tokens
+// in-process on a fixed (daily) interval so they never reach expiry while the
+// server runs — no external scheduler required. First pass runs shortly after
+// boot; per-sweep failures are logged inside handlers.RefreshExpiringTokens.
+func startTokenRefreshLoop(ctx context.Context, store handlers.TokenRefreshStore, refresher handlers.TokenRefresher, interval time.Duration, logger *slog.Logger) {
+	if store == nil || refresher == nil || interval <= 0 {
+		return
+	}
+	go func() {
+		run := func() {
+			sweepCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+			refreshed, failed, err := handlers.RefreshExpiringTokens(sweepCtx, store, refresher, nil, logger)
+			if err != nil {
+				logger.Warn("token refresh sweep failed", "error", err)
+				return
+			}
+			if refreshed > 0 || failed > 0 {
+				logger.Info("token refresh sweep complete", "refreshed", refreshed, "failed", failed)
+			}
+		}
+
+		timer := time.NewTimer(time.Minute)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				run()
+				timer.Reset(interval)
+			}
+		}
+	}()
+	logger.Info("token refresh loop started", "interval", interval.String())
 }
