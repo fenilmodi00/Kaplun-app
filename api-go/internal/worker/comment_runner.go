@@ -33,6 +33,7 @@ type CommentStore interface {
 	ListActiveForIG(ctx context.Context, igUserID string) ([]map[string]any, error)
 	FindLog(ctx context.Context, automationID, commentID string) (map[string]any, error)
 	FindLogByCommentID(ctx context.Context, commentID string) ([]map[string]any, error)
+	FindButtonDMForUser(ctx context.Context, automationID, userID string) (map[string]any, error)
 	CreateLog(ctx context.Context, data map[string]any) (map[string]any, error)
 	UpdateLog(ctx context.Context, logID string, data map[string]any) error
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
@@ -43,6 +44,7 @@ type CommentStore interface {
 	UpdateJob(ctx context.Context, jobID string, data map[string]any) error
 	CountRecentDMActions(igUserID, since string) int
 	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error)
+	HasPendingFollowUp(ctx context.Context, automationID, userID string) (bool, error)
 }
 
 // GraphSender sends Instagram Graph messaging / reply calls.
@@ -190,18 +192,19 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 			if len(commentTrim) > 1000 {
 				commentTrim = commentTrim[:1000]
 			}
-			created, cerr := r.Store.CreateLog(ctx, map[string]any{
-				"automation_id":      mapString(auto, "$id"),
-				"clerk_user_id":      mapString(auto, "clerk_user_id"),
-				"ig_user_id":         igID,
-				"media_id":           mediaID,
-				"comment_id":         commentID,
-				"commenter_username": nilIfEmpty(commenterName),
-				"comment_text":       commentTrim,
-				"matched_keyword":    nilIfEmpty(matchedKeyword),
-				"action":             "pending",
-				"created_at":         r.nowISO(),
-			})
+		created, cerr := r.Store.CreateLog(ctx, map[string]any{
+			"automation_id":      mapString(auto, "$id"),
+			"clerk_user_id":      mapString(auto, "clerk_user_id"),
+			"ig_user_id":         igID,
+			"media_id":           mediaID,
+			"comment_id":         commentID,
+			"commenter_id":       nilIfEmpty(mapString(event, "commenter_id")),
+			"commenter_username": nilIfEmpty(commenterName),
+			"comment_text":       commentTrim,
+			"matched_keyword":    nilIfEmpty(matchedKeyword),
+			"action":             "pending",
+			"created_at":         r.nowISO(),
+		})
 			if cerr != nil {
 				if IsDuplicateKey(cerr) {
 					continue
@@ -373,17 +376,17 @@ func (r *CommentRunner) sendAutomationMessages(
 					return err
 				}
 				fallbackMsg := buildInlineLinkFallback(dmText, commenterName, trackedURL)
-			if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
-				return err
-			}
-			if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-				"action": "dm_sent",
-				"reason": nil,
-			}); err != nil {
-				return err
-			}
-			r.scheduleFollowUp(ctx, auto, commenterName)
-			return nil
+				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
+					return err
+				}
+				if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+					"action": "dm_sent",
+					"reason": nil,
+				}); err != nil {
+					return err
+				}
+				r.scheduleFollowUp(ctx, auto, commenterID, commenterName)
+				return nil
 			}
 			return err
 		}
@@ -393,7 +396,7 @@ func (r *CommentRunner) sendAutomationMessages(
 		}); err != nil {
 			return err
 		}
-		r.scheduleFollowUp(ctx, auto, commenterName)
+		r.scheduleFollowUp(ctx, auto, mapString(event, "commenter_id"), commenterName)
 		return nil
 	}
 
@@ -406,7 +409,7 @@ func (r *CommentRunner) sendAutomationMessages(
 	}); err != nil {
 		return err
 	}
-	r.scheduleFollowUp(ctx, auto, commenterName)
+	r.scheduleFollowUp(ctx, auto, mapString(event, "commenter_id"), commenterName)
 	return nil
 }
 
@@ -423,15 +426,22 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 
 	// Read fallback jobs don't carry automation_id — they need to be resolved.
 	if fallback && automationID == "" {
-		// For read fallback, we need to find active automations for this account
-		// that have opening_dm_mode == "button". Since we don't have automation_id,
-		// we query active automations and check each one.
+		// Only target button-mode automations that actually sent THIS user a
+		// button DM; a read receipt must not trigger reveals from every
+		// button-mode automation on the account.
 		allActive, err := r.Store.ListActiveForIG(ctx, igID)
 		if err != nil {
 			return err
 		}
 		for _, auto := range allActive {
 			if mapString(auto, "opening_dm_mode") != "button" {
+				continue
+			}
+			buttonLog, berr := r.Store.FindButtonDMForUser(ctx, mapString(auto, "$id"), userID)
+			if berr != nil {
+				return berr
+			}
+			if buttonLog == nil {
 				continue
 			}
 			if err := r.sendRevealWithFallback(ctx, auto, igID, userID); err != nil {
@@ -509,12 +519,21 @@ func (r *CommentRunner) sendRevealWithFallback(ctx context.Context, auto map[str
 		return derr
 	}
 
-	return r.sendRevealMessage(ctx, auto, igID, userID, "read_fallback:"+userID, token)
+	return r.sendRevealMessage(ctx, auto, igID, userID, "read_fallback:"+userID, token, "")
 }
 
 // sendRevealStandard handles the standard postback path.
 func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]any, igID, userID string) error {
 	automationID := mapString(auto, "$id")
+
+	// Idempotency: duplicate postbacks must not send duplicate reveals.
+	existing, err := r.Store.FindLog(ctx, automationID, "postback:"+userID)
+	if err != nil {
+		return err
+	}
+	if existing != nil && mapString(existing, "action") == "reveal_sent" {
+		return nil
+	}
 
 	creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
 	if err != nil {
@@ -578,11 +597,14 @@ func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]
 		}
 	}
 
-	return r.sendRevealMessage(ctx, auto, igID, userID, "postback:"+userID, token)
+	return r.sendRevealMessage(ctx, auto, igID, userID, "postback:"+userID, token, "")
 }
 
-// sendRevealMessage sends the reveal DM and creates a log entry.
-func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]any, igID, userID, commentID, token string) error {
+// sendRevealMessage sends the reveal DM and records reveal_sent. When logID is
+// non-empty it updates that pending row instead of creating a new one; a
+// unique-index conflict on create means the reveal was already recorded, so it
+// is reconciled via update and treated as success.
+func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]any, igID, userID, commentID, token, logID string) error {
 	automationID := mapString(auto, "$id")
 
 	revealMessage := mapString(auto, "reveal_message")
@@ -606,6 +628,17 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 		return err
 	}
 
+	if logID != "" {
+		if err := r.Store.UpdateLog(ctx, logID, map[string]any{
+			"action": "reveal_sent",
+			"reason": nil,
+		}); err != nil {
+			return err
+		}
+		r.scheduleFollowUp(ctx, auto, userID, "")
+		return nil
+	}
+
 	_, err := r.Store.CreateLog(ctx, map[string]any{
 		"automation_id":      automationID,
 		"clerk_user_id":      mapString(auto, "clerk_user_id"),
@@ -619,17 +652,49 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 		"created_at":         r.nowISO(),
 	})
 	if err != nil {
+		if IsDuplicateKey(err) {
+			// Row already exists (prior delivery or follow_prompt_resent) —
+			// make sure it reflects the reveal instead of failing the job.
+			existing, ferr := r.Store.FindLog(ctx, automationID, commentID)
+			if ferr != nil {
+				return nil
+			}
+			if existing != nil && mapString(existing, "action") != "reveal_sent" {
+				_ = r.Store.UpdateLog(ctx, mapString(existing, "$id"), map[string]any{
+					"action": "reveal_sent",
+					"reason": nil,
+				})
+			}
+			return nil
+		}
 		return err
 	}
 
-	r.scheduleFollowUp(ctx, auto, "")
+	r.scheduleFollowUp(ctx, auto, userID, "")
 	return nil
 }
 
 // scheduleFollowUp creates a delayed send_followup job if the automation has
-// follow-up enabled. It is a no-op if follow-up is not configured.
-func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]any, commenterName string) {
+// follow-up enabled. It is a no-op if follow-up is not configured, if userID is
+// empty, or if a follow-up job already exists for this (automation, user).
+func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]any, userID, commenterName string) {
 	if !mapBool(auto, "follow_up_enabled") {
+		return
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		if r.Log != nil {
+			r.Log.WarnContext(ctx, "skipping follow-up: empty user_id", "automation_id", mapString(auto, "$id"))
+		}
+		return
+	}
+	// W4 dedup: don't stack follow-ups across retries / multi-touch flows.
+	pending, err := r.Store.HasPendingFollowUp(ctx, mapString(auto, "$id"), userID)
+	if err != nil {
+		if r.Log != nil {
+			r.Log.WarnContext(ctx, "follow-up dedup check failed", "automation_id", mapString(auto, "$id"), "error", err)
+		}
+	} else if pending {
 		return
 	}
 	delayMinutes := 1440 // default 24h
@@ -637,9 +702,9 @@ func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]an
 		delayMinutes = d
 	}
 	runAt := r.Now().UTC().Add(time.Duration(delayMinutes) * time.Minute).Format(time.RFC3339Nano)
-	_, err := r.Store.CreateJob(ctx, JobTypeFollowUp, map[string]any{
+	_, err = r.Store.CreateJob(ctx, JobTypeFollowUp, map[string]any{
 		"instagram_account_id": mapString(auto, "ig_user_id"),
-		"user_id":              "", // filled by caller
+		"user_id":              userID,
 		"automation_id":        mapString(auto, "$id"),
 		"commenter_name":       commenterName,
 	}, runAt)
@@ -751,9 +816,10 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 			logRow = created
 		}
 
-		// Send the reveal directly via sendRevealMessage.
+		// Send the reveal directly via sendRevealMessage, updating the pending
+		// log row in place (no second insert on the unique index).
 		// The DM path skips the opening DM entirely and delivers the reveal.
-		if err := r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token); err != nil {
+		if err := r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token, mapString(logRow, "$id")); err != nil {
 			if meta.IsTokenExpired(err) {
 				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
 					"status":     "error",
@@ -770,12 +836,6 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 			}
 			return err
 		}
-
-		// Update log to dm_sent after successful reveal.
-		_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-			"action": "dm_sent",
-			"reason": nil,
-		})
 	}
 
 	return nil

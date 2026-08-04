@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -155,10 +153,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			"message_text":         event.MessageText,
 			"sender_id":            event.SenderID,
 		}
-		// Deterministic job ID: message_<accountId>_<base64(messageId)>
-		encodedMID := base64.RawURLEncoding.EncodeToString([]byte(event.MessageID))
-		jobID := fmt.Sprintf("message_%s_%s", event.InstagramAccountID, encodedMID)
-		_, err := h.Store.CreateJob(c.Request.Context(), "process_message", jobPayload, "")
+		jobID, err := h.Store.CreateJob(c.Request.Context(), "process_message", jobPayload, "")
 		if err != nil {
 			h.warn("create process_message job failed", err)
 			continue
@@ -173,12 +168,11 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			"fallback":             true,
 		}
 		runAt := time.Now().UTC().Add(worker.ReadFallbackDelaySeconds * time.Second).Format(time.RFC3339Nano)
-		jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", readJobPayload, runAt)
-		if err != nil {
+		// Do NOT enqueue: delayed jobs are picked up by the sweeper via run_at.
+		if _, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", readJobPayload, runAt); err != nil {
 			h.warn("create read_fallback send_reveal job failed", err)
 			continue
 		}
-		h.enqueue(jobID)
 	}
 }
 

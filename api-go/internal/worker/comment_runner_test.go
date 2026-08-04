@@ -105,6 +105,35 @@ func (f *fakeStore) FindLogByCommentID(_ context.Context, commentID string) ([]m
 	return out, nil
 }
 
+func (f *fakeStore) FindButtonDMForUser(_ context.Context, automationID, userID string) (map[string]any, error) {
+	for _, log := range f.logs {
+		if log["automation_id"] == automationID && log["commenter_id"] == userID && log["action"] == "button_dm_sent" {
+			return log, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeStore) HasPendingFollowUp(_ context.Context, automationID, userID string) (bool, error) {
+	for _, job := range f.jobs {
+		if job["type"] != worker.JobTypeFollowUp {
+			continue
+		}
+		status, _ := job["status"].(string)
+		if status != "pending" && status != "processing" && status != "done" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(job["payload"].(string)), &payload); err != nil {
+			continue
+		}
+		if payload["automation_id"] == automationID && payload["user_id"] == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (f *fakeStore) CreateLog(_ context.Context, data map[string]any) (map[string]any, error) {
 	if f.raise409OnCreate {
 		return nil, worker.ErrDuplicateKey
@@ -578,5 +607,377 @@ func TestGraphRateLimitReturnsRequeue(t *testing.T) {
 	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
 	if err != nil || result != "requeue" {
 		t.Fatalf("result=%s err=%v", result, err)
+	}
+}
+
+func followUpJobs(store *fakeStore) []map[string]any {
+	var out []map[string]any
+	for _, j := range store.jobs {
+		if j["type"] == worker.JobTypeFollowUp {
+			out = append(out, j)
+		}
+	}
+	return out
+}
+
+func jobPayload(t *testing.T, job map[string]any) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(job["payload"].(string)), &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	return payload
+}
+
+func eventWithCommenterID(id string) map[string]any {
+	event := map[string]any{}
+	for k, v := range testEvent {
+		event[k] = v
+	}
+	event["commenter_id"] = id
+	return event
+}
+
+func TestFollowUpJobStoresCommenterID(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"follow_up_enabled":       true,
+		"follow_up_delay_minutes": 60,
+		"follow_up_message":       "Later {username}!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), eventWithCommenterID("u99"), 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	jobs := followUpJobs(store)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 follow-up job, got %d", len(jobs))
+	}
+	payload := jobPayload(t, jobs[0])
+	if payload["user_id"] != "u99" || payload["automation_id"] != "a1" || payload["commenter_name"] != "alice" {
+		t.Fatalf("follow-up payload: %#v", payload)
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["commenter_id"] != "u99" {
+		t.Fatalf("log missing commenter_id: %#v", log)
+	}
+}
+
+func TestFollowUpJobNotCreatedWithoutCommenterID(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"follow_up_enabled": true,
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	// testEvent has no commenter_id.
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if got := followUpJobs(store); len(got) != 0 {
+		t.Fatalf("expected no follow-up jobs with empty user_id, got %d", len(got))
+	}
+}
+
+func TestFollowUpJobDedupsExistingPending(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"follow_up_enabled": true,
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	_, err := store.CreateJob(context.Background(), worker.JobTypeFollowUp, map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u99",
+		"automation_id":        "a1",
+	}, "")
+	if err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), eventWithCommenterID("u99"), 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if got := followUpJobs(store); len(got) != 1 {
+		t.Fatalf("expected follow-up dedup (1 job), got %d", len(got))
+	}
+	if got := kinds(graph.calls); len(got) != 2 || got[0] != "reply" || got[1] != "dm" {
+		t.Fatalf("calls: %v", got)
+	}
+}
+
+func TestRunFollowUpSendsStoredUserID(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"follow_up_message": "Later {username}!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	store.addJob("j_fu", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u99",
+		"automation_id":        "a1",
+		"commenter_name":       "alice",
+	}, "pending", 0, worker.JobTypeFollowUp)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_fu"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "direct_dm" {
+		t.Fatalf("calls: %v", got)
+	}
+	dm := graph.calls[0]
+	if dm.Args[0] != "ig1" || dm.Args[1] != "u99" || dm.Args[2] != "Later alice!" || dm.Args[3] != "plain-token" {
+		t.Fatalf("direct_dm: %#v", dm.Args)
+	}
+	if store.jobs["j_fu"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_fu"]["status"])
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["action"] != "reply_sent" || log["comment_id"] != "followup:u99" {
+		t.Fatalf("log: %#v", log)
+	}
+}
+
+func TestRunFollowUpMissingUserIDFails(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(nil)}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	store.addJob("j_fu_bad", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "",
+		"automation_id":        "a1",
+	}, "pending", 0, worker.JobTypeFollowUp)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_fu_bad"); err == nil {
+		t.Fatal("expected error for empty user_id")
+	}
+	if store.jobs["j_fu_bad"]["status"] != "failed" {
+		t.Fatalf("job status: %#v", store.jobs["j_fu_bad"]["status"])
+	}
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no sends, got %v", kinds(graph.calls))
+	}
+}
+
+func TestSendRevealSkipsWhenAlreadyRevealed(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"reveal_message": "Secret link!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id": "a1",
+		"comment_id":    "postback:u42",
+		"action":        "reveal_sent",
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	store.addJob("j_reveal", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u42",
+		"automation_id":        "a1",
+	}, "pending", 0, worker.JobTypeSendReveal)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_reveal"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no duplicate reveal, got %v", kinds(graph.calls))
+	}
+	if store.jobs["j_reveal"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_reveal"]["status"])
+	}
+}
+
+func TestDuplicatePostbackRevealSendsOnce(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"reveal_message": "Secret link!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	payload := map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u42",
+		"automation_id":        "a1",
+	}
+	store.addJob("j_r1", payload, "pending", 0, worker.JobTypeSendReveal)
+	store.addJob("j_r2", payload, "pending", 0, worker.JobTypeSendReveal)
+	runner := newRunner(store, graph)
+
+	if err := runner.RunJob(context.Background(), "j_r1"); err != nil {
+		t.Fatalf("RunJob j_r1: %v", err)
+	}
+	if err := runner.RunJob(context.Background(), "j_r2"); err != nil {
+		t.Fatalf("RunJob j_r2: %v", err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "direct_dm" {
+		t.Fatalf("expected exactly 1 reveal DM, got %v", got)
+	}
+	revealLogs := 0
+	for _, l := range store.logs {
+		if l["action"] == "reveal_sent" {
+			revealLogs++
+		}
+	}
+	if revealLogs != 1 {
+		t.Fatalf("expected 1 reveal log, got %d", revealLogs)
+	}
+	if store.jobs["j_r2"]["status"] != "done" {
+		t.Fatalf("j_r2 status: %#v", store.jobs["j_r2"]["status"])
+	}
+}
+
+func TestRunProcessMessageSendsRevealAndMarksRevealSent(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"dm_trigger_enabled": true,
+		"reveal_message":     "Secret link!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	store.addJob("j_msg", map[string]any{
+		"instagram_account_id": "ig1",
+		"message_id":           "m123",
+		"message_text":         "send link please",
+		"sender_id":            "u77",
+	}, "pending", 0, worker.JobTypeProcessMessage)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_msg"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "direct_dm" {
+		t.Fatalf("calls: %v", got)
+	}
+	dm := graph.calls[0]
+	if dm.Args[0] != "ig1" || dm.Args[1] != "u77" || dm.Args[2] != "Secret link!" || dm.Args[3] != "plain-token" {
+		t.Fatalf("direct_dm: %#v", dm.Args)
+	}
+	if len(store.logs) != 1 {
+		t.Fatalf("expected exactly 1 log (no double-log), got %d", len(store.logs))
+	}
+	var log map[string]any
+	for _, l := range store.logs {
+		log = l
+	}
+	if log["comment_id"] != "dm:m123" || log["action"] != "reveal_sent" || log["matched_keyword"] != "link" {
+		t.Fatalf("log: %#v", log)
+	}
+	if store.jobs["j_msg"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_msg"]["status"])
+	}
+}
+
+func TestRunProcessMessageRedeliverySkips(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"dm_trigger_enabled": true,
+		"reveal_message":     "Secret link!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	payload := map[string]any{
+		"instagram_account_id": "ig1",
+		"message_id":           "m123",
+		"message_text":         "send link please",
+		"sender_id":            "u77",
+	}
+	store.addJob("j_msg1", payload, "pending", 0, worker.JobTypeProcessMessage)
+	store.addJob("j_msg2", payload, "pending", 0, worker.JobTypeProcessMessage)
+	runner := newRunner(store, graph)
+
+	if err := runner.RunJob(context.Background(), "j_msg1"); err != nil {
+		t.Fatalf("RunJob j_msg1: %v", err)
+	}
+	if err := runner.RunJob(context.Background(), "j_msg2"); err != nil {
+		t.Fatalf("RunJob j_msg2: %v", err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "direct_dm" {
+		t.Fatalf("expected exactly 1 DM across redelivery, got %v", got)
+	}
+	if len(store.logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(store.logs))
+	}
+	if store.jobs["j_msg2"]["status"] != "done" {
+		t.Fatalf("j_msg2 status: %#v", store.jobs["j_msg2"]["status"])
+	}
+}
+
+func TestReadFallbackTargetsOnlyButtonDMRecipients(t *testing.T) {
+	t.Parallel()
+	auto1 := makeAutomation(map[string]any{
+		"$id":             "a1",
+		"opening_dm_mode": "button",
+		"button_text":     "Get link",
+		"reveal_message":  "Secret one!",
+	})
+	auto2 := makeAutomation(map[string]any{
+		"$id":             "a2",
+		"opening_dm_mode": "button",
+		"button_text":     "Get link",
+		"reveal_message":  "Secret two!",
+	})
+	store := newFakeStore([]map[string]any{auto1, auto2}, map[string]map[string]any{"user1": testCreator}, 0)
+	// Only a1 sent a button DM to u42.
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id": "a1",
+		"comment_id":    "c9",
+		"commenter_id":  "u42",
+		"action":        "button_dm_sent",
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	store.addJob("j_fb", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u42",
+		"fallback":             true,
+	}, "pending", 0, worker.JobTypeSendReveal)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_fb"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "direct_dm" {
+		t.Fatalf("expected exactly 1 fallback reveal, got %v", got)
+	}
+	if graph.calls[0].Args[2] != "Secret one!" {
+		t.Fatalf("reveal text: %#v", graph.calls[0].Args)
+	}
+	for _, l := range store.logs {
+		if l["automation_id"] == "a2" && l["action"] == "reveal_sent" {
+			t.Fatalf("a2 must not reveal to u42: %#v", l)
+		}
+		if l["automation_id"] == "a1" && l["action"] == "reveal_sent" && l["comment_id"] != "read_fallback:u42" {
+			t.Fatalf("a1 reveal log: %#v", l)
+		}
+	}
+	if store.jobs["j_fb"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_fb"]["status"])
+	}
+}
+
+func TestReadFallbackSkipsUserWithoutButtonDM(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"opening_dm_mode": "button",
+		"button_text":     "Get link",
+		"reveal_message":  "Secret!",
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	store.addJob("j_fb", map[string]any{
+		"instagram_account_id": "ig1",
+		"user_id":              "u42",
+		"fallback":             true,
+	}, "pending", 0, worker.JobTypeSendReveal)
+
+	if err := newRunner(store, graph).RunJob(context.Background(), "j_fb"); err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no sends for user without button DM, got %v", kinds(graph.calls))
+	}
+	if store.jobs["j_fb"]["status"] != "done" {
+		t.Fatalf("job status: %#v", store.jobs["j_fb"]["status"])
 	}
 }

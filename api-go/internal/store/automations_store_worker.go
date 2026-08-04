@@ -68,6 +68,49 @@ func (s *AutomationsStore) FindLogByCommentID(ctx context.Context, commentID str
 	return result.Rows, nil
 }
 
+// FindButtonDMForUser returns the button_dm_sent log an automation sent to a
+// specific IG user, or nil. Used to scope read-fallback reveals to users who
+// actually received a button DM from that automation.
+func (s *AutomationsStore) FindButtonDMForUser(ctx context.Context, automationID, userID string) (map[string]any, error) {
+	result, err := s.client.ListRows(ctx, s.tables.Logs, []string{
+		appwrite.QueryEqual("automation_id", automationID),
+		appwrite.QueryEqual("commenter_id", userID),
+		appwrite.QueryEqual("action", "button_dm_sent"),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Rows) == 0 {
+		return nil, nil
+	}
+	return result.Rows[0], nil
+}
+
+// HasPendingFollowUp reports whether a send_followup job already exists for
+// this (automation, user) in an unfinished or completed state. Payloads are
+// JSON strings, so filtering happens in-process over a bounded page.
+func (s *AutomationsStore) HasPendingFollowUp(ctx context.Context, automationID, userID string) (bool, error) {
+	result, err := s.client.ListRows(ctx, s.tables.Jobs, []string{
+		appwrite.QueryEqual("type", worker.JobTypeFollowUp),
+		appwrite.QueryEqual("status", "pending", "processing", "done"),
+		appwrite.QueryLimit(100),
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, row := range result.Rows {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stringField(row, "payload")), &payload); err != nil {
+			continue
+		}
+		if payload["automation_id"] == automationID && payload["user_id"] == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *AutomationsStore) CreateLog(ctx context.Context, data map[string]any) (map[string]any, error) {
 	row, err := s.client.CreateRow(ctx, s.tables.Logs, appwrite.UniqueID, data, nil)
 	if err != nil {
