@@ -28,9 +28,7 @@ type CronStore interface {
 	ListCreatorsWithTokenExpiringBefore(ctx context.Context, thresholdISO string) ([]CronCreator, error)
 	UpdateCreatorToken(ctx context.Context, creatorID, encryptedToken, expiresAtISO string) error
 	DeleteLogsOlderThan(ctx context.Context, cutoffISO string) (int, error)
-	DeleteWebhookEventsOlderThan(ctx context.Context, cutoffISO string) (int, error)
 	CountJobsByStatus(ctx context.Context) (map[string]int, error)
-	GetLastWebhookEventTime(ctx context.Context) (*string, error)
 }
 
 type TokenRefresher interface {
@@ -134,17 +132,11 @@ func (h *CronHandler) RetainLogs(c *gin.Context) {
 	cutoff := h.Now().UTC().Add(-time.Duration(retainLogsDays) * 24 * time.Hour).Format(time.RFC3339Nano)
 	deletedLogs, err := h.Store.DeleteLogsOlderThan(c.Request.Context(), cutoff)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"deleted_logs": 0, "deleted_webhook_events": 0})
-		return
-	}
-	deletedEvents, err := h.Store.DeleteWebhookEventsOlderThan(c.Request.Context(), cutoff)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"deleted_logs": deletedLogs, "deleted_webhook_events": 0})
+		c.JSON(http.StatusInternalServerError, gin.H{"deleted_logs": 0})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"deleted_logs":           deletedLogs,
-		"deleted_webhook_events": deletedEvents,
+		"deleted_logs": deletedLogs,
 	})
 }
 
@@ -154,16 +146,10 @@ func (h *CronHandler) Health(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{})
 		return
 	}
-	last, err := h.Store.GetLastWebhookEventTime(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{})
-		return
-	}
 	c.JSON(http.StatusOK, gin.H{
-		"pending":               counts["pending"],
-		"processing":            counts["processing"],
-		"failed":                counts["failed"],
-		"done":                  counts["done"],
-		"last_webhook_event_at": last,
+		"pending":    counts["pending"],
+		"processing": counts["processing"],
+		"failed":     counts["failed"],
+		"done":       counts["done"],
 	})
 }

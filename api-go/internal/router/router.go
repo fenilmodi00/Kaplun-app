@@ -20,7 +20,6 @@ type Dependencies struct {
 
 	Bridge         *handlers.BridgeHandler
 	Automations    *handlers.AutomationsHandler
-	TrackedLinks   *handlers.TrackedLinksHandler
 	Webhooks       *handlers.WebhooksHandler
 	Cron           *handlers.CronHandler
 		InstagramOAuth *handlers.InstagramOAuthHandler
@@ -50,10 +49,6 @@ func registerRoutes(engine *gin.Engine, deps Dependencies) {
 
 	if deps.Automations != nil && deps.ClerkAuth != nil {
 		deps.Automations.Register(engine.Group("/automations"), deps.ClerkAuth)
-	}
-
-	if deps.TrackedLinks != nil {
-		engine.GET("/r/:slug", deps.TrackedLinks.Redirect)
 	}
 
 	if deps.Webhooks != nil {

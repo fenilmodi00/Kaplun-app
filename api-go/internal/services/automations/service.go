@@ -3,13 +3,11 @@ package automations
 import (
 	"context"
 	"errors"
-	"math"
 	"strings"
 	"time"
 
 	"kaplun/api-go/internal/models"
 	"kaplun/api-go/internal/services/templates"
-	"kaplun/api-go/internal/services/tracking"
 )
 
 var (
@@ -39,11 +37,6 @@ type Store interface {
 	CountLogsByActionSince(ctx context.Context, clerkUserID, sinceISO string) (map[string]int, error)
 	TopKeywords(ctx context.Context, clerkUserID, sinceISO string, limit int) ([][]any, error)
 
-	GetTrackedLinkForAutomation(ctx context.Context, automationID string) (*models.TrackedLinkRow, error)
-	CreateTrackedLink(ctx context.Context, automationID, targetURL, slug string) (models.TrackedLinkRow, error)
-	CountClicks(ctx context.Context, linkID string) (int, error)
-	CountClicksSince(ctx context.Context, linkID, sinceISO string) (int, error)
-
 	GetCreatorByClerkID(ctx context.Context, clerkUserID string) (*models.CreatorRow, error)
 }
 
@@ -51,7 +44,6 @@ type Store interface {
 type Service struct {
 	store Store
 	now   func() time.Time
-	slug  func() (string, error)
 }
 
 // NewService constructs an automations service with constructor injection.
@@ -59,7 +51,6 @@ func NewService(store Store) *Service {
 	return &Service{
 		store: store,
 		now:   func() time.Time { return time.Now().UTC() },
-		slug:  tracking.NewSlug,
 	}
 }
 
@@ -116,7 +107,6 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		DMMessage:               body.DMMessage,
 		ButtonText:              body.ButtonText,
 		RevealMessage:           body.RevealMessage,
-		TrackLinks:              body.TrackLinks,
 		PublicReplyEnabled:      body.PublicReplyEnabled,
 		PublicReplyMessage:      body.PublicReplyMessage,
 		PublicReplyMessages:     body.PublicReplyMessages,
@@ -135,22 +125,6 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 	created, err := s.store.CreateAutomation(ctx, row)
 	if err != nil {
 		return models.Automation{}, err
-	}
-
-	if body.TrackLinks {
-		targetURL := tracking.ExtractFirstURL(body.DMMessage)
-		if targetURL == "" && body.RevealMessage != nil {
-			targetURL = tracking.ExtractFirstURL(*body.RevealMessage)
-		}
-		if targetURL != "" {
-			slug, slugErr := s.slug()
-			if slugErr != nil {
-				return models.Automation{}, slugErr
-			}
-			if _, linkErr := s.store.CreateTrackedLink(ctx, created.ID, targetURL, slug); linkErr != nil {
-				return models.Automation{}, linkErr
-			}
-		}
 	}
 
 	return created, nil
@@ -210,27 +184,10 @@ func (s *Service) OverviewStats(ctx context.Context, clerkUserID string) (models
 		return models.OverviewStats{}, err
 	}
 	activeCount := 0
-	clicks7d := 0
 	for _, a := range automations {
 		if a.Status == "active" {
 			activeCount++
 		}
-		link, linkErr := s.store.GetTrackedLinkForAutomation(ctx, a.ID)
-		if linkErr != nil {
-			return models.OverviewStats{}, linkErr
-		}
-		if link != nil {
-			n, clickErr := s.store.CountClicksSince(ctx, link.ID, since7d)
-			if clickErr != nil {
-				return models.OverviewStats{}, clickErr
-			}
-			clicks7d += n
-		}
-	}
-
-	ctr := 0.0
-	if sent > 0 {
-		ctr = round2(float64(clicks7d) / float64(sent))
 	}
 
 	topKws, err := s.store.TopKeywords(ctx, clerkUserID, since7d, 1)
@@ -246,8 +203,6 @@ func (s *Service) OverviewStats(ctx context.Context, clerkUserID string) (models
 
 	return models.OverviewStats{
 		Sent7d:            sent,
-		Clicks7d:          clicks7d,
-		CTR7d:             ctr,
 		TopKeyword7d:      topKW,
 		ActiveAutomations: activeCount,
 	}, nil
@@ -267,70 +222,10 @@ func (s *Service) AutomationStats(ctx context.Context, clerkUserID, automationID
 	skipped := actionCounts["skipped"]
 	failed := actionCounts["failed"]
 
-	clicks := 0
-	link, linkErr := s.store.GetTrackedLinkForAutomation(ctx, automationID)
-	if linkErr != nil {
-		return models.AutomationStats{}, linkErr
-	}
-	if link != nil {
-		clicks, err = s.store.CountClicks(ctx, link.ID)
-		if err != nil {
-			return models.AutomationStats{}, err
-		}
-	}
-	ctr := 0.0
-	if sent > 0 {
-		ctr = round2(float64(clicks) / float64(sent))
-	}
-
-	logs, err := s.store.ListLogs(ctx, automationID, 10000)
-	if err != nil {
-		return models.AutomationStats{}, err
-	}
-
-	kwCounts := map[string]int{}
-	for _, log := range logs {
-		if log.MatchedKeyword != nil && *log.MatchedKeyword != "" {
-			kwCounts[*log.MatchedKeyword]++
-		}
-	}
-	topKeywords := topNKeywords(kwCounts, 10)
-
-	today := s.now().UTC().Truncate(24 * time.Hour)
-	dailyMap := map[string]int{}
-	dates := make([]string, 0, 7)
-	for i := 0; i < 7; i++ {
-		d := today.AddDate(0, 0, -i).Format("2006-01-02")
-		dailyMap[d] = 0
-		dates = append(dates, d)
-	}
-	for _, log := range logs {
-		if log.Action != "dm_sent" && log.Action != "button_dm_sent" {
-			continue
-		}
-		if len(log.CreatedAt) < 10 {
-			continue
-		}
-		logDate := log.CreatedAt[:10]
-		if _, ok := dailyMap[logDate]; ok {
-			dailyMap[logDate]++
-		}
-	}
-	// Sort dates ascending like Python sorted(daily_map.keys())
-	sortStrings(dates)
-	daily := make([]models.DailySent, 0, 7)
-	for _, d := range dates {
-		daily = append(daily, models.DailySent{Date: d, Sent: dailyMap[d]})
-	}
-
 	return models.AutomationStats{
-		Sent:        sent,
-		Skipped:     skipped,
-		Failed:      failed,
-		Clicks:      clicks,
-		CTR:         ctr,
-		TopKeywords: topKeywords,
-		Daily:       daily,
+		Sent:    sent,
+		Skipped: skipped,
+		Failed:  failed,
 	}, nil
 }
 
@@ -487,11 +382,8 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 		if body.FollowUpDelayMinutes != nil {
 			data["follow_up_delay_minutes"] = *body.FollowUpDelayMinutes
 		}
-		if body.DMTriggerEnabled != nil {
-			data["dm_trigger_enabled"] = *body.DMTriggerEnabled
-		}
-		if body.TrackLinks != nil {
-		data["track_links"] = *body.TrackLinks
+	if body.DMTriggerEnabled != nil {
+		data["dm_trigger_enabled"] = *body.DMTriggerEnabled
 	}
 	if body.Status != nil {
 		if *body.Status != "active" && *body.Status != "paused" {
@@ -511,44 +403,4 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 		data["media_ids"] = body.MediaIDs
 	}
 	return data, nil
-}
-
-func round2(v float64) float64 {
-	return math.Round(v*100) / 100
-}
-
-func topNKeywords(counts map[string]int, n int) [][]any {
-	type pair struct {
-		kw string
-		c  int
-	}
-	pairs := make([]pair, 0, len(counts))
-	for kw, c := range counts {
-		pairs = append(pairs, pair{kw, c})
-	}
-	for i := 0; i < len(pairs); i++ {
-		for j := i + 1; j < len(pairs); j++ {
-			if pairs[j].c > pairs[i].c {
-				pairs[i], pairs[j] = pairs[j], pairs[i]
-			}
-		}
-	}
-	if len(pairs) > n {
-		pairs = pairs[:n]
-	}
-	out := make([][]any, 0, len(pairs))
-	for _, p := range pairs {
-		out = append(out, []any{p.kw, p.c})
-	}
-	return out
-}
-
-func sortStrings(ss []string) {
-	for i := 0; i < len(ss); i++ {
-		for j := i + 1; j < len(ss); j++ {
-			if ss[j] < ss[i] {
-				ss[i], ss[j] = ss[j], ss[i]
-			}
-		}
-	}
 }

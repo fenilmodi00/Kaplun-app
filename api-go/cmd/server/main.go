@@ -29,7 +29,6 @@ import (
 	"kaplun/api-go/internal/services/bridge"
 	"kaplun/api-go/internal/services/oauth"
 	"kaplun/api-go/internal/services/reconcile"
-	"kaplun/api-go/internal/services/trackedlinks"
 	"kaplun/api-go/internal/store"
 	"kaplun/api-go/internal/worker"
 )
@@ -241,13 +240,10 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	var commentRunner *worker.CommentRunner
 	if awClient != nil && cfg.HasAutomationTables() {
 		autoStore = store.NewAutomationsStore(awClient, store.Tables{
-			Creators:      cfg.AppwriteCreatorsTableID,
-			Automations:   cfg.AppwriteAutomationsTableID,
-			Logs:          cfg.AppwriteAutomationLogsTableID,
-			Jobs:          cfg.AppwriteAutomationJobsTableID,
-			TrackedLinks:  cfg.AppwriteTrackedLinksTableID,
-			LinkClicks:    cfg.AppwriteLinkClicksTableID,
-			WebhookEvents: cfg.AppwriteWebhookEventsTableID,
+			Creators:    cfg.AppwriteCreatorsTableID,
+			Automations: cfg.AppwriteAutomationsTableID,
+			Logs:        cfg.AppwriteAutomationLogsTableID,
+			Jobs:        cfg.AppwriteAutomationJobsTableID,
 		})
 		commentRunner = worker.NewCommentRunner(autoStore.AsWorker(), graphSender, tokCrypto)
 		if cfg.PublicBaseURL != "" {
@@ -298,8 +294,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 
 	if autoStore != nil && deps.ClerkAuth != nil {
 		deps.Automations = handlers.NewAutomationsHandler(automations.NewService(autoStore))
-		deps.TrackedLinks = handlers.NewTrackedLinksHandler(trackedlinks.NewService(autoStore))
-		logger.Info("route enabled", "path", "/automations/* and GET /r/:slug")
+		logger.Info("route enabled", "path", "/automations/*")
 	}
 
 	if cfg.WebhookVerifyToken != "" {

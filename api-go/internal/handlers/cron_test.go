@@ -16,12 +16,10 @@ import (
 )
 
 type fakeCronStore struct {
-	creators      []handlers.CronCreator
-	updated       []updatedToken
-	deletedLogs   int
-	deletedEvents int
-	counts        map[string]int
-	lastWebhook   *string
+	creators    []handlers.CronCreator
+	updated     []updatedToken
+	deletedLogs int
+	counts      map[string]int
 }
 
 type updatedToken struct {
@@ -41,19 +39,11 @@ func (f *fakeCronStore) DeleteLogsOlderThan(context.Context, string) (int, error
 	return f.deletedLogs, nil
 }
 
-func (f *fakeCronStore) DeleteWebhookEventsOlderThan(context.Context, string) (int, error) {
-	return f.deletedEvents, nil
-}
-
 func (f *fakeCronStore) CountJobsByStatus(context.Context) (map[string]int, error) {
 	if f.counts == nil {
 		return map[string]int{}, nil
 	}
 	return f.counts, nil
-}
-
-func (f *fakeCronStore) GetLastWebhookEventTime(context.Context) (*string, error) {
-	return f.lastWebhook, nil
 }
 
 type fakeRefresher struct {
@@ -211,7 +201,7 @@ func TestCronRetainLogs(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1, deletedEvents: 2}, nil, nil, nil)
+	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1}, nil, nil, nil)
 	engine := gin.New()
 	engine.POST("/cron/retain-logs", h.RetainLogs)
 
@@ -221,7 +211,7 @@ func TestCronRetainLogs(t *testing.T) {
 
 	var body map[string]int
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
-	if body["deleted_logs"] != 1 || body["deleted_webhook_events"] != 2 {
+	if body["deleted_logs"] != 1 {
 		t.Fatalf("body: %v", body)
 	}
 }
@@ -230,10 +220,8 @@ func TestCronHealth(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	ts := "2026-07-29T12:00:00+00:00"
 	h := handlers.NewCronHandler(&fakeCronStore{
 		counts: map[string]int{"pending": 1, "processing": 1, "failed": 1, "done": 2},
-		lastWebhook: &ts,
 	}, nil, nil, nil)
 	engine := gin.New()
 	engine.GET("/cron/health", h.Health)
@@ -246,8 +234,5 @@ func TestCronHealth(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
 	if body["pending"].(float64) != 1 || body["done"].(float64) != 2 {
 		t.Fatalf("body: %v", body)
-	}
-	if body["last_webhook_event_at"] != ts {
-		t.Fatalf("last: %v", body["last_webhook_event_at"])
 	}
 }

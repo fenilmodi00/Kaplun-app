@@ -33,7 +33,6 @@ type Automation struct {
 	DMMessage               string   `json:"dm_message"`
 	ButtonText              *string  `json:"button_text"`
 	RevealMessage           *string  `json:"reveal_message"`
-	TrackLinks              bool     `json:"track_links"`
 	PublicReplyEnabled      bool     `json:"public_reply_enabled"`
 	PublicReplyMessage      *string  `json:"public_reply_message"`
 	PublicReplyMessages     []string `json:"public_reply_messages"`
@@ -85,7 +84,6 @@ type AutomationCreate struct {
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
 	DMTriggerEnabled        bool     `json:"dm_trigger_enabled"`
-	TrackLinks              bool     `json:"track_links"`
 }
 
 // AutomationPatch is the PATCH /automations/:id body.
@@ -108,7 +106,6 @@ type AutomationPatch struct {
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
 	DMTriggerEnabled        *bool    `json:"dm_trigger_enabled"`
-	TrackLinks              *bool    `json:"track_links"`
 	Status                  *string  `json:"status"`
 	TargetType              *string  `json:"target_type"`
 	MediaIDs                []string `json:"media_ids"`
@@ -142,28 +139,16 @@ type CampaignTemplate struct {
 	DMMessage string   `json:"dm_message"`
 }
 
-// DailySent is one day bucket for per-automation stats.
-type DailySent struct {
-	Date string `json:"date"`
-	Sent int    `json:"sent"`
-}
-
 // AutomationStats matches Expo AutomationStats (bare object, not wrapped).
 type AutomationStats struct {
-	Sent        int         `json:"sent"`
-	Skipped     int         `json:"skipped"`
-	Failed      int         `json:"failed"`
-	Clicks      int         `json:"clicks"`
-	CTR         float64     `json:"ctr"`
-	TopKeywords [][]any     `json:"top_keywords"`
-	Daily       []DailySent `json:"daily"`
+	Sent    int `json:"sent"`
+	Skipped int `json:"skipped"`
+	Failed  int `json:"failed"`
 }
 
 // OverviewStats matches Expo OverviewStats (bare object, not wrapped).
 type OverviewStats struct {
 	Sent7d            int     `json:"sent_7d"`
-	Clicks7d          int     `json:"clicks_7d"`
-	CTR7d             float64 `json:"ctr_7d"`
 	TopKeyword7d      string  `json:"top_keyword_7d"`
 	ActiveAutomations int     `json:"active_automations"`
 }
@@ -173,12 +158,4 @@ type CreatorRow struct {
 	ClerkUserID string `json:"clerk_user_id"`
 	IGUserID    string `json:"ig_user_id"`
 	AccessToken string `json:"access_token"`
-}
-
-// TrackedLinkRow is a tracked-link document.
-type TrackedLinkRow struct {
-	ID           string `json:"$id"`
-	AutomationID string `json:"automation_id"`
-	TargetURL    string `json:"target_url"`
-	Slug         string `json:"slug,omitempty"`
 }

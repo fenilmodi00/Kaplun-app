@@ -226,17 +226,6 @@ func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payloa
 	return id, nil
 }
 
-func (s *AutomationsStore) RecordWebhookEvent(ctx context.Context, payload string) error {
-	if len(payload) > 16000 {
-		payload = payload[:16000]
-	}
-	_, err := s.client.CreateRow(ctx, s.tables.WebhookEvents, appwrite.UniqueID, map[string]any{
-		"payload":     payload,
-		"received_at": s.now().Format(time.RFC3339Nano),
-	}, nil)
-	return err
-}
-
 // GetAutomationMap returns a raw automation row (for worker adapter).
 func (s *AutomationsStore) GetAutomationMap(ctx context.Context, automationID string) (map[string]any, error) {
 	row, err := s.client.GetRow(ctx, s.tables.Automations, automationID)
@@ -264,21 +253,6 @@ func (s *AutomationsStore) GetCreatorMapByClerkID(ctx context.Context, clerkUser
 	return result.Rows[0], nil
 }
 
-// GetTrackedLinkMapForAutomation returns a raw tracked-link row (for worker adapter).
-func (s *AutomationsStore) GetTrackedLinkMapForAutomation(ctx context.Context, automationID string) (map[string]any, error) {
-	result, err := s.client.ListRows(ctx, s.tables.TrackedLinks, []string{
-		appwrite.QueryEqual("automation_id", automationID),
-		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(result.Rows) == 0 {
-		return nil, nil
-	}
-	return result.Rows[0], nil
-}
-
 // --- WorkerFacade: signature adapters for conflicting typed methods ---
 
 func (f WorkerFacade) GetAutomation(ctx context.Context, automationID string) (map[string]any, error) {
@@ -287,10 +261,6 @@ func (f WorkerFacade) GetAutomation(ctx context.Context, automationID string) (m
 
 func (f WorkerFacade) GetCreatorByClerkID(ctx context.Context, clerkUserID string) (map[string]any, error) {
 	return f.GetCreatorMapByClerkID(ctx, clerkUserID)
-}
-
-func (f WorkerFacade) GetTrackedLinkForAutomation(ctx context.Context, automationID string) (map[string]any, error) {
-	return f.GetTrackedLinkMapForAutomation(ctx, automationID)
 }
 
 func (f WorkerFacade) UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error {
@@ -329,10 +299,6 @@ func (s *AutomationsStore) UpdateCreatorToken(ctx context.Context, creatorID, en
 
 func (s *AutomationsStore) DeleteLogsOlderThan(ctx context.Context, cutoffISO string) (int, error) {
 	return s.deleteOlderThan(ctx, s.tables.Logs, "created_at", cutoffISO)
-}
-
-func (s *AutomationsStore) DeleteWebhookEventsOlderThan(ctx context.Context, cutoffISO string) (int, error) {
-	return s.deleteOlderThan(ctx, s.tables.WebhookEvents, "received_at", cutoffISO)
 }
 
 func (s *AutomationsStore) deleteOlderThan(ctx context.Context, tableID, field, cutoffISO string) (int, error) {
@@ -386,22 +352,4 @@ func (s *AutomationsStore) CountJobsByStatus(ctx context.Context) (map[string]in
 		}
 	}
 	return counts, nil
-}
-
-func (s *AutomationsStore) GetLastWebhookEventTime(ctx context.Context) (*string, error) {
-	result, err := s.client.ListRows(ctx, s.tables.WebhookEvents, []string{
-		appwrite.QueryOrderDesc("received_at"),
-		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(result.Rows) == 0 {
-		return nil, nil
-	}
-	ts := stringField(result.Rows[0], "received_at")
-	if ts == "" {
-		return nil, nil
-	}
-	return &ts, nil
 }

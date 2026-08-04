@@ -27,15 +27,6 @@ func TestListAutomationsQueries(t *testing.T) {
 	}
 }
 
-func TestCountClicksQueries(t *testing.T) {
-	t.Parallel()
-
-	got := store.CountClicksQueries("slug1")
-	if got[0] != `{"method":"equal","attribute":"slug","values":["slug1"]}` || got[1] != `{"method":"limit","values":[1]}` {
-		t.Fatalf("got=%#v", got)
-	}
-}
-
 type fakeRows struct {
 	listCalls []listCall
 	rows      map[string]appwrite.RowsResult
@@ -117,12 +108,10 @@ func TestAutomationsStoreListAndCreateShapes(t *testing.T) {
 		},
 	}
 	s := store.NewAutomationsStore(fake, store.Tables{
-		Creators:     "creators",
-		Automations:  "automations",
-		Logs:         "logs",
-		Jobs:         "jobs",
-		TrackedLinks: "links",
-		LinkClicks:   "clicks",
+		Creators:    "creators",
+		Automations: "automations",
+		Logs:        "logs",
+		Jobs:        "jobs",
 	})
 
 	list, err := s.ListAutomations(context.Background(), "c1")
@@ -152,27 +141,6 @@ func TestAutomationsStoreListAndCreateShapes(t *testing.T) {
 	}
 	if len(fake.created) != 1 || fake.created[0].id != appwrite.UniqueID {
 		t.Fatalf("created calls=%#v", fake.created)
-	}
-}
-
-func TestAutomationsStoreCountClicksUsesSlugQuery(t *testing.T) {
-	t.Parallel()
-
-	fake := &fakeRows{
-		rows: map[string]appwrite.RowsResult{
-			"clicks": {Total: 7, Rows: []map[string]any{}},
-		},
-	}
-	s := store.NewAutomationsStore(fake, store.Tables{LinkClicks: "clicks"})
-	n, err := s.CountClicks(context.Background(), "slug99")
-	if err != nil {
-		t.Fatalf("CountClicks: %v", err)
-	}
-	if n != 7 {
-		t.Fatalf("n=%d", n)
-	}
-	if fake.listCalls[0].queries[0] != `{"method":"equal","attribute":"slug","values":["slug99"]}` {
-		t.Fatalf("queries=%#v", fake.listCalls[0].queries)
 	}
 }
 

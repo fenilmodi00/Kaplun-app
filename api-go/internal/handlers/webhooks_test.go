@@ -17,10 +17,8 @@ import (
 )
 
 type fakeWebhookStore struct {
-	mu        sync.Mutex
-	recorded  []string
-	created   []createdJob
-	recordErr error
+	mu      sync.Mutex
+	created []createdJob
 }
 
 type createdJob struct {
@@ -28,13 +26,6 @@ type createdJob struct {
 	Payload map[string]any
 	ID      string
 	RunAt   string
-}
-
-func (f *fakeWebhookStore) RecordWebhookEvent(_ context.Context, payload string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.recorded = append(f.recorded, payload)
-	return f.recordErr
 }
 
 func (f *fakeWebhookStore) CreateJob(_ context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
@@ -174,40 +165,11 @@ func TestWebhookPostbackCreatesSendReveal(t *testing.T) {
 	}
 }
 
-func TestWebhookRecordsRawPayload(t *testing.T) {
+func TestWebhookValidSignatureAlways200EvenOnBadJSON(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &fakeWebhookStore{}
-	h := handlers.NewWebhooksHandler("", []string{"test-ig-secret"}, store, &fakeEnqueuer{})
-	engine := gin.New()
-	engine.POST("/webhooks/instagram", h.Events)
-
-	body := []byte(`{"object":"instagram","entry":[]}`)
-	sig := webhooks.ComputeTestSignature("test-ig-secret", body)
-
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/instagram", bytes.NewReader(body))
-	req.Header.Set("X-Hub-Signature-256", sig)
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	if len(store.recorded) != 1 {
-		t.Fatalf("expected recorded payload")
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(store.recorded[0]), &parsed); err != nil || parsed["object"] != "instagram" {
-		t.Fatalf("recorded: %q", store.recorded[0])
-	}
-}
-
-func TestWebhookValidSignatureAlways200EvenOnRecordError(t *testing.T) {
-	t.Parallel()
-	gin.SetMode(gin.TestMode)
-
-	store := &fakeWebhookStore{recordErr: context.Canceled}
 	h := handlers.NewWebhooksHandler("", []string{"secret"}, store, &fakeEnqueuer{})
 	engine := gin.New()
 	engine.POST("/webhooks/instagram", h.Events)

@@ -35,9 +35,6 @@ type Config struct {
 	AppwriteAutomationsTableID    string
 	AppwriteAutomationLogsTableID string
 	AppwriteAutomationJobsTableID string
-	AppwriteTrackedLinksTableID   string
-	AppwriteLinkClicksTableID     string
-	AppwriteWebhookEventsTableID  string
 
 	// Comment Automation — Secrets / flags
 	WebhookVerifyToken       string
@@ -86,9 +83,6 @@ func FromMap(values map[string]string) (Config, error) {
 		AppwriteAutomationsTableID:    strings.TrimSpace(values["APPWRITE_AUTOMATIONS_TABLE_ID"]),
 		AppwriteAutomationLogsTableID: strings.TrimSpace(values["APPWRITE_AUTOMATION_LOGS_TABLE_ID"]),
 		AppwriteAutomationJobsTableID: strings.TrimSpace(values["APPWRITE_AUTOMATION_JOBS_TABLE_ID"]),
-		AppwriteTrackedLinksTableID:   strings.TrimSpace(values["APPWRITE_TRACKED_LINKS_TABLE_ID"]),
-		AppwriteLinkClicksTableID:     strings.TrimSpace(values["APPWRITE_LINK_CLICKS_TABLE_ID"]),
-		AppwriteWebhookEventsTableID:  strings.TrimSpace(values["APPWRITE_WEBHOOK_EVENTS_TABLE_ID"]),
 
 		WebhookVerifyToken: strings.TrimSpace(values["WEBHOOK_VERIFY_TOKEN"]),
 		TokenEncryptionKey: strings.TrimSpace(values["TOKEN_ENCRYPTION_KEY"]),
@@ -159,10 +153,7 @@ func (c Config) HasClerkAuth() bool {
 func (c Config) HasAutomationTables() bool {
 	return c.AppwriteAutomationsTableID != "" &&
 		c.AppwriteAutomationLogsTableID != "" &&
-		c.AppwriteAutomationJobsTableID != "" &&
-		c.AppwriteTrackedLinksTableID != "" &&
-		c.AppwriteLinkClicksTableID != "" &&
-		c.AppwriteWebhookEventsTableID != ""
+		c.AppwriteAutomationJobsTableID != ""
 }
 
 func envMap() map[string]string {
@@ -183,9 +174,6 @@ func envMap() map[string]string {
 		"APPWRITE_AUTOMATIONS_TABLE_ID",
 		"APPWRITE_AUTOMATION_LOGS_TABLE_ID",
 		"APPWRITE_AUTOMATION_JOBS_TABLE_ID",
-		"APPWRITE_TRACKED_LINKS_TABLE_ID",
-		"APPWRITE_LINK_CLICKS_TABLE_ID",
-		"APPWRITE_WEBHOOK_EVENTS_TABLE_ID",
 		"WEBHOOK_VERIFY_TOKEN",
 		"TOKEN_ENCRYPTION_KEY",
 		"FACEBOOK_APP_SECRET",

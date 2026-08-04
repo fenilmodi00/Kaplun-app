@@ -10,21 +10,16 @@ import (
 )
 
 type fakeStore struct {
-	automations  map[string]models.Automation
-	logs         map[string][]models.AutomationLog
-	creators     map[string]models.CreatorRow
-	trackedLinks map[string]models.TrackedLinkRow
-	linkClicks   map[string][]string // linkID -> click timestamps
-	createdLink  *models.TrackedLinkRow
+	automations map[string]models.Automation
+	logs        map[string][]models.AutomationLog
+	creators    map[string]models.CreatorRow
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		automations:  map[string]models.Automation{},
-		logs:         map[string][]models.AutomationLog{},
-		creators:     map[string]models.CreatorRow{},
-		trackedLinks: map[string]models.TrackedLinkRow{},
-		linkClicks:   map[string][]string{},
+		automations: map[string]models.Automation{},
+		logs:        map[string][]models.AutomationLog{},
+		creators:    map[string]models.CreatorRow{},
 	}
 }
 
@@ -117,37 +112,6 @@ func (f *fakeStore) TopKeywords(_ context.Context, clerkUserID, sinceISO string,
 	return out, nil
 }
 
-func (f *fakeStore) GetTrackedLinkForAutomation(_ context.Context, automationID string) (*models.TrackedLinkRow, error) {
-	for _, link := range f.trackedLinks {
-		if link.AutomationID == automationID {
-			cp := link
-			return &cp, nil
-		}
-	}
-	return nil, nil
-}
-
-func (f *fakeStore) CreateTrackedLink(_ context.Context, automationID, targetURL, slug string) (models.TrackedLinkRow, error) {
-	row := models.TrackedLinkRow{ID: slug, AutomationID: automationID, TargetURL: targetURL, Slug: slug}
-	f.trackedLinks[slug] = row
-	f.createdLink = &row
-	return row, nil
-}
-
-func (f *fakeStore) CountClicks(_ context.Context, linkID string) (int, error) {
-	return len(f.linkClicks[linkID]), nil
-}
-
-func (f *fakeStore) CountClicksSince(_ context.Context, linkID, sinceISO string) (int, error) {
-	n := 0
-	for _, ts := range f.linkClicks[linkID] {
-		if ts >= sinceISO {
-			n++
-		}
-	}
-	return n, nil
-}
-
 func (f *fakeStore) GetCreatorByClerkID(_ context.Context, clerkUserID string) (*models.CreatorRow, error) {
 	c, ok := f.creators[clerkUserID]
 	if !ok {
@@ -206,7 +170,7 @@ func TestCreateSuccessAndInstagramRequired(t *testing.T) {
 	if row.ClerkUserID != "clerk_1" || row.Status != "active" || row.IGUserID != "ig_123" {
 		t.Fatalf("unexpected row: %#v", row)
 	}
-	if row.OpeningDMMode != "direct" || row.TrackLinks || len(row.BoundMediaIDs) != 0 {
+	if row.OpeningDMMode != "direct" || len(row.BoundMediaIDs) != 0 {
 		t.Fatalf("unexpected defaults: %#v", row)
 	}
 	if len(row.Keywords) != 2 || row.Keywords[1] != "kw2" {
@@ -278,7 +242,7 @@ func TestOverviewStatsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("overview: %v", err)
 	}
-	if stats.Sent7d != 0 || stats.Clicks7d != 0 || stats.CTR7d != 0 || stats.TopKeyword7d != "" || stats.ActiveAutomations != 0 {
+	if stats.Sent7d != 0 || stats.TopKeyword7d != "" || stats.ActiveAutomations != 0 {
 		t.Fatalf("unexpected empty stats: %#v", stats)
 	}
 }
@@ -297,22 +261,13 @@ func TestAutomationStatsShape(t *testing.T) {
 		{ID: "l4", Action: "failed", MatchedKeyword: &shopKW, CreatedAt: "2026-07-26T00:00:00Z"},
 		{ID: "l5", Action: "button_dm_sent", MatchedKeyword: &linkKW, CreatedAt: "2026-07-25T00:00:00Z"},
 	}
-	store.trackedLinks["s1"] = models.TrackedLinkRow{ID: "s1", AutomationID: "auto_1"}
-	store.linkClicks["s1"] = []string{"2026-07-29T00:00:00Z", "2026-07-28T00:00:00Z"}
-
 	svc := automations.NewService(store)
 
 	stats, err := svc.AutomationStats(context.Background(), "clerk_1", "auto_1")
 	if err != nil {
 		t.Fatalf("stats: %v", err)
 	}
-	if stats.Sent != 3 || stats.Skipped != 1 || stats.Failed != 1 || stats.Clicks != 2 {
+	if stats.Sent != 3 || stats.Skipped != 1 || stats.Failed != 1 {
 		t.Fatalf("unexpected counters: %#v", stats)
-	}
-	if stats.CTR != 0.67 {
-		t.Fatalf("expected ctr 0.67, got %v", stats.CTR)
-	}
-	if len(stats.Daily) != 7 {
-		t.Fatalf("expected 7 daily buckets, got %d", len(stats.Daily))
 	}
 }

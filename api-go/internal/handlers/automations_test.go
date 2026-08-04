@@ -250,7 +250,7 @@ func TestAutomationsHandlers(t *testing.T) {
 			method:     http.MethodGet,
 			path:       "/automations/stats/overview",
 			auth:       withAutomationsClerk("clerk_test_1"),
-			svc:        &fakeAutomationsService{overview: models.OverviewStats{Sent7d: 3, Clicks7d: 1, CTR7d: 0.33, TopKeyword7d: "LINK", ActiveAutomations: 2}},
+			svc:        &fakeAutomationsService{overview: models.OverviewStats{Sent7d: 3, TopKeyword7d: "LINK", ActiveAutomations: 2}},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder, _ *fakeAutomationsService) {
 				var body models.OverviewStats
@@ -373,9 +373,7 @@ func TestAutomationsHandlers(t *testing.T) {
 			path:   "/automations/auto_1/stats",
 			auth:   withAutomationsClerk("clerk_test_1"),
 			svc: &fakeAutomationsService{stats: models.AutomationStats{
-				Sent: 3, Skipped: 1, Failed: 1, Clicks: 2, CTR: 0.67,
-				TopKeywords: [][]any{{"LINK", 3}, {"SHOP", 1}},
-				Daily:       []models.DailySent{{Date: "2026-07-29", Sent: 1}},
+				Sent: 3, Skipped: 1, Failed: 1,
 			}},
 			wantStatus: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder, _ *fakeAutomationsService) {
@@ -383,11 +381,8 @@ func TestAutomationsHandlers(t *testing.T) {
 				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
-				if body.Sent != 3 || body.Clicks != 2 || body.CTR != 0.67 {
+				if body.Sent != 3 || body.Skipped != 1 || body.Failed != 1 {
 					t.Fatalf("unexpected stats: %#v", body)
-				}
-				if len(body.TopKeywords) != 2 {
-					t.Fatalf("expected top keywords, got %#v", body.TopKeywords)
 				}
 			},
 		},

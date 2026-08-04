@@ -9,19 +9,15 @@ import (
 
 	"kaplun/api-go/internal/models"
 	"kaplun/api-go/internal/platform/appwrite"
-	"kaplun/api-go/internal/services/trackedlinks"
 	"kaplun/api-go/internal/worker"
 )
 
 // Tables holds Appwrite TablesDB table IDs used by the automation engine.
 type Tables struct {
-	Creators      string
-	Automations   string
-	Logs          string
-	Jobs          string
-	TrackedLinks  string
-	LinkClicks    string
-	WebhookEvents string
+	Creators    string
+	Automations string
+	Logs        string
+	Jobs        string
 }
 
 // RowClient is the subset of Appwrite TablesDB operations the store needs.
@@ -205,59 +201,6 @@ func (s *AutomationsStore) TopKeywords(ctx context.Context, clerkUserID, sinceIS
 	return out, nil
 }
 
-func (s *AutomationsStore) GetTrackedLinkForAutomation(ctx context.Context, automationID string) (*models.TrackedLinkRow, error) {
-	result, err := s.client.ListRows(ctx, s.tables.TrackedLinks, []string{
-		appwrite.QueryEqual("automation_id", automationID),
-		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(result.Rows) == 0 {
-		return nil, nil
-	}
-	link, err := decodeTrackedLink(result.Rows[0])
-	if err != nil {
-		return nil, err
-	}
-	return &link, nil
-}
-
-func (s *AutomationsStore) CreateTrackedLink(ctx context.Context, automationID, targetURL, slug string) (models.TrackedLinkRow, error) {
-	row, err := s.client.CreateRow(ctx, s.tables.TrackedLinks, slug, map[string]any{
-		"automation_id": automationID,
-		"target_url":    targetURL,
-		"created_at":    s.now().Format(time.RFC3339Nano),
-	}, nil)
-	if err != nil {
-		return models.TrackedLinkRow{}, err
-	}
-	return decodeTrackedLink(row)
-}
-
-func (s *AutomationsStore) CountClicks(ctx context.Context, linkID string) (int, error) {
-	result, err := s.client.ListRows(ctx, s.tables.LinkClicks, []string{
-		appwrite.QueryEqual("slug", linkID),
-		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		return 0, err
-	}
-	return result.Total, nil
-}
-
-func (s *AutomationsStore) CountClicksSince(ctx context.Context, linkID, sinceISO string) (int, error) {
-	result, err := s.client.ListRows(ctx, s.tables.LinkClicks, []string{
-		appwrite.QueryEqual("slug", linkID),
-		appwrite.QueryGreaterThan("clicked_at", sinceISO),
-		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		return 0, err
-	}
-	return result.Total, nil
-}
-
 func (s *AutomationsStore) GetCreatorByClerkID(ctx context.Context, clerkUserID string) (*models.CreatorRow, error) {
 	result, err := s.client.ListRows(ctx, s.tables.Creators, []string{
 		appwrite.QueryEqual("clerk_user_id", clerkUserID),
@@ -275,31 +218,6 @@ func (s *AutomationsStore) GetCreatorByClerkID(ctx context.Context, clerkUserID 
 		IGUserID:    stringField(row, "ig_user_id"),
 		AccessToken: stringField(row, "access_token"),
 	}, nil
-}
-
-// --- trackedlinks.Store ---
-
-func (s *AutomationsStore) GetTrackedLink(ctx context.Context, slug string) (trackedlinks.Link, error) {
-	row, err := s.client.GetRow(ctx, s.tables.TrackedLinks, slug)
-	if err != nil {
-		if apiErr, ok := err.(*appwrite.APIError); ok && apiErr.NotFound() {
-			return trackedlinks.Link{}, trackedlinks.ErrNotFound
-		}
-		return trackedlinks.Link{}, err
-	}
-	link, err := decodeTrackedLink(row)
-	if err != nil {
-		return trackedlinks.Link{}, err
-	}
-	return trackedlinks.Link{Slug: link.ID, TargetURL: link.TargetURL}, nil
-}
-
-func (s *AutomationsStore) RecordClick(ctx context.Context, slug string) error {
-	_, err := s.client.CreateRow(ctx, s.tables.LinkClicks, appwrite.UniqueID, map[string]any{
-		"slug":       slug,
-		"clicked_at": s.now().Format(time.RFC3339Nano),
-	}, nil)
-	return err
 }
 
 // --- worker.SweeperStore ---
@@ -342,14 +260,6 @@ func ListAutomationsQueries(clerkUserID string) []string {
 	}
 }
 
-// CountClicksQueries returns the Appwrite queries used by CountClicks (test helper).
-func CountClicksQueries(linkID string) []string {
-	return []string{
-		appwrite.QueryEqual("slug", linkID),
-		appwrite.QueryLimit(1),
-	}
-}
-
 func automationToData(a models.Automation) map[string]any {
 	publicReplyMessages := a.PublicReplyMessages
 	if publicReplyMessages == nil {
@@ -369,7 +279,6 @@ func automationToData(a models.Automation) map[string]any {
 		"dm_message":                  a.DMMessage,
 		"button_text":                 a.ButtonText,
 		"reveal_message":              a.RevealMessage,
-		"track_links":                 a.TrackLinks,
 		"public_reply_enabled":        a.PublicReplyEnabled,
 		"public_reply_message":        a.PublicReplyMessage,
 		"public_reply_messages":       publicReplyMessages,
@@ -412,16 +321,6 @@ func decodeLog(row map[string]any) (models.AutomationLog, error) {
 		return models.AutomationLog{}, fmt.Errorf("decode log: %w", err)
 	}
 	return log, nil
-}
-
-func decodeTrackedLink(row map[string]any) (models.TrackedLinkRow, error) {
-	id := stringField(row, "$id")
-	return models.TrackedLinkRow{
-		ID:           id,
-		AutomationID: stringField(row, "automation_id"),
-		TargetURL:    stringField(row, "target_url"),
-		Slug:         id,
-	}, nil
 }
 
 func decodeJobs(rows []map[string]any) []worker.JobRecord {

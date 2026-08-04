@@ -161,10 +161,6 @@ func (f *fakeStore) GetCreatorByClerkID(_ context.Context, clerkID string) (map[
 	return f.creators[clerkID], nil
 }
 
-func (f *fakeStore) GetTrackedLinkForAutomation(context.Context, string) (map[string]any, error) {
-	return nil, nil
-}
-
 func (f *fakeStore) GetAutomation(_ context.Context, automationID string) (map[string]any, error) {
 	for _, a := range f.automations {
 		if a["$id"] == automationID {

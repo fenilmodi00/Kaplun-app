@@ -15,7 +15,6 @@ import (
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/services/keywords"
 	"kaplun/api-go/internal/services/ratelimit"
-	"kaplun/api-go/internal/services/tracking"
 )
 
 // ErrDuplicateKey mirrors Appwrite TablesDB unique-index conflicts (HTTP 409).
@@ -38,7 +37,6 @@ type CommentStore interface {
 	UpdateLog(ctx context.Context, logID string, data map[string]any) error
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
 	GetCreatorByClerkID(ctx context.Context, clerkUserID string) (map[string]any, error)
-	GetTrackedLinkForAutomation(ctx context.Context, automationID string) (map[string]any, error)
 	GetAutomation(ctx context.Context, automationID string) (map[string]any, error)
 	GetJob(ctx context.Context, jobID string) (map[string]any, error)
 	UpdateJob(ctx context.Context, jobID string, data map[string]any) error
@@ -98,33 +96,27 @@ func Personalize(text, commenterName string) string {
 	return usernameTokenRE.ReplaceAllString(text, name)
 }
 
-// buildInlineLinkFallback builds a plain-text fallback message when a button
-// template DM is rejected. It personalizes {username}, replaces {link} with
-// the tracked URL, and appends the URL if no {link} token is present.
-func buildInlineLinkFallback(dmMessage, commenterName, trackedURL string) string {
-	msg := Personalize(dmMessage, commenterName)
-	linkToken := "{link}"
-	if strings.Contains(msg, linkToken) {
-		msg = strings.ReplaceAll(msg, linkToken, trackedURL)
-	} else if trackedURL != "" && !strings.Contains(msg, trackedURL) {
-		msg += "\n\n" + trackedURL
+var firstURLRE = regexp.MustCompile(`(?i)https?://[^\s<>"')\]]+`)
+
+// extractFirstURL returns the first URL in message, or "" if none.
+func extractFirstURL(message string) string {
+	m := firstURLRE.FindString(message)
+	if m == "" {
+		return ""
 	}
-	return msg
+	return strings.TrimRight(m, ".,!?;:")
 }
 
 var bareDomainRE = regexp.MustCompile(`(?i)^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(/[\w\-./?%&=+#]*)?$`)
 
 // resolveRevealLinkURL returns a https URL for a web_url button when the reveal
-// is link-like. trackedURL wins when link tracking is enabled.
-func resolveRevealLinkURL(revealText, trackedURL string) string {
-	if u := strings.TrimSpace(trackedURL); u != "" {
-		return u
-	}
+// is link-like.
+func resolveRevealLinkURL(revealText string) string {
 	revealText = strings.TrimSpace(revealText)
 	if revealText == "" {
 		return ""
 	}
-	if u := tracking.ExtractFirstURL(revealText); u != "" {
+	if u := extractFirstURL(revealText); u != "" {
 		return u
 	}
 	// Bare domains like "Kaplun.tech" — common in reveal fields.
@@ -325,22 +317,6 @@ func (r *CommentRunner) sendAutomationMessages(
 	dmText := mapString(auto, "dm_message")
 	revealText := mapString(auto, "reveal_message")
 
-	var trackedURL string
-	if mapBool(auto, "track_links") {
-		link, err := r.Store.GetTrackedLinkForAutomation(ctx, mapString(auto, "$id"))
-		if err != nil {
-			return err
-		}
-		if link != nil {
-			trackedURL = r.PublicBaseURL + "/r/" + mapString(link, "$id")
-			targetURL := mapString(link, "target_url")
-			dmText = tracking.RenderMessageWithTracking(dmText, commenterName, trackedURL, targetURL)
-			if revealText != "" {
-				revealText = tracking.RenderMessageWithTracking(revealText, commenterName, trackedURL, targetURL)
-			}
-		}
-	}
-
 	// Follow gate: if requireFollow is true and mode is NOT button, check follow status
 	// before sending the DM. If not following, send a follow prompt button instead.
 	if mapBool(auto, "require_follow") && mapString(auto, "opening_dm_mode") != "button" {
@@ -406,7 +382,7 @@ func (r *CommentRunner) sendAutomationMessages(
 				if commenterID == "" {
 					return err
 				}
-				fallbackMsg := buildInlineLinkFallback(dmText, commenterName, trackedURL)
+				fallbackMsg := Personalize(dmText, commenterName)
 				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
 					return err
 				}
@@ -650,21 +626,8 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 		revealMessage = "Here's the link you requested!"
 	}
 
-	var trackedURL string
-	if mapBool(auto, "track_links") {
-		link, lerr := r.Store.GetTrackedLinkForAutomation(ctx, automationID)
-		if lerr != nil {
-			return lerr
-		}
-		if link != nil {
-			trackedURL = r.PublicBaseURL + "/r/" + mapString(link, "$id")
-			targetURL := mapString(link, "target_url")
-			revealMessage = tracking.RenderMessageWithTracking(revealMessage, "", trackedURL, targetURL)
-		}
-	}
-
 	personalized := Personalize(revealMessage, "")
-	linkURL := resolveRevealLinkURL(revealMessage, trackedURL)
+	linkURL := resolveRevealLinkURL(revealMessage)
 	btnTitle := mapString(auto, "button_text")
 	if btnTitle == "" {
 		btnTitle = "Open link"

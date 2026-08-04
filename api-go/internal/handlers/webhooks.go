@@ -17,9 +17,8 @@ import (
 
 const maxCommentTextJobLen = 1500
 
-// WebhookStore records payloads and creates durable automation jobs.
+// WebhookStore creates durable automation jobs.
 type WebhookStore interface {
-	RecordWebhookEvent(ctx context.Context, payload string) error
 	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (jobID string, err error)
 }
 
@@ -94,13 +93,6 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 	defer func() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}()
-
-	rawStr := string(raw)
-	if h.Store != nil {
-		if err := h.Store.RecordWebhookEvent(c.Request.Context(), rawStr); err != nil {
-			h.warn("failed to record webhook event", err)
-		}
-	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(raw, &payload); err != nil {
