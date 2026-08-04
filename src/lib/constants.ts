@@ -6,6 +6,8 @@ export const TABLES = {
   DEAL_THREADS: 'deal_threads',
   MESSAGES: 'messages',
   DEALS: 'deals',
+  AUTOMATIONS: 'automations',
+  AUTOMATION_LOGS: 'automation_logs',
 };
 
 export const BUCKET_ID = 'attachments';

@@ -166,6 +166,15 @@ export default function AutomationDetail() {
     [automations, automationId],
   );
 
+  const replyPool = useMemo(() => {
+    if (!automation?.public_reply_enabled) return [];
+    const primary = automation.public_reply_message?.trim() ?? '';
+    const all = [primary, ...(automation.public_reply_messages ?? [])]
+      .map((m) => m.trim())
+      .filter(Boolean);
+    return [...new Set(all)];
+  }, [automation]);
+
   const stats = useMemo(() => computeStats(logs), [logs]);
 
   const handlePauseResume = useCallback(() => {
@@ -336,16 +345,13 @@ export default function AutomationDetail() {
                   <Text style={styles.configLabel}>Public reply</Text>
                   <Text style={styles.configValue}>
                     {automation.public_reply_enabled
-                      ? `On${automation.public_reply_messages?.length ? ` (${automation.public_reply_messages.length + (automation.public_reply_message ? 1 : 0)} in pool)` : ''}`
+                      ? `On${replyPool.length > 0 ? ` (${replyPool.length} in pool)` : ''}`
                       : 'Off'}
                   </Text>
                 </View>
-                {automation.public_reply_enabled && automation.public_reply_messages?.length > 0 && (
+                {automation.public_reply_enabled && replyPool.length > 0 && (
                   <View style={styles.poolWrap}>
-                    {automation.public_reply_message && (
-                      <Text style={styles.poolItem} numberOfLines={1}>• {automation.public_reply_message}</Text>
-                    )}
-                    {automation.public_reply_messages.map((msg) => (
+                    {replyPool.map((msg) => (
                       <Text key={msg} style={styles.poolItem} numberOfLines={1}>• {msg}</Text>
                     ))}
                   </View>

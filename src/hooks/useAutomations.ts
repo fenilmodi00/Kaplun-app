@@ -1,7 +1,11 @@
 // src/hooks/useAutomations.ts
+import { useMemo } from 'react';
 import { useAuth, useUser } from '@clerk/expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Channel } from 'appwrite';
 
+import { DATABASE_ID, TABLES } from '@/lib/constants';
+import { useRealtimeSubscription } from '@/lib/realtime';
 import {
   createAutomation,
   deleteAutomation,
@@ -22,20 +26,36 @@ export function useAutomations() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
+  const queryKey = ['automations', user?.id];
+
   const query = useQuery({
-    queryKey: ['automations', user?.id],
+    queryKey,
     enabled: !!user,
     queryFn: () => listAutomations(getToken),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['automations'] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
   const toggle = useMutation({
     mutationFn: (automation: Automation) =>
       updateAutomation(getToken, automation.$id, {
         status: automation.status === 'active' ? 'paused' : 'active',
       }),
-    onSuccess: invalidate,
+    onMutate: async (automation) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Automation[]>(queryKey);
+      const nextStatus = automation.status === 'active' ? 'paused' : 'active';
+      queryClient.setQueryData<Automation[]>(queryKey, (prev = []) =>
+        prev.map((a) => (a.$id === automation.$id ? { ...a, status: nextStatus } : a)),
+      );
+      return { previous };
+    },
+    onError: (_err, _automation, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+    },
+    onSettled: invalidate,
   });
 
   const create = useMutation({
@@ -45,7 +65,20 @@ export function useAutomations() {
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteAutomation(getToken, id),
-    onSuccess: invalidate,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Automation[]>(queryKey);
+      queryClient.setQueryData<Automation[]>(queryKey, (prev = []) =>
+        prev.filter((a) => a.$id !== id),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+    },
+    onSettled: invalidate,
   });
 
   return {
@@ -57,16 +90,35 @@ export function useAutomations() {
     createAutomation: create.mutateAsync,
     deleteAutomation: remove.mutateAsync,
     creating: create.isPending,
+    toggling: toggle.isPending,
+    togglingId: toggle.isPending && toggle.variables ? toggle.variables.$id : null,
+    removing: remove.isPending,
+    removingId: remove.isPending && remove.variables ? remove.variables : null,
   };
 }
 
 export function useAutomationLogs(automationId: string) {
   const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
   const query = useQuery({
     queryKey: ['automationLogs', automationId],
     enabled: !!automationId,
     queryFn: () => listAutomationLogs(getToken, automationId),
   });
+
+  const logsChannel = useMemo(
+    () => Channel.tablesdb(DATABASE_ID).table(TABLES.AUTOMATION_LOGS).row().create(),
+    [],
+  );
+
+  useRealtimeSubscription(logsChannel.toString(), (event) => {
+    const newLog = event.payload as unknown as AutomationLog;
+    if (newLog.automation_id === automationId) {
+      queryClient.invalidateQueries({ queryKey: ['automationLogs', automationId] });
+    }
+  });
+
   return {
     logs: query.data ?? [] as AutomationLog[],
     loading: query.isLoading,
