@@ -18,6 +18,9 @@ type Pool struct {
 	jobs   chan func(context.Context)
 	wg     sync.WaitGroup
 	closed atomic.Bool
+
+	mu  sync.Mutex
+	ctx context.Context
 }
 
 func NewPool(workers, queueSize int) *Pool {
@@ -38,10 +41,30 @@ func NewPool(workers, queueSize int) *Pool {
 	return p
 }
 
+// SetContext threads a shutdown-aware base context into job execution so
+// in-flight jobs observe cancellation on server shutdown. Nil is ignored.
+func (p *Pool) SetContext(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	p.mu.Lock()
+	p.ctx = ctx
+	p.mu.Unlock()
+}
+
+func (p *Pool) jobContext() context.Context {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ctx != nil {
+		return p.ctx
+	}
+	return context.Background()
+}
+
 func (p *Pool) loop() {
 	defer p.wg.Done()
 	for job := range p.jobs {
-		job(context.Background())
+		job(p.jobContext())
 	}
 }
 

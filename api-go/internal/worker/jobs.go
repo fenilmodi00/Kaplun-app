@@ -12,9 +12,9 @@ const (
 	JobTypeFollowUp       = "send_followup"
 	JobTypeProcessMessage = "process_message"
 
-	MaxAttempts            = 3
-	StaleProcessingMinutes = 10
-	RequeueDelayMinutes    = 30
+	MaxAttempts              = 3
+	StaleProcessingMinutes   = 10
+	RequeueDelayMinutes      = 30
 	ReadFallbackDelaySeconds = 300
 )
 

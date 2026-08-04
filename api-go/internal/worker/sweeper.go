@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -28,6 +29,9 @@ type Sweeper struct {
 	Interval time.Duration
 	Log      *slog.Logger
 	Now      func() time.Time
+	// Pool, when set, receives due jobs instead of running them inline. On
+	// ErrPoolFull/ErrPoolClosed the job still runs inline so it is never dropped.
+	Pool *Pool
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -107,7 +111,20 @@ func (s *Sweeper) Tick(ctx context.Context) {
 	} else {
 		safe := &SafeRunner{Runner: s.Runner, Log: s.Log}
 		for _, job := range due {
-			safe.RunJobSafe(ctx, job.ID)
+			jobID := job.ID
+			if s.Pool != nil {
+				submitErr := s.Pool.Submit(func(jobCtx context.Context) {
+					safe.RunJobSafe(jobCtx, jobID)
+				})
+				if submitErr == nil {
+					continue
+				}
+				if !errors.Is(submitErr, ErrPoolFull) && !errors.Is(submitErr, ErrPoolClosed) {
+					s.logError("submit due job failed", submitErr)
+				}
+				// Pool saturated or closing — run inline so a due job is never dropped.
+			}
+			safe.RunJobSafe(ctx, jobID)
 		}
 	}
 
