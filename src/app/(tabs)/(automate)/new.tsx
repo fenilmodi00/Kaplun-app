@@ -32,6 +32,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations } from '@/hooks/useAutomations';
@@ -47,7 +48,7 @@ import type {
   MatchMode,
   CampaignTemplate,
 } from '@/lib/automations';
-import { listCampaignTemplates, updateAutomation } from '@/lib/automations';
+import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
 
 /* ── Design tokens (mirrors src/global.css @theme — raw-RN screens can't
@@ -291,7 +292,8 @@ function MediaGrid({
 export default function NewAutomationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { createAutomation, creating, refresh: refreshAutomations } = useAutomations();
+  const queryClient = useQueryClient();
+  const { createAutomation, creating } = useAutomations();
   const { getToken } = useAuth();
   const { connect: connectInstagram } = useAutomationGate();
 
@@ -531,6 +533,7 @@ export default function NewAutomationScreen() {
             public_reply_messages: publicReplyMessages.filter((m) => m.trim()),
           }
         : { public_reply_message: null, public_reply_messages: [] }),
+      status: goLive ? 'active' : 'paused',
     };
 
     if (!goLive) setSavingPaused(true);
@@ -540,12 +543,7 @@ export default function NewAutomationScreen() {
         setSubmitError('Automation created, but the server returned no id — open it from the list.');
         return;
       }
-      if (!goLive) {
-        // The engine creates every automation live, so a draft needs a
-        // follow-up patch before it starts matching comments.
-        await updateAutomation(getToken, created.$id, { status: 'paused' });
-        refreshAutomations();
-      }
+      await queryClient.invalidateQueries({ queryKey: ['automations'] });
       router.dismissTo(
         `/(tabs)/(automate)/${created.$id}?created=${goLive ? 'live' : 'paused'}` as never,
       );
@@ -566,7 +564,7 @@ export default function NewAutomationScreen() {
     publicReplyEnabled, publicReplyMessage, publicReplyMessages, selectedMediaIds,
     requireFollow, followPromptMessage, followPromptButtonLabel,
     followUpEnabled, followUpMessage, followUpDelayMinutes, dmTriggerEnabled,
-    createAutomation, refreshAutomations, getToken, router,
+    createAutomation, queryClient, router,
   ]);
 
   const previewMessage = dmMessage.replace(/{username}/g, '@yourfan');
@@ -984,7 +982,13 @@ export default function NewAutomationScreen() {
                   }
                 }}
                 onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
+                onBlur={() => {
+                  handleInputBlur();
+                  const num = parseInt(String(followUpDelayMinutes), 10);
+                  if (!isNaN(num)) {
+                    setFollowUpDelayMinutes(Math.max(1, Math.min(1440, num)));
+                  }
+                }}
                 keyboardType="number-pad"
                 accessibilityLabel="Follow-up delay in minutes"
               />

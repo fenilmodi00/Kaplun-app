@@ -31,9 +31,9 @@ import NewAutomationScreen from '@/app/(tabs)/(automate)/new';
 import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia } from '@/lib/instagram';
-import { updateAutomation } from '@/lib/automations';
 import { validateAutomationDraft } from '@/lib/automation-validation';
 import type { AutomationDraft } from '@/lib/automation-validation';
+import { createQueryClientWrapper } from './test-utils';
 
 const mockUseAutomations = useAutomations as jest.Mock;
 const mockUseAutomationGate = useAutomationGate as jest.Mock;
@@ -180,8 +180,10 @@ describe('NewAutomationScreen', () => {
     });
   });
 
+  const renderScreen = () => render(<NewAutomationScreen />, { wrapper: createQueryClientWrapper() });
+
   it('renders all form sections', async () => {
-    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText } = await renderScreen();
     expect(getByLabelText('Automation name')).toBeTruthy();
     expect(getByLabelText('Keywords')).toBeTruthy();
     expect(getByLabelText('DM message')).toBeTruthy();
@@ -196,7 +198,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByText } = await render(<NewAutomationScreen />);
+    const { getByText } = await renderScreen();
     await fireEvent(getByText('Go Live'), 'press');
 
     expect(mockCreate).not.toHaveBeenCalled();
@@ -209,7 +211,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
@@ -229,7 +231,7 @@ describe('NewAutomationScreen', () => {
       { id: 'media_2', caption: 'Second post', media_type: 'VIDEO' },
     ]);
 
-    const { getByLabelText } = await render(<NewAutomationScreen />);
+    const { getByLabelText } = await renderScreen();
 
     await waitFor(() => {
       expect(getByLabelText('First post')).toBeTruthy();
@@ -238,7 +240,7 @@ describe('NewAutomationScreen', () => {
   });
 
   it('shows explainer when next post or reel is selected', async () => {
-    const { getByText } = await render(<NewAutomationScreen />);
+    const { getByText } = await renderScreen();
     await fireEvent(getByText('next post or reel'), 'press');
     expect(
       getByText('Automatically applies to every new reel you post')
@@ -246,7 +248,7 @@ describe('NewAutomationScreen', () => {
   });
 
   it('shows public reply input when toggle is on', async () => {
-    const { getByLabelText, queryByLabelText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, queryByLabelText } = await renderScreen();
     expect(queryByLabelText('Public reply message')).toBeNull();
 
     await fireEvent(getByLabelText('Enable public reply'), 'valueChange', true);
@@ -261,7 +263,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
@@ -281,7 +283,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
@@ -311,7 +313,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText, findByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText, findByText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
@@ -332,7 +334,7 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText, queryByLabelText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText, queryByLabelText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test Campaign');
     await fireEvent(getByText('any post or reel'), 'press');
@@ -351,18 +353,14 @@ describe('NewAutomationScreen', () => {
     expect(callArg.keywords).toEqual([]);
   });
 
-  it('save as paused creates then patches status to paused', async () => {
+  it('save as paused creates with status paused', async () => {
     const mockCreate = jest.fn().mockResolvedValue({ $id: 'auto_1' });
-    const mockRefresh = jest.fn();
     mockUseAutomations.mockReturnValue({
       createAutomation: mockCreate,
       creating: false,
-      refresh: mockRefresh,
     });
-    const mockUpdate = jest.mocked(updateAutomation);
-    mockUpdate.mockResolvedValue({} as never);
 
-    const { getByLabelText, getByText } = await render(<NewAutomationScreen />);
+    const { getByLabelText, getByText } = await renderScreen();
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
@@ -373,8 +371,9 @@ describe('NewAutomationScreen', () => {
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
-      expect(mockUpdate).toHaveBeenCalledWith(expect.any(Function), 'auto_1', { status: 'paused' });
-      expect(mockRefresh).toHaveBeenCalled();
     });
+
+    const callArg = mockCreate.mock.calls[0][0];
+    expect(callArg.status).toBe('paused');
   });
 });

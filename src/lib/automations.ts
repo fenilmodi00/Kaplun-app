@@ -1,4 +1,4 @@
-/** FastAPI client for the comment-automation engine. Uses Clerk Bearer auth. */
+/** Gin/Go client for the comment-automation engine. Uses Clerk Bearer auth. */
 import { executeWithRetry } from './resilient';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
@@ -76,9 +76,10 @@ export interface CreateAutomationInput {
   follow_up_message?: string | null;
   follow_up_delay_minutes?: number | null;
   dm_trigger_enabled?: boolean;
+  status?: 'active' | 'paused';
 }
 
-export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;
+export type PatchAutomationInput = Partial<CreateAutomationInput>;
 export type GetToken = () => Promise<string | null>;
 
 export interface CampaignTemplate {

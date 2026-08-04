@@ -76,8 +76,8 @@ export function validateAutomationDraft(draft: AutomationDraft): string[] {
     if (!draft.followUpMessage.trim()) {
       errors.push('Follow-up message is required when follow-up is enabled');
     }
-    if (!draft.followUpDelayMinutes || draft.followUpDelayMinutes < 1) {
-      errors.push('Follow-up delay must be at least 1 minute');
+    if (!draft.followUpDelayMinutes || draft.followUpDelayMinutes < 1 || draft.followUpDelayMinutes > 1440) {
+      errors.push('Follow-up delay must be between 1 and 1440 minutes');
     }
   }
 
