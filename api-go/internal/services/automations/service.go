@@ -99,28 +99,34 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		// Any-word campaigns carry no keyword list — every comment matches.
 		keywords = []string{}
 	}
-	row := models.Automation{
-		ClerkUserID:        clerkUserID,
-		IGUserID:           creator.IGUserID,
-		Name:               body.Name,
-		TargetType:         body.TargetType,
-		MediaIDs:           mediaIDs,
-		BoundMediaIDs:      []string{},
-		Keywords:           keywords,
-		MatchMode:          matchMode,
-		MatchAnyWord:       body.MatchAnyWord,
-		OpeningDMMode:      "direct",
-		DMMessage:          body.DMMessage,
-		ButtonText:         body.ButtonText,
-		RevealMessage:      body.RevealMessage,
-		TrackLinks:         body.TrackLinks,
-		PublicReplyEnabled:  body.PublicReplyEnabled,
-		PublicReplyMessage:  body.PublicReplyMessage,
-		PublicReplyMessages: body.PublicReplyMessages,
-		Status:              "active",
-		CreatedAt:          now,
-		UpdatedAt:          now,
-	}
+		row := models.Automation{
+			ClerkUserID:        clerkUserID,
+			IGUserID:           creator.IGUserID,
+			Name:               body.Name,
+			TargetType:         body.TargetType,
+			MediaIDs:           mediaIDs,
+			BoundMediaIDs:      []string{},
+			Keywords:           keywords,
+			MatchMode:          matchMode,
+			MatchAnyWord:       body.MatchAnyWord,
+			OpeningDMMode:      "direct",
+			DMMessage:          body.DMMessage,
+			ButtonText:         body.ButtonText,
+			RevealMessage:      body.RevealMessage,
+			TrackLinks:         body.TrackLinks,
+			PublicReplyEnabled:  body.PublicReplyEnabled,
+			PublicReplyMessage:  body.PublicReplyMessage,
+			PublicReplyMessages: body.PublicReplyMessages,
+			RequireFollow:           body.RequireFollow,
+			FollowPromptMessage:     body.FollowPromptMessage,
+			FollowPromptButtonLabel: body.FollowPromptButtonLabel,
+			FollowUpEnabled:         body.FollowUpEnabled,
+			FollowUpMessage:         body.FollowUpMessage,
+			FollowUpDelayMinutes:    body.FollowUpDelayMinutes,
+			Status:                  "active",
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
 
 	created, err := s.store.CreateAutomation(ctx, row)
 	if err != nil {
@@ -387,6 +393,14 @@ func validateCreate(body models.AutomationCreate) error {
 			return &ValidationError{Message: "public_reply_message or public_reply_messages is required when public replies are enabled"}
 		}
 	}
+	if body.FollowUpEnabled {
+		if body.FollowUpMessage == nil || strings.TrimSpace(*body.FollowUpMessage) == "" {
+			return &ValidationError{Message: "follow_up_message is required when follow-up is enabled"}
+		}
+		if body.FollowUpDelayMinutes == nil || *body.FollowUpDelayMinutes < 1 {
+			return &ValidationError{Message: "follow_up_delay_minutes must be at least 1 when follow-up is enabled"}
+		}
+	}
 	return nil
 }
 
@@ -449,9 +463,27 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 		data["public_reply_message"] = *body.PublicReplyMessage
 	}
 	if body.PublicReplyMessages != nil {
-		data["public_reply_messages"] = body.PublicReplyMessages
-	}
-	if body.TrackLinks != nil {
+			data["public_reply_messages"] = body.PublicReplyMessages
+		}
+		if body.RequireFollow != nil {
+			data["require_follow"] = *body.RequireFollow
+		}
+		if body.FollowPromptMessage != nil {
+			data["follow_prompt_message"] = *body.FollowPromptMessage
+		}
+		if body.FollowPromptButtonLabel != nil {
+			data["follow_prompt_button_label"] = *body.FollowPromptButtonLabel
+		}
+		if body.FollowUpEnabled != nil {
+			data["follow_up_enabled"] = *body.FollowUpEnabled
+		}
+		if body.FollowUpMessage != nil {
+			data["follow_up_message"] = *body.FollowUpMessage
+		}
+		if body.FollowUpDelayMinutes != nil {
+			data["follow_up_delay_minutes"] = *body.FollowUpDelayMinutes
+		}
+		if body.TrackLinks != nil {
 		data["track_links"] = *body.TrackLinks
 	}
 	if body.Status != nil {

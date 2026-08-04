@@ -106,6 +106,73 @@ func (c *Client) SendDirectMessage(ctx context.Context, igAccountID, userID, tex
 	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
 }
 
+// SendDirectMessageWithButton sends a button template as a direct message (not private reply).
+// Uses recipient: {id: userID} and a button template attachment.
+func (c *Client) SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) (map[string]any, error) {
+	body := map[string]any{
+		"recipient": map[string]any{"id": userID},
+		"message": map[string]any{
+			"attachment": map[string]any{
+				"type": "template",
+				"payload": map[string]any{
+					"template_type": "button",
+					"text":          truncateRunes(text, 640),
+					"buttons": []map[string]any{{
+						"type":    "postback",
+						"title":   truncateRunes(buttonTitle, 20),
+						"payload": payload,
+					}},
+				},
+			},
+		},
+	}
+	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
+}
+
+// GetUserFollowStatus checks whether a user follows the business account.
+// Calls GET /{recipientId}?fields=is_user_follow_business.
+// Returns true/false, or nil if the field is not available (fail-open).
+func (c *Client) GetUserFollowStatus(ctx context.Context, accessToken, recipientID string) (*bool, error) {
+	if c == nil || c.HTTP == nil {
+		return nil, fmt.Errorf("meta client not configured")
+	}
+	rawURL := c.base() + "/" + recipientID + "?fields=is_user_follow_business&access_token=" + accessToken
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, WrapRequestError(err)
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, WrapRequestError(err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, WrapRequestError(err)
+	}
+	var data map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &data); err != nil {
+			return nil, WrapRequestError(fmt.Errorf("decode meta response: %w", err))
+		}
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	out, err := Handle(data, resp.StatusCode)
+	if err != nil {
+		return nil, err
+	}
+	// is_user_follow_business may be absent or null — fail-open
+	if v, ok := out["is_user_follow_business"]; ok {
+		if b, ok := v.(bool); ok {
+			return &b, nil
+		}
+	}
+	return nil, nil
+}
+
 // SendCommentReply posts a public reply on a comment.
 func (c *Client) SendCommentReply(ctx context.Context, commentID, message, accessToken string) (map[string]any, error) {
 	body := map[string]any{"message": message}

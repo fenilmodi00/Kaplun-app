@@ -310,6 +310,12 @@ export default function NewAutomationScreen() {
   const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
   const [publicReplyMessage, setPublicReplyMessage] = useState('');
   const [publicReplyMessages, setPublicReplyMessages] = useState<string[]>([]);
+  const [requireFollow, setRequireFollow] = useState(false);
+  const [followPromptMessage, setFollowPromptMessage] = useState('');
+  const [followPromptButtonLabel, setFollowPromptButtonLabel] = useState('');
+  const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [followUpMessage, setFollowUpMessage] = useState('');
+  const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(1440);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isConnectingIg, setIsConnectingIg] = useState(false);
   const [savingPaused, setSavingPaused] = useState(false);
@@ -472,8 +478,14 @@ export default function NewAutomationScreen() {
       publicReplyEnabled,
       publicReplyMessage,
       publicReplyMessages,
+      requireFollow,
+      followPromptMessage,
+      followPromptButtonLabel,
+      followUpEnabled,
+      followUpMessage,
+      followUpDelayMinutes,
     }),
-    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages]
+    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages, requireFollow, followPromptMessage, followPromptButtonLabel, followUpEnabled, followUpMessage, followUpDelayMinutes]
   );
 
   const validationErrors = useMemo(() => validateAutomationDraft(draft), [draft]);
@@ -495,6 +507,20 @@ export default function NewAutomationScreen() {
         ? { button_text: buttonText.trim(), reveal_message: revealMessage.trim() }
         : { button_text: null, reveal_message: null }),
       public_reply_enabled: publicReplyEnabled,
+      require_follow: requireFollow,
+      ...(requireFollow
+        ? {
+            follow_prompt_message: followPromptMessage.trim() || null,
+            follow_prompt_button_label: followPromptButtonLabel.trim() || null,
+          }
+        : { follow_prompt_message: null, follow_prompt_button_label: null }),
+      follow_up_enabled: followUpEnabled,
+      ...(followUpEnabled
+        ? {
+            follow_up_message: followUpMessage.trim() || null,
+            follow_up_delay_minutes: followUpDelayMinutes,
+          }
+        : { follow_up_message: null, follow_up_delay_minutes: null }),
       ...(targetType === 'specific_posts' ? { media_ids: selectedMediaIds } : {}),
       ...(publicReplyEnabled
         ? {
@@ -535,6 +561,8 @@ export default function NewAutomationScreen() {
     isValid, creating, savingPaused, name, targetType, keywords, matchAnyWord, matchMode, dmMessage,
     openingDmMode, buttonText, revealMessage,
     publicReplyEnabled, publicReplyMessage, publicReplyMessages, selectedMediaIds,
+    requireFollow, followPromptMessage, followPromptButtonLabel,
+    followUpEnabled, followUpMessage, followUpDelayMinutes,
     createAutomation, refreshAutomations, getToken, router,
   ]);
 
@@ -792,16 +820,43 @@ export default function NewAutomationScreen() {
             />
           </View>
 
-          {/* Pro features — no plan exists yet, so present them as one
-              compact "coming soon" card instead of dead disabled toggles */}
-          <View style={styles.proCard}>
-            <View style={styles.proBadge}>
-              <Text style={styles.proBadgeText}>PRO</Text>
-            </View>
-            <Text style={styles.proText}>
-              Follow-to-unlock, email capture, and follow-up DMs — coming soon
-            </Text>
-          </View>
+          {/* ── Follow gate ── */}
+          <ToggleCard
+            title="require them to follow you"
+            description="Only send the link to people who follow your account"
+            value={requireFollow}
+            onValueChange={setRequireFollow}
+            switchAccessibilityLabel="Enable follow gate"
+          />
+          {requireFollow && (
+            <>
+              <Text style={styles.caption}>
+                Message shown to non-followers (we'll replace {'{username}'} with their name)
+              </Text>
+              <TextInput
+                style={styles.inputMultiline}
+                placeholder="Follow me to unlock the link!"
+                placeholderTextColor={COLORS.mutedSoft}
+                value={followPromptMessage}
+                onChangeText={setFollowPromptMessage}
+                onFocus={(e) => handleInputFocus(e.currentTarget)}
+                onBlur={handleInputBlur}
+                multiline
+                accessibilityLabel="Follow prompt message"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Button label (e.g. Follow)"
+                placeholderTextColor={COLORS.mutedSoft}
+                value={followPromptButtonLabel}
+                onChangeText={setFollowPromptButtonLabel}
+                onFocus={(e) => handleInputFocus(e.currentTarget)}
+                onBlur={handleInputBlur}
+                maxLength={20}
+                accessibilityLabel="Follow prompt button label"
+              />
+            </>
+          )}
         </View>
 
         {/* ── Then they will get (button-tap reveal DM) ── */}
@@ -872,6 +927,56 @@ export default function NewAutomationScreen() {
                   Pool: {publicReplyMessages.filter((m) => m.trim()).length + (publicReplyMessage.trim() ? 1 : 0)} messages
                 </Text>
               )}
+            </>
+          )}
+        </View>
+
+        {/* ── Follow-up DM ── */}
+        <View style={styles.section}>
+          <ToggleCard
+            title="send a follow-up message"
+            description="Send an appreciation message after the link is delivered"
+            value={followUpEnabled}
+            onValueChange={setFollowUpEnabled}
+            switchAccessibilityLabel="Enable follow-up message"
+          />
+          {followUpEnabled && (
+            <>
+              <Text style={styles.caption}>
+                We'll replace {'{username}'} with the commenter's name
+              </Text>
+              <TextInput
+                style={styles.inputMultiline}
+                placeholder="Thanks for your interest! Let me know if you have any questions 😊"
+                placeholderTextColor={COLORS.mutedSoft}
+                value={followUpMessage}
+                onChangeText={setFollowUpMessage}
+                onFocus={(e) => handleInputFocus(e.currentTarget)}
+                onBlur={handleInputBlur}
+                multiline
+                accessibilityLabel="Follow-up message"
+              />
+              <Text style={styles.caption}>
+                Delay before sending (in minutes)
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="1440 (24 hours)"
+                placeholderTextColor={COLORS.mutedSoft}
+                value={String(followUpDelayMinutes)}
+                onChangeText={(text) => {
+                  const num = parseInt(text, 10);
+                  if (!isNaN(num) && num > 0) {
+                    setFollowUpDelayMinutes(num);
+                  } else if (text === '') {
+                    setFollowUpDelayMinutes(0);
+                  }
+                }}
+                onFocus={(e) => handleInputFocus(e.currentTarget)}
+                onBlur={handleInputBlur}
+                keyboardType="number-pad"
+                accessibilityLabel="Follow-up delay in minutes"
+              />
             </>
           )}
         </View>

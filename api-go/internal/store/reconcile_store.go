@@ -60,8 +60,8 @@ func (r ReconcileStore) FindLog(ctx context.Context, automationID, commentID str
 	return existing != nil, nil
 }
 
-func (r ReconcileStore) CreateJob(ctx context.Context, jobType string, payload map[string]any) (string, error) {
-	return r.store.CreateJob(ctx, jobType, payload)
+func (r ReconcileStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
+	return r.store.CreateJob(ctx, jobType, payload, runAt)
 }
 
 func (r ReconcileStore) UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error {

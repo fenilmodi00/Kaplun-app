@@ -18,6 +18,12 @@ export interface AutomationDraft {
   publicReplyEnabled: boolean;
   publicReplyMessage: string;
   publicReplyMessages: string[];
+  requireFollow: boolean;
+  followPromptMessage: string;
+  followPromptButtonLabel: string;
+  followUpEnabled: boolean;
+  followUpMessage: string;
+  followUpDelayMinutes: number;
 }
 
 /**
@@ -53,6 +59,24 @@ export function validateAutomationDraft(draft: AutomationDraft): string[] {
     }
     if (!draft.revealMessage.trim()) {
       errors.push('Reveal message is required in button mode');
+    }
+  }
+
+  if (draft.requireFollow) {
+    if (!draft.followPromptMessage.trim()) {
+      errors.push('Follow prompt message is required when follow gate is enabled');
+    }
+    if (!draft.followPromptButtonLabel.trim()) {
+      errors.push('Follow prompt button label is required when follow gate is enabled');
+    }
+  }
+
+  if (draft.followUpEnabled) {
+    if (!draft.followUpMessage.trim()) {
+      errors.push('Follow-up message is required when follow-up is enabled');
+    }
+    if (!draft.followUpDelayMinutes || draft.followUpDelayMinutes < 1) {
+      errors.push('Follow-up delay must be at least 1 minute');
     }
   }
 

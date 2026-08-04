@@ -41,6 +41,7 @@ type CommentStore interface {
 	GetJob(ctx context.Context, jobID string) (map[string]any, error)
 	UpdateJob(ctx context.Context, jobID string, data map[string]any) error
 	CountRecentDMActions(igUserID, since string) int
+	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error)
 }
 
 // GraphSender sends Instagram Graph messaging / reply calls.
@@ -49,6 +50,8 @@ type GraphSender interface {
 	SendPrivateReply(ctx context.Context, igAccountID, commentID, text, accessToken string) error
 	SendPrivateReplyWithButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, payload, accessToken string) error
 	SendDirectMessage(ctx context.Context, igAccountID, userID, text, accessToken string) error
+	SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) error
+	GetUserFollowStatus(ctx context.Context, accessToken, recipientID string) (*bool, error)
 }
 
 // TokenDecryptor decrypts stored access tokens (or returns plaintext legacy values).
@@ -284,6 +287,49 @@ func (r *CommentRunner) sendAutomationMessages(
 		}
 	}
 
+	// Follow gate: if requireFollow is true and mode is NOT button, check follow status
+	// before sending the DM. If not following, send a follow prompt button instead.
+	if mapBool(auto, "require_follow") && mapString(auto, "opening_dm_mode") != "button" {
+		commenterID := mapString(event, "commenter_id")
+		if commenterID != "" {
+			following, fErr := r.Graph.GetUserFollowStatus(ctx, token, commenterID)
+			if fErr != nil {
+				// Log but fail-open — if we can't verify, send the DM anyway
+				if r.Log != nil {
+					r.Log.WarnContext(ctx, "follow status check failed, sending DM anyway",
+						"automation_id", mapString(auto, "$id"),
+						"error", fErr,
+					)
+				}
+			} else if following != nil && !*following {
+				// Not following — send follow prompt button
+				promptMsg := mapString(auto, "follow_prompt_message")
+				if promptMsg == "" {
+					promptMsg = "Follow me to unlock the link!"
+				}
+				btnLabel := mapString(auto, "follow_prompt_button_label")
+				if btnLabel == "" {
+					btnLabel = "Follow"
+				}
+				if err := r.Graph.SendPrivateReplyWithButton(
+					ctx,
+					igID,
+					commentID,
+					Personalize(promptMsg, commenterName),
+					btnLabel,
+					"followcheck:"+mapString(auto, "$id"),
+					token,
+				); err != nil {
+					return err
+				}
+				return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+					"action": "dm_sent",
+					"reason": "follow_prompt_sent",
+				})
+			}
+		}
+	}
+
 	if mapString(auto, "opening_dm_mode") == "button" && mapString(auto, "button_text") != "" && revealText != "" {
 		if err := r.Graph.SendPrivateReplyWithButton(
 			ctx,
@@ -300,29 +346,41 @@ func (r *CommentRunner) sendAutomationMessages(
 					return err
 				}
 				fallbackMsg := buildInlineLinkFallback(dmText, commenterName, trackedURL)
-				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
-					return err
-				}
-				return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-					"action": "dm_sent",
-					"reason": nil,
-				})
+			if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
+				return err
+			}
+			if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+				"action": "dm_sent",
+				"reason": nil,
+			}); err != nil {
+				return err
+			}
+			r.scheduleFollowUp(ctx, auto, commenterName)
+			return nil
 			}
 			return err
 		}
-		return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+		if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
 			"action": "button_dm_sent",
 			"reason": nil,
-		})
+		}); err != nil {
+			return err
+		}
+		r.scheduleFollowUp(ctx, auto, commenterName)
+		return nil
 	}
 
 	if err := r.Graph.SendPrivateReply(ctx, igID, commentID, Personalize(dmText, commenterName), token); err != nil {
 		return err
 	}
-	return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+	if err := r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
 		"action": "dm_sent",
 		"reason": nil,
-	})
+	}); err != nil {
+		return err
+	}
+	r.scheduleFollowUp(ctx, auto, commenterName)
+	return nil
 }
 
 // RunSendReveal executes a send_reveal job payload.
@@ -334,8 +392,247 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 	automationID := mapString(payload, "automation_id")
 	userID := mapString(payload, "user_id")
 	igID := mapString(payload, "instagram_account_id")
+	fallback := mapBool(payload, "fallback")
+
+	// Read fallback jobs don't carry automation_id — they need to be resolved.
+	if fallback && automationID == "" {
+		// For read fallback, we need to find active automations for this account
+		// that have opening_dm_mode == "button". Since we don't have automation_id,
+		// we query active automations and check each one.
+		allActive, err := r.Store.ListActiveForIG(ctx, igID)
+		if err != nil {
+			return err
+		}
+		for _, auto := range allActive {
+			if mapString(auto, "opening_dm_mode") != "button" {
+				continue
+			}
+			if err := r.sendRevealWithFallback(ctx, auto, igID, userID); err != nil {
+				if r.Log != nil {
+					r.Log.WarnContext(ctx, "read fallback send_reveal failed",
+						"automation_id", mapString(auto, "$id"),
+						"error", err,
+					)
+				}
+			}
+		}
+		return nil
+	}
+
 	if automationID == "" || userID == "" || igID == "" {
 		return fmt.Errorf("send_reveal job missing required fields")
+	}
+
+	auto, err := r.Store.GetAutomation(ctx, automationID)
+	if err != nil {
+		return err
+	}
+	if auto == nil {
+		return fmt.Errorf("automation %s not found", automationID)
+	}
+	if mapString(auto, "ig_user_id") != igID {
+		return fmt.Errorf("automation %s ig_user_id mismatch", automationID)
+	}
+
+	if fallback {
+		return r.sendRevealWithFallback(ctx, auto, igID, userID)
+	}
+
+	return r.sendRevealStandard(ctx, auto, igID, userID)
+}
+
+// sendRevealWithFallback handles the read-fallback path: skips if reveal already
+// sent, skips follow-gate silently, and uses a distinct comment_id.
+func (r *CommentRunner) sendRevealWithFallback(ctx context.Context, auto map[string]any, igID, userID string) error {
+	automationID := mapString(auto, "$id")
+
+	// Check if reveal was already sent via postback.
+	existing, err := r.Store.FindLog(ctx, automationID, "postback:"+userID)
+	if err != nil {
+		return err
+	}
+	if existing != nil && mapString(existing, "action") == "reveal_sent" {
+		return nil
+	}
+
+	// Check if reveal was already sent via read fallback.
+	existing, err = r.Store.FindLog(ctx, automationID, "read_fallback:"+userID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+
+	// Follow gate: if requireFollow and fallback, skip silently.
+	if mapBool(auto, "require_follow") {
+		return nil
+	}
+
+	creator, cerr := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
+	if cerr != nil {
+		return cerr
+	}
+	if creator == nil || mapString(creator, "access_token") == "" {
+		return fmt.Errorf("no access_token for automation %s", automationID)
+	}
+
+	token, derr := r.decryptToken(mapString(creator, "access_token"))
+	if derr != nil {
+		return derr
+	}
+
+	return r.sendRevealMessage(ctx, auto, igID, userID, "read_fallback:"+userID, token)
+}
+
+// sendRevealStandard handles the standard postback path.
+func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]any, igID, userID string) error {
+	automationID := mapString(auto, "$id")
+
+	creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
+	if err != nil {
+		return err
+	}
+	if creator == nil || mapString(creator, "access_token") == "" {
+		return fmt.Errorf("no access_token for automation %s", automationID)
+	}
+
+	token, err := r.decryptToken(mapString(creator, "access_token"))
+	if err != nil {
+		return err
+	}
+
+	// Follow gate check: if requireFollow is true, verify follow status before revealing.
+	// Fail-open: if unverifiable (null), send the reveal anyway.
+	if mapBool(auto, "require_follow") {
+		following, fErr := r.Graph.GetUserFollowStatus(ctx, token, userID)
+		if fErr != nil {
+			if r.Log != nil {
+				r.Log.WarnContext(ctx, "follow status check failed in reveal, sending anyway",
+					"automation_id", automationID,
+					"error", fErr,
+				)
+			}
+		} else if following != nil && !*following {
+			// Not following — re-send follow prompt as a direct message button
+			promptMsg := mapString(auto, "follow_prompt_message")
+			if promptMsg == "" {
+				promptMsg = "Follow me to unlock the link!"
+			}
+			btnLabel := mapString(auto, "follow_prompt_button_label")
+			if btnLabel == "" {
+				btnLabel = "Follow"
+			}
+			if err := r.Graph.SendDirectMessageWithButton(
+				ctx,
+				igID,
+				userID,
+				Personalize(promptMsg, ""),
+				btnLabel,
+				"followcheck:"+automationID,
+				token,
+			); err != nil {
+				return err
+			}
+			_, err = r.Store.CreateLog(ctx, map[string]any{
+				"automation_id":      automationID,
+				"clerk_user_id":      mapString(auto, "clerk_user_id"),
+				"ig_user_id":         igID,
+				"media_id":           "",
+				"comment_id":         "postback:" + userID,
+				"commenter_username": nil,
+				"comment_text":       nil,
+				"matched_keyword":    nil,
+				"action":             "dm_sent",
+				"reason":             "follow_prompt_resent",
+				"created_at":         r.nowISO(),
+			})
+			return err
+		}
+	}
+
+	return r.sendRevealMessage(ctx, auto, igID, userID, "postback:"+userID, token)
+}
+
+// sendRevealMessage sends the reveal DM and creates a log entry.
+func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]any, igID, userID, commentID, token string) error {
+	automationID := mapString(auto, "$id")
+
+	revealMessage := mapString(auto, "reveal_message")
+	if revealMessage == "" {
+		revealMessage = "Here's the link you requested!"
+	}
+
+	if mapBool(auto, "track_links") {
+		link, lerr := r.Store.GetTrackedLinkForAutomation(ctx, automationID)
+		if lerr != nil {
+			return lerr
+		}
+		if link != nil {
+			trackedURL := r.PublicBaseURL + "/r/" + mapString(link, "$id")
+			targetURL := mapString(link, "target_url")
+			revealMessage = tracking.RenderMessageWithTracking(revealMessage, "", trackedURL, targetURL)
+		}
+	}
+
+	if err := r.Graph.SendDirectMessage(ctx, igID, userID, Personalize(revealMessage, ""), token); err != nil {
+		return err
+	}
+
+	_, err := r.Store.CreateLog(ctx, map[string]any{
+		"automation_id":      automationID,
+		"clerk_user_id":      mapString(auto, "clerk_user_id"),
+		"ig_user_id":         igID,
+		"media_id":           "",
+		"comment_id":         commentID,
+		"commenter_username": nil,
+		"comment_text":       nil,
+		"matched_keyword":    nil,
+		"action":             "reveal_sent",
+		"created_at":         r.nowISO(),
+	})
+	if err != nil {
+		return err
+	}
+
+	r.scheduleFollowUp(ctx, auto, "")
+	return nil
+}
+
+// scheduleFollowUp creates a delayed send_followup job if the automation has
+// follow-up enabled. It is a no-op if follow-up is not configured.
+func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]any, commenterName string) {
+	if !mapBool(auto, "follow_up_enabled") {
+		return
+	}
+	delayMinutes := 1440 // default 24h
+	if d := mapInt(auto, "follow_up_delay_minutes"); d > 0 {
+		delayMinutes = d
+	}
+	runAt := r.Now().UTC().Add(time.Duration(delayMinutes) * time.Minute).Format(time.RFC3339Nano)
+	_, err := r.Store.CreateJob(ctx, JobTypeFollowUp, map[string]any{
+		"instagram_account_id": mapString(auto, "ig_user_id"),
+		"user_id":              "", // filled by caller
+		"automation_id":        mapString(auto, "$id"),
+		"commenter_name":       commenterName,
+	}, runAt)
+	if err != nil && r.Log != nil {
+		r.Log.WarnContext(ctx, "failed to schedule follow-up job", "automation_id", mapString(auto, "$id"), "error", err)
+	}
+}
+
+// RunFollowUp executes a send_followup job payload.
+func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any) error {
+	if r.Store == nil || r.Graph == nil {
+		return fmt.Errorf("comment runner not configured")
+	}
+
+	automationID := mapString(payload, "automation_id")
+	userID := mapString(payload, "user_id")
+	igID := mapString(payload, "instagram_account_id")
+	commenterName := mapString(payload, "commenter_name")
+	if automationID == "" || userID == "" || igID == "" {
+		return fmt.Errorf("send_followup job missing required fields")
 	}
 
 	auto, err := r.Store.GetAutomation(ctx, automationID)
@@ -362,24 +659,12 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 		return err
 	}
 
-	revealMessage := mapString(auto, "reveal_message")
-	if revealMessage == "" {
-		revealMessage = "Here's the link you requested!"
+	followUpMessage := mapString(auto, "follow_up_message")
+	if followUpMessage == "" {
+		followUpMessage = "Thanks for your interest! 😊"
 	}
 
-	if mapBool(auto, "track_links") {
-		link, lerr := r.Store.GetTrackedLinkForAutomation(ctx, automationID)
-		if lerr != nil {
-			return lerr
-		}
-		if link != nil {
-			trackedURL := r.PublicBaseURL + "/r/" + mapString(link, "$id")
-			targetURL := mapString(link, "target_url")
-			revealMessage = tracking.RenderMessageWithTracking(revealMessage, "", trackedURL, targetURL)
-		}
-	}
-
-	if err := r.Graph.SendDirectMessage(ctx, igID, userID, Personalize(revealMessage, ""), token); err != nil {
+	if err := r.Graph.SendDirectMessage(ctx, igID, userID, Personalize(followUpMessage, commenterName), token); err != nil {
 		return err
 	}
 
@@ -388,11 +673,11 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 		"clerk_user_id":      mapString(auto, "clerk_user_id"),
 		"ig_user_id":         igID,
 		"media_id":           "",
-		"comment_id":         "postback:" + userID,
-		"commenter_username": nil,
+		"comment_id":         "followup:" + userID,
+		"commenter_username": nilIfEmpty(commenterName),
 		"comment_text":       nil,
 		"matched_keyword":    nil,
-		"action":             "reveal_sent",
+		"action":             "reply_sent",
 		"created_at":         r.nowISO(),
 	})
 	return err
@@ -448,6 +733,19 @@ func (r *CommentRunner) RunJob(ctx context.Context, jobID string) error {
 
 	if mapString(job, "type") == JobTypeSendReveal {
 		if err := r.RunSendReveal(ctx, payload); err != nil {
+			if meta.IsMetaAPIError(err) {
+				return r.retryMetaAPIError(ctx, jobID, job, err)
+			}
+			return r.failJobUnexpected(ctx, jobID, job, err)
+		}
+		return r.Store.UpdateJob(ctx, jobID, map[string]any{
+			"status":     "done",
+			"updated_at": r.nowISO(),
+		})
+	}
+
+	if mapString(job, "type") == JobTypeFollowUp {
+		if err := r.RunFollowUp(ctx, payload); err != nil {
 			if meta.IsMetaAPIError(err) {
 				return r.retryMetaAPIError(ctx, jobID, job, err)
 			}

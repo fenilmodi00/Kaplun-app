@@ -96,8 +96,11 @@ func (s *AutomationsStore) CountRecentDMActions(igUserID, since string) int {
 	return result.Total
 }
 
-func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payload map[string]any) (string, error) {
+func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
 	now := s.now().Format(time.RFC3339Nano)
+	if runAt == "" {
+		runAt = now
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -107,7 +110,7 @@ func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payloa
 		"payload":    string(encoded),
 		"status":     "pending",
 		"attempts":   0,
-		"run_at":     now,
+		"run_at":     runAt,
 		"created_at": now,
 		"updated_at": now,
 	}, nil)

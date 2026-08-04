@@ -32,6 +32,12 @@ export interface Automation {
   public_reply_enabled: boolean;
   public_reply_message: string | null;
   public_reply_messages: string[];
+  require_follow: boolean;
+  follow_prompt_message: string | null;
+  follow_prompt_button_label: string | null;
+  follow_up_enabled: boolean;
+  follow_up_message: string | null;
+  follow_up_delay_minutes: number | null;
   status: AutomationStatus;
   created_at: string;
   updated_at: string;
@@ -63,6 +69,12 @@ export interface CreateAutomationInput {
   public_reply_enabled: boolean;
   public_reply_message?: string | null;
   public_reply_messages?: string[];
+  require_follow?: boolean;
+  follow_prompt_message?: string | null;
+  follow_prompt_button_label?: string | null;
+  follow_up_enabled?: boolean;
+  follow_up_message?: string | null;
+  follow_up_delay_minutes?: number | null;
 }
 
 export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;

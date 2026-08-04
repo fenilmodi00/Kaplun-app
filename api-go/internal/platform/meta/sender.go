@@ -47,3 +47,18 @@ func (s *Sender) SendDirectMessage(ctx context.Context, igAccountID, userID, tex
 	_, err := s.Client.SendDirectMessage(ctx, igAccountID, userID, text, accessToken)
 	return err
 }
+
+func (s *Sender) SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) error {
+	if s == nil || s.Client == nil {
+		return fmt.Errorf("meta sender not configured")
+	}
+	_, err := s.Client.SendDirectMessageWithButton(ctx, igAccountID, userID, text, buttonTitle, payload, accessToken)
+	return err
+}
+
+func (s *Sender) GetUserFollowStatus(ctx context.Context, accessToken, recipientID string) (*bool, error) {
+	if s == nil || s.Client == nil {
+		return nil, fmt.Errorf("meta sender not configured")
+	}
+	return s.Client.GetUserFollowStatus(ctx, accessToken, recipientID)
+}

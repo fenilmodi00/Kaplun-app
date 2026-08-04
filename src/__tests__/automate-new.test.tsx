@@ -53,6 +53,13 @@ function makeDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft {
     revealMessage: '',
     publicReplyEnabled: false,
     publicReplyMessage: '',
+    publicReplyMessages: [],
+    requireFollow: false,
+    followPromptMessage: '',
+    followPromptButtonLabel: '',
+    followUpEnabled: false,
+    followUpMessage: '',
+    followUpDelayMinutes: 0,
     ...overrides,
   };
 }

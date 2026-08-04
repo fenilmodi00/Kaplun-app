@@ -9,10 +9,12 @@ import (
 const (
 	JobTypeProcessComment = "process_comment"
 	JobTypeSendReveal     = "send_reveal"
+	JobTypeFollowUp       = "send_followup"
 
 	MaxAttempts            = 3
 	StaleProcessingMinutes = 10
 	RequeueDelayMinutes    = 30
+	ReadFallbackDelaySeconds = 300
 )
 
 var BackoffMinutes = []int{5, 15, 45}
@@ -30,6 +32,19 @@ type ProcessCommentHandler interface {
 // SendRevealHandler handles send_reveal job payloads.
 type SendRevealHandler interface {
 	SendReveal(ctx context.Context, payload map[string]any) error
+}
+
+// FollowUpHandler handles send_followup job payloads.
+type FollowUpHandler interface {
+	SendFollowUp(ctx context.Context, payload map[string]any) error
+}
+
+// FollowUpJob is the payload for a send_followup job.
+type FollowUpJob struct {
+	InstagramAccountID string `json:"instagram_account_id"`
+	UserID             string `json:"user_id"`
+	AutomationID       string `json:"automation_id"`
+	CommenterName      string `json:"commenter_name"`
 }
 
 // SafeRunner wraps a JobRunner so background callers never observe panics or errors.

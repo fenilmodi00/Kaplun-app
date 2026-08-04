@@ -157,6 +157,27 @@ func (f *fakeStore) GetJob(_ context.Context, jobID string) (map[string]any, err
 	return f.jobs[jobID], nil
 }
 
+func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
+	f.seq++
+	jobID := "job" + strconv.Itoa(f.seq)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if runAt == "" {
+		runAt = now
+	}
+	body, _ := json.Marshal(payload)
+	f.jobs[jobID] = map[string]any{
+		"$id":        jobID,
+		"type":       jobType,
+		"payload":    string(body),
+		"status":     "pending",
+		"attempts":   0,
+		"run_at":     runAt,
+		"created_at": now,
+		"updated_at": now,
+	}
+	return jobID, nil
+}
+
 func (f *fakeStore) UpdateJob(_ context.Context, jobID string, data map[string]any) error {
 	job := f.jobs[jobID]
 	for k, v := range data {
@@ -193,6 +214,17 @@ func (g *fakeGraph) SendPrivateReplyWithButton(_ context.Context, ig, commentID,
 func (g *fakeGraph) SendDirectMessage(_ context.Context, ig, userID, text, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_dm", Args: []any{ig, userID, text, accessToken}})
 	return g.dmErr
+}
+
+func (g *fakeGraph) SendDirectMessageWithButton(_ context.Context, ig, userID, text, buttonTitle, payload, accessToken string) error {
+	g.calls = append(g.calls, graphCall{Kind: "direct_button_dm", Args: []any{ig, userID, text, buttonTitle, payload, accessToken}})
+	return g.dmErr
+}
+
+func (g *fakeGraph) GetUserFollowStatus(_ context.Context, accessToken, recipientID string) (*bool, error) {
+	g.calls = append(g.calls, graphCall{Kind: "follow_check", Args: []any{accessToken, recipientID}})
+	following := true
+	return &following, nil
 }
 
 type plainCrypto struct{}

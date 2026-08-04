@@ -41,7 +41,7 @@ type Store interface {
 	ListAllActiveAutomations(ctx context.Context) ([]Automation, error)
 	GetCreatorByClerkID(ctx context.Context, clerkID string) (Creator, bool, error)
 	FindLog(ctx context.Context, automationID, commentID string) (bool, error)
-	CreateJob(ctx context.Context, jobType string, payload map[string]any) (string, error)
+	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error)
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
 }
 
@@ -147,7 +147,7 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 					"commenter_name":       c.From["username"],
 					"media_id":             mediaID,
 				}
-				if _, err := s.Store.CreateJob(ctx, "process_comment", payload); err != nil {
+				if _, err := s.Store.CreateJob(ctx, "process_comment", payload, ""); err != nil {
 					return Result{}, err
 				}
 				enqueued++

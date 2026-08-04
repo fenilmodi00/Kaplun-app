@@ -35,7 +35,7 @@ func (f *fakeWebhookStore) RecordWebhookEvent(_ context.Context, payload string)
 	return f.recordErr
 }
 
-func (f *fakeWebhookStore) CreateJob(_ context.Context, jobType string, payload map[string]any) (string, error) {
+func (f *fakeWebhookStore) CreateJob(_ context.Context, jobType string, payload map[string]any, _ string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id := "j" + string(rune('1'+len(f.created)))

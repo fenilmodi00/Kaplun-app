@@ -29,7 +29,7 @@ func (f *fakeStore) FindLog(_ context.Context, automationID, commentID string) (
 	return f.logs[automationID+":"+commentID], nil
 }
 
-func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[string]any) (string, error) {
+func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[string]any, _ string) (string, error) {
 	payload = cloneMap(payload)
 	payload["_type"] = jobType
 	f.jobs = append(f.jobs, payload)

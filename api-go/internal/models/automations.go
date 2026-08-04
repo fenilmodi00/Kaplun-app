@@ -30,10 +30,16 @@ type Automation struct {
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
 	TrackLinks         bool     `json:"track_links"`
-	PublicReplyEnabled  bool     `json:"public_reply_enabled"`
-	PublicReplyMessage  *string  `json:"public_reply_message"`
-	PublicReplyMessages []string `json:"public_reply_messages"`
-	Status              string   `json:"status"`
+	PublicReplyEnabled   bool     `json:"public_reply_enabled"`
+	PublicReplyMessage   *string  `json:"public_reply_message"`
+	PublicReplyMessages  []string `json:"public_reply_messages"`
+	RequireFollow           bool     `json:"require_follow"`
+	FollowPromptMessage     *string  `json:"follow_prompt_message"`
+	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
+	FollowUpEnabled         bool     `json:"follow_up_enabled"`
+	FollowUpMessage         *string  `json:"follow_up_message"`
+	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	Status                  string   `json:"status"`
 	CreatedAt          string   `json:"created_at"`
 	UpdatedAt          string   `json:"updated_at"`
 }
@@ -64,10 +70,16 @@ type AutomationCreate struct {
 	OpeningDMMode      string   `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled  bool     `json:"public_reply_enabled"`
-	PublicReplyMessage  *string  `json:"public_reply_message"`
-	PublicReplyMessages []string `json:"public_reply_messages"`
-	TrackLinks          bool     `json:"track_links"`
+	PublicReplyEnabled   bool     `json:"public_reply_enabled"`
+	PublicReplyMessage   *string  `json:"public_reply_message"`
+	PublicReplyMessages  []string `json:"public_reply_messages"`
+	RequireFollow           bool     `json:"require_follow"`
+	FollowPromptMessage     *string  `json:"follow_prompt_message"`
+	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
+	FollowUpEnabled         bool     `json:"follow_up_enabled"`
+	FollowUpMessage         *string  `json:"follow_up_message"`
+	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	TrackLinks              bool     `json:"track_links"`
 }
 
 // AutomationPatch is the PATCH /automations/:id body.
@@ -80,10 +92,16 @@ type AutomationPatch struct {
 	OpeningDMMode      *string  `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled  *bool    `json:"public_reply_enabled"`
-	PublicReplyMessage  *string  `json:"public_reply_message"`
-	PublicReplyMessages []string `json:"public_reply_messages"`
-	TrackLinks          *bool    `json:"track_links"`
+	PublicReplyEnabled   *bool    `json:"public_reply_enabled"`
+	PublicReplyMessage   *string  `json:"public_reply_message"`
+	PublicReplyMessages  []string `json:"public_reply_messages"`
+	RequireFollow           *bool    `json:"require_follow"`
+	FollowPromptMessage     *string  `json:"follow_prompt_message"`
+	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
+	FollowUpEnabled         *bool    `json:"follow_up_enabled"`
+	FollowUpMessage         *string  `json:"follow_up_message"`
+	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	TrackLinks              *bool    `json:"track_links"`
 	Status             *string  `json:"status"`
 	TargetType         *string  `json:"target_type"`
 	MediaIDs           []string `json:"media_ids"`

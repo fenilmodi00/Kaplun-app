@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"kaplun/api-go/internal/platform/webhooks"
+	"kaplun/api-go/internal/worker"
 )
 
 const maxCommentTextJobLen = 1500
@@ -18,7 +20,7 @@ const maxCommentTextJobLen = 1500
 // WebhookStore records payloads and creates durable automation jobs.
 type WebhookStore interface {
 	RecordWebhookEvent(ctx context.Context, payload string) error
-	CreateJob(ctx context.Context, jobType string, payload map[string]any) (jobID string, err error)
+	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (jobID string, err error)
 }
 
 // JobEnqueuer schedules background processing for a created job ID.
@@ -106,7 +108,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			"commenter_name":       event.CommenterName,
 			"media_id":             event.MediaID,
 		}
-		jobID, err := h.Store.CreateJob(c.Request.Context(), "process_comment", jobPayload)
+		jobID, err := h.Store.CreateJob(c.Request.Context(), "process_comment", jobPayload, "")
 		if err != nil {
 			h.warn("create process_comment job failed", err)
 			continue
@@ -115,18 +117,45 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 	}
 
 	for _, event := range webhooks.ParsePostbackEvents(payload) {
-		if !strings.HasPrefix(event.Payload, "reveal:") {
-			continue
+		if strings.HasPrefix(event.Payload, "reveal:") {
+			automationID := strings.TrimPrefix(event.Payload, "reveal:")
+			jobPayload := map[string]any{
+				"instagram_account_id": event.InstagramAccountID,
+				"user_id":              event.UserID,
+				"automation_id":        automationID,
+			}
+			jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload, "")
+			if err != nil {
+				h.warn("create send_reveal job failed", err)
+				continue
+			}
+			h.enqueue(jobID)
+		} else if strings.HasPrefix(event.Payload, "followcheck:") {
+			automationID := strings.TrimPrefix(event.Payload, "followcheck:")
+			jobPayload := map[string]any{
+				"instagram_account_id": event.InstagramAccountID,
+				"user_id":              event.UserID,
+				"automation_id":        automationID,
+			}
+			jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload, "")
+			if err != nil {
+				h.warn("create send_reveal job (followcheck) failed", err)
+				continue
+			}
+			h.enqueue(jobID)
 		}
-		automationID := strings.TrimPrefix(event.Payload, "reveal:")
-		jobPayload := map[string]any{
+	}
+
+	for _, event := range webhooks.ParseReadEvents(payload) {
+		readJobPayload := map[string]any{
 			"instagram_account_id": event.InstagramAccountID,
 			"user_id":              event.UserID,
-			"automation_id":        automationID,
+			"fallback":             true,
 		}
-		jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload)
+		runAt := time.Now().UTC().Add(worker.ReadFallbackDelaySeconds * time.Second).Format(time.RFC3339Nano)
+		jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", readJobPayload, runAt)
 		if err != nil {
-			h.warn("create send_reveal job failed", err)
+			h.warn("create read_fallback send_reveal job failed", err)
 			continue
 		}
 		h.enqueue(jobID)

@@ -23,6 +23,12 @@ type PostbackEvent struct {
 	MID                string
 }
 
+type ReadEvent struct {
+	InstagramAccountID string
+	UserID             string
+	Watermark          int64
+}
+
 func VerifySignature(rawBody []byte, signatureHeader string, secrets []string) bool {
 	if signatureHeader == "" || len(secrets) == 0 {
 		return false
@@ -107,6 +113,41 @@ func ParsePostbackEvents(payload map[string]any) []PostbackEvent {
 				UserID:             userID,
 				Payload:            payloadValue,
 				MID:                asString(postback["mid"]),
+			})
+		}
+	}
+
+	return events
+}
+
+// ParseReadEvents extracts read-receipt events from an Instagram webhook payload.
+// Instagram sends `read` events in the messaging array when a user opens a DM.
+func ParseReadEvents(payload map[string]any) []ReadEvent {
+	events := make([]ReadEvent, 0)
+	if payload["object"] != "instagram" {
+		return events
+	}
+
+	for _, entryValue := range asSlice(payload["entry"]) {
+		entry := asMap(entryValue)
+		entryID := asString(entry["id"])
+		for _, messagingValue := range asSlice(entry["messaging"]) {
+			messaging := asMap(messagingValue)
+			read := asMap(messaging["read"])
+			if len(read) == 0 {
+				continue
+			}
+			userID := asString(asMap(messaging["sender"])["id"])
+			accountID := firstNonEmpty(entryID, asString(asMap(messaging["recipient"])["id"]))
+			watermark, _ := read["watermark"].(float64)
+			if userID == "" || accountID == "" || userID == accountID {
+				continue
+			}
+
+			events = append(events, ReadEvent{
+				InstagramAccountID: accountID,
+				UserID:             userID,
+				Watermark:          int64(watermark),
 			})
 		}
 	}

@@ -358,6 +358,44 @@ export default function AutomationDetail() {
                     ))}
                   </View>
                 )}
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Follow gate</Text>
+                  <Text style={styles.configValue}>
+                    {automation.require_follow ? 'On' : 'Off'}
+                  </Text>
+                </View>
+                {automation.require_follow && (
+                  <>
+                    <View style={styles.configRow}>
+                      <Text style={styles.configLabel}>Prompt message</Text>
+                      <Text style={styles.configValue} numberOfLines={1}>
+                        {automation.follow_prompt_message ?? 'Follow me to unlock the link!'}
+                      </Text>
+                    </View>
+                    <View style={styles.configRow}>
+                      <Text style={styles.configLabel}>Button label</Text>
+                      <Text style={styles.configValue}>
+                        {automation.follow_prompt_button_label ?? 'Follow'}
+                      </Text>
+                    </View>
+                  </>
+                )}
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>Follow-up</Text>
+                  <Text style={styles.configValue}>
+                    {automation.follow_up_enabled
+                      ? `On${automation.follow_up_delay_minutes ? ` (${automation.follow_up_delay_minutes}m delay)` : ''}`
+                      : 'Off'}
+                  </Text>
+                </View>
+                {automation.follow_up_enabled && automation.follow_up_message && (
+                  <View style={styles.configRow}>
+                    <Text style={styles.configLabel}>Follow-up msg</Text>
+                    <Text style={styles.configValue} numberOfLines={1}>
+                      {automation.follow_up_message}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {logs.length > 0 ? (
