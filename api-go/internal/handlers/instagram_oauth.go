@@ -25,10 +25,6 @@ type CreatorProfileStore interface {
 	StoreCreatorProfile(ctx context.Context, clerkID string, data map[string]any) (bool, error)
 }
 
-type OAuthTokenCrypto interface {
-	Encrypt(plaintext string) (string, error)
-}
-
 type WebhookSubscriber interface {
 	SubscribeToWebhooks(ctx context.Context, igAccountID, accessToken string, fields []string) error
 }
@@ -36,7 +32,6 @@ type WebhookSubscriber interface {
 type InstagramOAuthHandler struct {
 	OAuth       OAuthTokenExchanger
 	Store       CreatorProfileStore
-	Crypto      OAuthTokenCrypto
 	Subscriber  WebhookSubscriber
 	AppID       string
 	AppSecret   string
@@ -48,7 +43,6 @@ type InstagramOAuthHandler struct {
 func NewInstagramOAuthHandler(
 	exchanger OAuthTokenExchanger,
 	store CreatorProfileStore,
-	crypto OAuthTokenCrypto,
 	appID, appSecret, redirectURI string,
 	logger *slog.Logger,
 ) *InstagramOAuthHandler {
@@ -58,7 +52,6 @@ func NewInstagramOAuthHandler(
 	return &InstagramOAuthHandler{
 		OAuth:       exchanger,
 		Store:       store,
-		Crypto:      crypto,
 		AppID:       appID,
 		AppSecret:   appSecret,
 		RedirectURI: redirectURI,
@@ -214,8 +207,7 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 
 	// Store the long-lived token in plaintext. The Expo app reads this token
 	// directly from the creators row and calls graph.instagram.com, so it must
-	// be usable without backend decryption. The worker still decrypts when an
-	// encrypted legacy value is present via DecryptOrPlaintext.
+	// be usable without backend decryption.
 	creatorData := oauth.BuildCreatorData(profile, longToken.AccessToken, tokenExpiresAt, clerkID, now)
 	ok, err := h.Store.StoreCreatorProfile(c.Request.Context(), clerkID, creatorData)
 	if err != nil {

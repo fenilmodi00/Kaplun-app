@@ -30,8 +30,8 @@ func (f *fakeCronStore) ListCreatorsWithTokenExpiringBefore(context.Context, str
 	return f.creators, nil
 }
 
-func (f *fakeCronStore) UpdateCreatorToken(_ context.Context, creatorID, encryptedToken, expiresAtISO string) error {
-	f.updated = append(f.updated, updatedToken{ID: creatorID, Token: encryptedToken, Expires: expiresAtISO})
+func (f *fakeCronStore) UpdateCreatorToken(_ context.Context, creatorID, token, expiresAtISO string) error {
+	f.updated = append(f.updated, updatedToken{ID: creatorID, Token: token, Expires: expiresAtISO})
 	return nil
 }
 
@@ -57,19 +57,6 @@ func (f *fakeRefresher) RefreshLongLivedToken(_ context.Context, token string) (
 	return f.result, f.err
 }
 
-type fakeCrypto struct{}
-
-func (fakeCrypto) Encrypt(plaintext string) (string, error) {
-	return "enc1:" + plaintext, nil
-}
-
-func (fakeCrypto) DecryptOrPlaintext(stored string) string {
-	if len(stored) > 5 && stored[:5] == "enc1:" {
-		return stored[5:]
-	}
-	return stored
-}
-
 type fakeReconcile struct {
 	once     map[string]any
 	attached int
@@ -90,7 +77,7 @@ func TestCronRefreshAuthViaMiddleware(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{}, &fakeRefresher{}, fakeCrypto{}, &fakeReconcile{})
+	h := handlers.NewCronHandler(&fakeCronStore{}, &fakeRefresher{}, &fakeReconcile{})
 	engine := gin.New()
 	engine.POST("/cron/refresh-tokens", middleware.CronSecret("test-cron-secret"), h.RefreshTokens)
 
@@ -121,12 +108,12 @@ func TestCronRefreshSuccessAndSkip(t *testing.T) {
 
 	store := &fakeCronStore{
 		creators: []handlers.CronCreator{
-			{ID: "c1", AccessToken: "enc1:ig_token", TokenExpiresAt: time.Now().Add(5 * 24 * time.Hour).Format(time.RFC3339)},
+			{ID: "c1", AccessToken: "ig_token", TokenExpiresAt: time.Now().Add(5 * 24 * time.Hour).Format(time.RFC3339)},
 			{ID: "c2", AccessToken: "", TokenExpiresAt: time.Now().Add(5 * 24 * time.Hour).Format(time.RFC3339)},
 		},
 	}
 	refresher := &fakeRefresher{result: handlers.TokenRefreshResult{AccessToken: "new_token", ExpiresIn: 5184000}}
-	h := handlers.NewCronHandler(store, refresher, fakeCrypto{}, &fakeReconcile{})
+	h := handlers.NewCronHandler(store, refresher, &fakeReconcile{})
 	fixed := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	h.Now = func() time.Time { return fixed }
 
@@ -141,9 +128,9 @@ func TestCronRefreshSuccessAndSkip(t *testing.T) {
 		t.Fatalf("status %d", rec.Code)
 	}
 	if refresher.seen != "ig_token" {
-		t.Fatalf("expected decrypted token, got %q", refresher.seen)
+		t.Fatalf("expected stored plaintext token, got %q", refresher.seen)
 	}
-	if len(store.updated) != 1 || store.updated[0].Token != "enc1:new_token" {
+	if len(store.updated) != 1 || store.updated[0].Token != "new_token" {
 		t.Fatalf("updated: %#v", store.updated)
 	}
 }
@@ -157,7 +144,7 @@ func TestCronRefreshFailure(t *testing.T) {
 			{ID: "c1", AccessToken: "tok"},
 		},
 	}
-	h := handlers.NewCronHandler(store, &fakeRefresher{err: errors.New("timeout")}, fakeCrypto{}, nil)
+	h := handlers.NewCronHandler(store, &fakeRefresher{err: errors.New("timeout")}, nil)
 	engine := gin.New()
 	engine.POST("/cron/refresh-tokens", h.RefreshTokens)
 
@@ -179,7 +166,7 @@ func TestCronReconcile(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{}, nil, nil, &fakeReconcile{
+	h := handlers.NewCronHandler(&fakeCronStore{}, nil, &fakeReconcile{
 		once:     map[string]any{"enqueued": 3},
 		attached: 2,
 	})
@@ -201,7 +188,7 @@ func TestCronRetainLogs(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1}, nil, nil, nil)
+	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1}, nil, nil)
 	engine := gin.New()
 	engine.POST("/cron/retain-logs", h.RetainLogs)
 
@@ -222,7 +209,7 @@ func TestCronHealth(t *testing.T) {
 
 	h := handlers.NewCronHandler(&fakeCronStore{
 		counts: map[string]int{"pending": 1, "processing": 1, "failed": 1, "done": 2},
-	}, nil, nil, nil)
+	}, nil, nil)
 	engine := gin.New()
 	engine.GET("/cron/health", h.Health)
 

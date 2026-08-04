@@ -20,10 +20,10 @@ type Config struct {
 	Port        string
 
 	// Appwrite
-	AppwriteEndpoint       string
-	AppwriteProjectID      string
-	AppwriteAPIKey         string
-	AppwriteDatabaseID     string
+	AppwriteEndpoint        string
+	AppwriteProjectID       string
+	AppwriteAPIKey          string
+	AppwriteDatabaseID      string
 	AppwriteCreatorsTableID string
 
 	// Instagram OAuth
@@ -38,7 +38,6 @@ type Config struct {
 
 	// Comment Automation — Secrets / flags
 	WebhookVerifyToken       string
-	TokenEncryptionKey       string
 	FacebookAppSecret        string
 	CronSecret               string
 	PublicBaseURL            string
@@ -85,7 +84,6 @@ func FromMap(values map[string]string) (Config, error) {
 		AppwriteAutomationJobsTableID: strings.TrimSpace(values["APPWRITE_AUTOMATION_JOBS_TABLE_ID"]),
 
 		WebhookVerifyToken: strings.TrimSpace(values["WEBHOOK_VERIFY_TOKEN"]),
-		TokenEncryptionKey: strings.TrimSpace(values["TOKEN_ENCRYPTION_KEY"]),
 		FacebookAppSecret:  strings.TrimSpace(values["FACEBOOK_APP_SECRET"]),
 		CronSecret:         strings.TrimSpace(values["CRON_SECRET"]),
 		PublicBaseURL:      strings.TrimSpace(values["PUBLIC_BASE_URL"]),
@@ -175,7 +173,6 @@ func envMap() map[string]string {
 		"APPWRITE_AUTOMATION_LOGS_TABLE_ID",
 		"APPWRITE_AUTOMATION_JOBS_TABLE_ID",
 		"WEBHOOK_VERIFY_TOKEN",
-		"TOKEN_ENCRYPTION_KEY",
 		"FACEBOOK_APP_SECRET",
 		"CRON_SECRET",
 		"PUBLIC_BASE_URL",

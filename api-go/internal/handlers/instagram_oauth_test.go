@@ -16,10 +16,10 @@ import (
 )
 
 type fakeOAuth struct {
-	short  oauth.TokenResult
-	long   oauth.TokenResult
+	short   oauth.TokenResult
+	long    oauth.TokenResult
 	profile oauth.Profile
-	errAt  string
+	errAt   string
 }
 
 func (f *fakeOAuth) ExchangeCodeForShortToken(context.Context, string) (oauth.TokenResult, error) {
@@ -54,24 +54,18 @@ func (f *fakeCreatorStore) StoreCreatorProfile(_ context.Context, _ string, data
 	return f.ok, f.err
 }
 
-type fakeOAuthCrypto struct{}
-
-func (fakeOAuthCrypto) Encrypt(plaintext string) (string, error) {
-	return "enc1:" + plaintext, nil
-}
-
 func TestInstagramCallbackSuccess(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	expires := 1000
 	oauthFake := &fakeOAuth{
-		short: oauth.TokenResult{AccessToken: "short"},
-		long:  oauth.TokenResult{AccessToken: "long", ExpiresIn: &expires},
+		short:   oauth.TokenResult{AccessToken: "short"},
+		long:    oauth.TokenResult{AccessToken: "long", ExpiresIn: &expires},
 		profile: oauth.Profile{ID: "ig1", Username: "alice", AccountType: "CREATOR"},
 	}
 	store := &fakeCreatorStore{ok: true}
-	h := handlers.NewInstagramOAuthHandler(oauthFake, store, fakeOAuthCrypto{}, "app", "secret", "https://cb", nil)
+	h := handlers.NewInstagramOAuthHandler(oauthFake, store, "app", "secret", "https://cb", nil)
 	fixed := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	h.Now = func() time.Time { return fixed }
 
@@ -105,7 +99,7 @@ func TestInstagramCallbackOAuthError(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb", nil)
+	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, "app", "secret", "https://cb", nil)
 	engine := gin.New()
 	engine.GET("/instagram/callback", h.Callback)
 
@@ -124,7 +118,7 @@ func TestInstagramCallbackMissingCode(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, nil, "app", "secret", "https://cb", nil)
+	h := handlers.NewInstagramOAuthHandler(&fakeOAuth{}, &fakeCreatorStore{}, "app", "secret", "https://cb", nil)
 	engine := gin.New()
 	engine.GET("/instagram/callback", h.Callback)
 

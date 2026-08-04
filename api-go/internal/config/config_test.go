@@ -62,7 +62,6 @@ func TestFromMapLoadsAllEnvExampleKeys(t *testing.T) {
 		"APPWRITE_AUTOMATION_LOGS_TABLE_ID": "logs",
 		"APPWRITE_AUTOMATION_JOBS_TABLE_ID": "jobs",
 		"WEBHOOK_VERIFY_TOKEN":              "verify",
-		"TOKEN_ENCRYPTION_KEY":              "enckey",
 		"FACEBOOK_APP_SECRET":               "fb_secret",
 		"CRON_SECRET":                       "cron",
 		"PUBLIC_BASE_URL":                   "https://api.kaplun.tech",
