@@ -35,18 +35,18 @@ func TestParseCommentEventsSkipsOwnComments(t *testing.T) {
 					map[string]any{
 						"field": "comments",
 						"value": map[string]any{
-							"id":   "c1",
-							"text": "LINK please",
-							"from": map[string]any{"id": "u2", "username": "fan"},
+							"id":    "c1",
+							"text":  "LINK please",
+							"from":  map[string]any{"id": "u2", "username": "fan"},
 							"media": map[string]any{"id": "m1"},
 						},
 					},
 					map[string]any{
 						"field": "comments",
 						"value": map[string]any{
-							"id":   "c2",
-							"text": "own",
-							"from": map[string]any{"id": "ig1"},
+							"id":    "c2",
+							"text":  "own",
+							"from":  map[string]any{"id": "ig1"},
 							"media": map[string]any{"id": "m1"},
 						},
 					},

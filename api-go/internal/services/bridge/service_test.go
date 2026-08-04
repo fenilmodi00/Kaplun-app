@@ -10,11 +10,11 @@ import (
 )
 
 type fakeSessionCreator struct {
-	session          models.BridgeSession
-	createErr        error
-	ensureErr        error
-	createdFor       string
-	ensuredFor       string
+	session    models.BridgeSession
+	createErr  error
+	ensureErr  error
+	createdFor string
+	ensuredFor string
 }
 
 func (f *fakeSessionCreator) CreateUserSession(_ context.Context, clerkUserID string) (models.BridgeSession, error) {

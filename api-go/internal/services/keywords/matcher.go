@@ -7,8 +7,8 @@ import (
 
 // KeywordMatchResult mirrors the Python KeywordMatchResult dataclass.
 type KeywordMatchResult struct {
-	Matched         bool
-	MatchedKeyword  string
+	Matched        bool
+	MatchedKeyword string
 }
 
 var (

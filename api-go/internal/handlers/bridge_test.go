@@ -16,8 +16,8 @@ import (
 )
 
 type fakeBridgeService struct {
-	session    models.BridgeSession
-	err        error
+	session     models.BridgeSession
+	err         error
 	clerkUserID string
 }
 

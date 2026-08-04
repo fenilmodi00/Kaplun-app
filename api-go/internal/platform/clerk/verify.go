@@ -12,9 +12,9 @@ import (
 )
 
 type Config struct {
-	SecretKey          string
-	JWTKey             string
-	AuthorizedParties  []string
+	SecretKey         string
+	JWTKey            string
+	AuthorizedParties []string
 }
 
 type Verifier struct {

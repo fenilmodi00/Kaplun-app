@@ -83,9 +83,9 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Endpoint() string       { return c.endpoint }
-func (c *Client) ProjectID() string      { return c.projectID }
-func (c *Client) DatabaseID() string     { return c.databaseID }
+func (c *Client) Endpoint() string        { return c.endpoint }
+func (c *Client) ProjectID() string       { return c.projectID }
+func (c *Client) DatabaseID() string      { return c.databaseID }
 func (c *Client) CreatorsTableID() string { return c.creatorsTableID }
 
 func (c *Client) CreateSessionEndpoint() string {
@@ -270,19 +270,19 @@ func (c *Client) EnsureCreatorProfile(ctx context.Context, clerkUserID string) e
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = c.CreateRow(ctx, c.creatorsTableID, UniqueID, map[string]any{
-		"clerk_user_id":    clerkUserID,
-		"username":         clerkUserID,
-		"full_name":        "",
-		"bio":              "",
-		"profile_pic_url":  "",
-		"follower_count":   0,
-		"following_count":  0,
-		"post_count":       0,
-		"engagement_rate":  0.0,
-		"is_onboarded":     false,
-		"is_active":        true,
-		"created_at":       now,
-		"updated_at":       now,
+		"clerk_user_id":   clerkUserID,
+		"username":        clerkUserID,
+		"full_name":       "",
+		"bio":             "",
+		"profile_pic_url": "",
+		"follower_count":  0,
+		"following_count": 0,
+		"post_count":      0,
+		"engagement_rate": 0.0,
+		"is_onboarded":    false,
+		"is_active":       true,
+		"created_at":      now,
+		"updated_at":      now,
 	}, UserPermissions(clerkUserID))
 	return err
 }
