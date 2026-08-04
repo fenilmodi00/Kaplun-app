@@ -46,7 +46,6 @@ const mockAutomation = {
   dm_message: 'Hey! Love your content. Want to collab?',
   button_text: null,
   reveal_message: null,
-  track_links: false,
   public_reply_enabled: true,
   public_reply_message: null,
   status: 'active' as const,
@@ -114,7 +113,7 @@ describe('AutomationDetail', () => {
     mockUseAutomations.mockReturnValue(defaultAutomationsReturn);
     mockUseAutomationLogs.mockReturnValue(defaultLogsReturn);
     mockUseAutomationStats.mockReturnValue({
-      stats: { sent: 1, skipped: 1, failed: 1, clicks: 2, ctr: 0.67, top_keywords: [['collab', 1]], daily: [] },
+      stats: { sent: 1, skipped: 1, failed: 1 },
       loading: false,
       error: null,
       refresh: jest.fn(),

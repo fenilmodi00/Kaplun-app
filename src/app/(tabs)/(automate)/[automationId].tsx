@@ -270,14 +270,6 @@ export default function AutomationDetail() {
           value={statsLoading ? '--' : String(apiStats?.failed ?? stats.failed)}
           label="Failed"
         />
-        <StatCell
-          value={statsLoading ? '--' : String(apiStats?.clicks ?? 0)}
-          label="Clicks"
-        />
-        <StatCell
-          value={statsLoading ? '--' : apiStats ? `${(apiStats.ctr * 100).toFixed(0)}%` : '0%'}
-          label="CTR"
-        />
       </View>
 
       {/* Activity feed */}

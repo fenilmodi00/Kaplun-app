@@ -45,7 +45,6 @@ const mockAutomation = {
   dm_message: 'Thanks for your comment!',
   button_text: null,
   reveal_message: null,
-  track_links: false,
   public_reply_enabled: false,
   public_reply_message: null,
   status: 'active' as const,
@@ -316,13 +315,6 @@ describe('getAutomationStats', () => {
     sent: 41,
     skipped: 3,
     failed: 1,
-    clicks: 12,
-    ctr: 0.29,
-    top_keywords: [['LINK', 30], ['SHOP', 11]] as [string, number][],
-    daily: [
-      { date: '2026-07-23', sent: 5 },
-      { date: '2026-07-24', sent: 8 },
-    ],
   };
 
   it('happy: GETs /automations/:id/stats and returns stats', async () => {
@@ -359,8 +351,6 @@ describe('getAutomationStats', () => {
 describe('getOverviewStats', () => {
   const mockOverview = {
     sent_7d: 128,
-    clicks_7d: 31,
-    ctr_7d: 0.24,
     top_keyword_7d: 'LINK',
     active_automations: 3,
   };

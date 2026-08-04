@@ -39,7 +39,6 @@ const mockAutomation: Automation = {
   dm_message: 'Thanks for your comment!',
   button_text: null,
   reveal_message: null,
-  track_links: false,
   public_reply_enabled: false,
   public_reply_message: null,
   public_reply_messages: [],

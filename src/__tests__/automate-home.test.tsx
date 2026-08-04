@@ -66,7 +66,6 @@ const mockAutomations = [
     dm_message: 'Thanks for commenting!',
     button_text: null,
     reveal_message: null,
-    track_links: false,
     public_reply_enabled: false,
     public_reply_message: null,
     status: 'active' as const,
@@ -87,7 +86,6 @@ const mockAutomations = [
     dm_message: 'Use PROMO20 for 20% off!',
     button_text: null,
     reveal_message: null,
-    track_links: false,
     public_reply_enabled: false,
     public_reply_message: null,
     status: 'paused' as const,
@@ -101,7 +99,7 @@ describe('AutomateScreen', () => {
     jest.clearAllMocks();
     mockUseAutomations.mockReturnValue(defaultMockReturn);
     mockUseOverviewStats.mockReturnValue({
-      stats: { sent_7d: 128, clicks_7d: 31, ctr_7d: 0.24, top_keyword_7d: 'LINK', active_automations: 3 },
+      stats: { sent_7d: 128, top_keyword_7d: 'LINK', active_automations: 3 },
       loading: false,
       error: null,
       refresh: jest.fn(),

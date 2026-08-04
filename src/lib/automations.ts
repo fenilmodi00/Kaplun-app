@@ -28,7 +28,6 @@ export interface Automation {
   dm_message: string;
   button_text: string | null;
   reveal_message: string | null;
-  track_links: boolean;
   public_reply_enabled: boolean;
   public_reply_message: string | null;
   public_reply_messages: string[];
@@ -165,16 +164,10 @@ export interface AutomationStats {
   sent: number;
   skipped: number;
   failed: number;
-  clicks: number;
-  ctr: number;
-  top_keywords: [string, number][];
-  daily: { date: string; sent: number }[];
 }
 
 export interface OverviewStats {
   sent_7d: number;
-  clicks_7d: number;
-  ctr_7d: number;
   top_keyword_7d: string;
   active_automations: number;
 }

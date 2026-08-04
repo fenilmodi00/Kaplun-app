@@ -94,10 +94,6 @@ function StatsCard() {
           <Text style={styles.statLabel}>DMs sent (7d)</Text>
         </View>
         <View style={styles.statCell}>
-          <Text style={styles.statValue}>{loading ? '--' : stats?.clicks_7d ?? 0}</Text>
-          <Text style={styles.statLabel}>Link clicks (7d)</Text>
-        </View>
-        <View style={styles.statCell}>
           <Text style={styles.statValue}>{loading ? '--' : stats?.top_keyword_7d || '—'}</Text>
           <Text style={styles.statLabel}>Top keyword</Text>
         </View>
