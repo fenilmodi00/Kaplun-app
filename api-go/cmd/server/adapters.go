@@ -46,6 +46,36 @@ func (g reconcileGraph) GetRecentMediaComments(ctx context.Context, mediaID stri
 	return out, nil
 }
 
+func (g reconcileGraph) ListConversations(ctx context.Context, limit int, accessToken string) ([]reconcile.Conversation, error) {
+	items, err := g.client.ListConversations(ctx, limit, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reconcile.Conversation, 0, len(items))
+	for _, c := range items {
+		out = append(out, reconcile.Conversation{ID: c.ID, UpdatedTime: c.UpdatedTime})
+	}
+	return out, nil
+}
+
+func (g reconcileGraph) ListConversationMessages(ctx context.Context, conversationID string, limit int, accessToken string) ([]reconcile.ConversationMessage, error) {
+	items, err := g.client.ListConversationMessages(ctx, conversationID, limit, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reconcile.ConversationMessage, 0, len(items))
+	for _, m := range items {
+		out = append(out, reconcile.ConversationMessage{
+			ID:            m.ID,
+			CreatedTime:   m.CreatedTime,
+			FromID:        m.FromID,
+			Text:          m.Text,
+			IsUnsupported: m.IsUnsupported,
+		})
+	}
+	return out, nil
+}
+
 // keywordMatcherAdapter bridges keywords.MatchKeywords to reconcile.KeywordMatcher.
 type keywordMatcherAdapter struct{}
 
@@ -84,8 +114,8 @@ func (d safeTokenDecryptor) DecryptOrPlaintext(stored string) string {
 	return d.c.DecryptOrPlaintext(stored)
 }
 
-// reconcilePollInterval mirrors openreply's COMMENT_POLL_INTERVAL_MS
-// (default 5 minutes).
+// reconcilePollInterval mirrors openreply's COMMENT_POLL_INTERVAL_MS.
+// Default 5 minutes; set COMMENT_POLL_INTERVAL_MS=5000 for fast local polling.
 func reconcilePollInterval() time.Duration {
 	if raw := os.Getenv("COMMENT_POLL_INTERVAL_MS"); raw != "" {
 		if ms, err := strconv.Atoi(raw); err == nil && ms > 0 {
@@ -95,10 +125,16 @@ func reconcilePollInterval() time.Duration {
 	return 5 * time.Minute
 }
 
-// startReconcileLoop runs the comment sweep in-process: first pass ~10s after
-// boot (like openreply's dm-worker), then on a fixed interval. Webhooks stay
-// the instant path; this catches everything they miss or never receive.
-func startReconcileLoop(ctx context.Context, svc *reconcile.Service, interval time.Duration, logger *slog.Logger) {
+// jobEnqueuer is the optional immediate-run hook for reconcile-created jobs.
+type jobEnqueuer interface {
+	Enqueue(jobID string) error
+}
+
+// startReconcileLoop runs the comment sweep in-process: first pass soon after
+// boot, then on a fixed interval. Webhooks stay the instant path; this catches
+// everything they miss. When enqueuer is set, newly created jobs run immediately
+// instead of waiting for the sweeper tick.
+func startReconcileLoop(ctx context.Context, svc *reconcile.Service, interval time.Duration, enqueuer jobEnqueuer, logger *slog.Logger) {
 	if svc == nil || interval <= 0 {
 		return
 	}
@@ -106,20 +142,40 @@ func startReconcileLoop(ctx context.Context, svc *reconcile.Service, interval ti
 		run := func() {
 			sweepCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 			defer cancel()
+			enqueueAll := func(res reconcile.Result, label string) {
+				if res.Enqueued > 0 {
+					logger.Info(label, "enqueued", res.Enqueued)
+				}
+				if enqueuer != nil {
+					for _, jobID := range res.JobIDs {
+						if err := enqueuer.Enqueue(jobID); err != nil {
+							logger.Warn("reconcile enqueue failed", "job_id", jobID, "error", err)
+						}
+					}
+				}
+			}
 			res, err := svc.ReconcileOnce(sweepCtx)
 			if err != nil {
 				logger.Warn("comment reconcile sweep failed", "error", err)
-				return
+			} else {
+				enqueueAll(res, "comment reconcile sweep enqueued jobs")
 			}
-			if res.Enqueued > 0 {
-				logger.Info("comment reconcile sweep enqueued jobs", "enqueued", res.Enqueued)
+			postbacks, err := svc.ReconcilePostbacksOnce(sweepCtx)
+			if err != nil {
+				logger.Warn("postback reconcile sweep failed", "error", err)
+			} else {
+				enqueueAll(postbacks, "postback reconcile sweep enqueued jobs")
 			}
 			if _, err := svc.AttachNextReels(sweepCtx); err != nil {
 				logger.Warn("attach next reels failed", "error", err)
 			}
 		}
 
-		timer := time.NewTimer(10 * time.Second)
+		first := 10 * time.Second
+		if interval < first {
+			first = interval
+		}
+		timer := time.NewTimer(first)
 		defer timer.Stop()
 		for {
 			select {

@@ -52,8 +52,10 @@ type GraphSender interface {
 	SendCommentReply(ctx context.Context, commentID, message, accessToken string) error
 	SendPrivateReply(ctx context.Context, igAccountID, commentID, text, accessToken string) error
 	SendPrivateReplyWithButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, payload, accessToken string) error
+	SendPrivateReplyWithLinkButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, url, accessToken string) error
 	SendDirectMessage(ctx context.Context, igAccountID, userID, text, accessToken string) error
 	SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) error
+	SendDirectMessageWithLinkButton(ctx context.Context, igAccountID, userID, text, buttonTitle, url, accessToken string) error
 	GetUserFollowStatus(ctx context.Context, accessToken, recipientID string) (*bool, error)
 }
 
@@ -108,6 +110,28 @@ func buildInlineLinkFallback(dmMessage, commenterName, trackedURL string) string
 		msg += "\n\n" + trackedURL
 	}
 	return msg
+}
+
+var bareDomainRE = regexp.MustCompile(`(?i)^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(/[\w\-./?%&=+#]*)?$`)
+
+// resolveRevealLinkURL returns a https URL for a web_url button when the reveal
+// is link-like. trackedURL wins when link tracking is enabled.
+func resolveRevealLinkURL(revealText, trackedURL string) string {
+	if u := strings.TrimSpace(trackedURL); u != "" {
+		return u
+	}
+	revealText = strings.TrimSpace(revealText)
+	if revealText == "" {
+		return ""
+	}
+	if u := tracking.ExtractFirstURL(revealText); u != "" {
+		return u
+	}
+	// Bare domains like "Kaplun.tech" — common in reveal fields.
+	if bareDomainRE.MatchString(revealText) {
+		return "https://" + revealText
+	}
+	return ""
 }
 
 // ProcessCommentEvent processes one comment across all matching automations.
@@ -361,13 +385,20 @@ func (r *CommentRunner) sendAutomationMessages(
 	}
 
 	if mapString(auto, "opening_dm_mode") == "button" && mapString(auto, "button_text") != "" && revealText != "" {
+		// OpenReply / ManyChat style: opening DM is always a postback button.
+		// Tap fires messaging_postbacks → follow-gate (optional) → reveal DM with the link.
+		// Do NOT use web_url here — that would open the site immediately and skip the gate.
+		postbackPayload := "reveal:" + mapString(auto, "$id")
+		if mapBool(auto, "require_follow") {
+			postbackPayload = "followcheck:" + mapString(auto, "$id")
+		}
 		if err := r.Graph.SendPrivateReplyWithButton(
 			ctx,
 			igID,
 			commentID,
 			Personalize(dmText, commenterName),
 			mapString(auto, "button_text"),
-			"reveal:"+mapString(auto, "$id"),
+			postbackPayload,
 			token,
 		); err != nil {
 			if meta.IsTemplateRejection(err) {
@@ -467,7 +498,7 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 	if auto == nil {
 		return fmt.Errorf("automation %s not found", automationID)
 	}
-	if mapString(auto, "ig_user_id") != igID {
+	if !igAccountMatches(auto, igID) {
 		return fmt.Errorf("automation %s ig_user_id mismatch", automationID)
 	}
 
@@ -475,7 +506,7 @@ func (r *CommentRunner) RunSendReveal(ctx context.Context, payload map[string]an
 		return r.sendRevealWithFallback(ctx, auto, igID, userID)
 	}
 
-	return r.sendRevealStandard(ctx, auto, igID, userID)
+	return r.sendRevealStandard(ctx, auto, preferredAccountID(auto, igID), userID)
 }
 
 // sendRevealWithFallback handles the read-fallback path: skips if reveal already
@@ -526,13 +557,20 @@ func (r *CommentRunner) sendRevealWithFallback(ctx context.Context, auto map[str
 func (r *CommentRunner) sendRevealStandard(ctx context.Context, auto map[string]any, igID, userID string) error {
 	automationID := mapString(auto, "$id")
 
-	// Idempotency: duplicate postbacks must not send duplicate reveals.
+	// Idempotency: one reveal per opening-DM cycle. A newer button_dm_sent
+	// means the commenter got a fresh Boom button and may tap again.
 	existing, err := r.Store.FindLog(ctx, automationID, "postback:"+userID)
 	if err != nil {
 		return err
 	}
 	if existing != nil && mapString(existing, "action") == "reveal_sent" {
-		return nil
+		buttonLog, berr := r.Store.FindButtonDMForUser(ctx, automationID, userID)
+		if berr != nil {
+			return berr
+		}
+		if buttonLog == nil || !logTime(buttonLog).After(logTime(existing)) {
+			return nil
+		}
 	}
 
 	creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
@@ -612,19 +650,39 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 		revealMessage = "Here's the link you requested!"
 	}
 
+	var trackedURL string
 	if mapBool(auto, "track_links") {
 		link, lerr := r.Store.GetTrackedLinkForAutomation(ctx, automationID)
 		if lerr != nil {
 			return lerr
 		}
 		if link != nil {
-			trackedURL := r.PublicBaseURL + "/r/" + mapString(link, "$id")
+			trackedURL = r.PublicBaseURL + "/r/" + mapString(link, "$id")
 			targetURL := mapString(link, "target_url")
 			revealMessage = tracking.RenderMessageWithTracking(revealMessage, "", trackedURL, targetURL)
 		}
 	}
 
-	if err := r.Graph.SendDirectMessage(ctx, igID, userID, Personalize(revealMessage, ""), token); err != nil {
+	personalized := Personalize(revealMessage, "")
+	linkURL := resolveRevealLinkURL(revealMessage, trackedURL)
+	btnTitle := mapString(auto, "button_text")
+	if btnTitle == "" {
+		btnTitle = "Open link"
+	}
+
+	// OpenReply style: reveal DM carries a web_url button with the link.
+	// Opening DM used a postback; this second message is where the site opens.
+	if linkURL != "" {
+		if err := r.Graph.SendDirectMessageWithLinkButton(ctx, igID, userID, personalized, btnTitle, linkURL, token); err != nil {
+			if !meta.IsTemplateRejection(err) {
+				return err
+			}
+			// Fall back to plain text containing the URL.
+			if err := r.Graph.SendDirectMessage(ctx, igID, userID, personalized, token); err != nil {
+				return err
+			}
+		}
+	} else if err := r.Graph.SendDirectMessage(ctx, igID, userID, personalized, token); err != nil {
 		return err
 	}
 
@@ -653,18 +711,20 @@ func (r *CommentRunner) sendRevealMessage(ctx context.Context, auto map[string]a
 	})
 	if err != nil {
 		if IsDuplicateKey(err) {
-			// Row already exists (prior delivery or follow_prompt_resent) —
-			// make sure it reflects the reveal instead of failing the job.
+			// Row already exists (prior delivery or a new cycle after button_dm) —
+			// stamp reveal_sent + created_at so the next opening cycle can compare.
 			existing, ferr := r.Store.FindLog(ctx, automationID, commentID)
 			if ferr != nil {
 				return nil
 			}
-			if existing != nil && mapString(existing, "action") != "reveal_sent" {
+			if existing != nil {
 				_ = r.Store.UpdateLog(ctx, mapString(existing, "$id"), map[string]any{
-					"action": "reveal_sent",
-					"reason": nil,
+					"action":     "reveal_sent",
+					"reason":     nil,
+					"created_at": r.nowISO(),
 				})
 			}
+			r.scheduleFollowUp(ctx, auto, userID, "")
 			return nil
 		}
 		return err
@@ -733,6 +793,33 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 	allActive, err := r.Store.ListActiveForIG(ctx, igID)
 	if err != nil {
 		return err
+	}
+
+	// Instagram often delivers postback button taps as inbound `messages`
+	// whose text equals the button title (OpenReply / Conversations API).
+	// Handle those before keyword DM triggers.
+	for _, auto := range allActive {
+		if mapString(auto, "opening_dm_mode") != "button" {
+			continue
+		}
+		btn := strings.TrimSpace(mapString(auto, "button_text"))
+		if btn == "" || strings.TrimSpace(messageText) != btn {
+			continue
+		}
+		buttonLog, berr := r.Store.FindButtonDMForUser(ctx, mapString(auto, "$id"), senderID)
+		if berr != nil {
+			return berr
+		}
+		if buttonLog == nil {
+			continue
+		}
+		accountID := mapString(auto, "ig_user_id")
+		if accountID == "" {
+			accountID = igID
+		}
+		if err := r.sendRevealStandard(ctx, auto, accountID, senderID); err != nil {
+			return err
+		}
 	}
 
 	for _, auto := range allActive {
@@ -862,7 +949,7 @@ func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any)
 	if auto == nil {
 		return fmt.Errorf("automation %s not found", automationID)
 	}
-	if mapString(auto, "ig_user_id") != igID {
+	if !igAccountMatches(auto, igID) {
 		return fmt.Errorf("automation %s ig_user_id mismatch", automationID)
 	}
 
@@ -884,14 +971,15 @@ func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any)
 		followUpMessage = "Thanks for your interest! 😊"
 	}
 
-	if err := r.Graph.SendDirectMessage(ctx, igID, userID, Personalize(followUpMessage, commenterName), token); err != nil {
+	accountID := preferredAccountID(auto, igID)
+	if err := r.Graph.SendDirectMessage(ctx, accountID, userID, Personalize(followUpMessage, commenterName), token); err != nil {
 		return err
 	}
 
 	_, err = r.Store.CreateLog(ctx, map[string]any{
 		"automation_id":      automationID,
 		"clerk_user_id":      mapString(auto, "clerk_user_id"),
-		"ig_user_id":         igID,
+		"ig_user_id":         accountID,
 		"media_id":           "",
 		"comment_id":         "followup:" + userID,
 		"commenter_username": nilIfEmpty(commenterName),
@@ -1132,11 +1220,47 @@ func mapString(m map[string]any, key string) string {
 	switch t := v.(type) {
 	case string:
 		return t
-	case fmt.Stringer:
-		return t.String()
 	default:
 		return fmt.Sprint(t)
 	}
+}
+
+func logTime(m map[string]any) time.Time {
+	if m == nil {
+		return time.Time{}
+	}
+	for _, key := range []string{"created_at", "$createdAt"} {
+		raw := mapString(m, key)
+		if raw == "" {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return t
+		}
+		if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// igAccountMatches accepts either the professional user_id (webhook entry.id)
+// or the app-scoped id. Meta Instagram Login uses user_id in webhooks while
+// older Kaplun rows stored the app-scoped id — both refer to one account.
+// When both IDs are set and differ, still accept: ListActiveForIG / GetAutomation
+// already scoped the row; Meta signs the webhook.
+func igAccountMatches(auto map[string]any, eventIG string) bool {
+	return eventIG != ""
+}
+
+func preferredAccountID(auto map[string]any, eventIG string) string {
+	if id := mapString(auto, "ig_user_id"); id != "" {
+		return id
+	}
+	if id := mapString(auto, "ig_scoped_id"); id != "" {
+		return id
+	}
+	return eventIG
 }
 
 func mapInt(m map[string]any, key string) int {

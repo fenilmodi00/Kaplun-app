@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"kaplun/api-go/internal/platform/appwrite"
 	"kaplun/api-go/internal/services/reconcile"
@@ -39,6 +41,9 @@ func (r ReconcileStore) ListAllActiveAutomations(ctx context.Context) ([]reconci
 			MatchAnyWord:  boolField(row, "match_any_word"),
 			MediaIDs:      stringSliceField(row, "media_ids"),
 			BoundMediaIDs: stringSliceField(row, "bound_media_ids"),
+			OpeningDMMode: stringField(row, "opening_dm_mode"),
+			ButtonText:    stringField(row, "button_text"),
+			RequireFollow: boolField(row, "require_follow"),
 		})
 	}
 	return out, nil
@@ -60,6 +65,57 @@ func (r ReconcileStore) FindLog(ctx context.Context, automationID, commentID str
 	return existing != nil, nil
 }
 
+func (r ReconcileStore) FindButtonDMForUser(ctx context.Context, automationID, userID string) (bool, time.Time, error) {
+	row, err := r.store.FindButtonDMForUser(ctx, automationID, userID)
+	if err != nil {
+		return false, time.Time{}, err
+	}
+	if row == nil {
+		return false, time.Time{}, nil
+	}
+	createdAt := parseFlexibleTime(stringField(row, "created_at"))
+	if createdAt.IsZero() {
+		createdAt = parseFlexibleTime(stringField(row, "$createdAt"))
+	}
+	return true, createdAt, nil
+}
+
+func (r ReconcileStore) GetPostbackLog(ctx context.Context, automationID, userID string) (string, time.Time, bool, error) {
+	existing, err := r.store.FindLog(ctx, automationID, "postback:"+userID)
+	if err != nil {
+		return "", time.Time{}, false, err
+	}
+	if existing == nil {
+		return "", time.Time{}, false, nil
+	}
+	createdAt := parseFlexibleTime(stringField(existing, "created_at"))
+	if createdAt.IsZero() {
+		createdAt = parseFlexibleTime(stringField(existing, "$createdAt"))
+	}
+	return stringField(existing, "action"), createdAt, true, nil
+}
+
+func (r ReconcileStore) HasPendingSendReveal(ctx context.Context, automationID, userID string) (bool, error) {
+	result, err := r.store.client.ListRows(ctx, r.store.tables.Jobs, []string{
+		appwrite.QueryEqual("type", "send_reveal"),
+		appwrite.QueryEqual("status", "pending", "processing"),
+		appwrite.QueryLimit(100),
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, row := range result.Rows {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stringField(row, "payload")), &payload); err != nil {
+			continue
+		}
+		if payload["automation_id"] == automationID && payload["user_id"] == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r ReconcileStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
 	return r.store.CreateJob(ctx, jobType, payload, runAt)
 }
@@ -67,6 +123,19 @@ func (r ReconcileStore) CreateJob(ctx context.Context, jobType string, payload m
 func (r ReconcileStore) UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error {
 	_, err := r.store.UpdateAutomation(ctx, automationID, data)
 	return err
+}
+
+func parseFlexibleTime(raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func stringSliceField(row map[string]any, key string) []string {

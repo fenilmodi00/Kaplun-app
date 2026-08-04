@@ -29,11 +29,12 @@ type JobEnqueuer interface {
 }
 
 type WebhooksHandler struct {
-	VerifyToken string
-	Secrets     []string
-	Store       WebhookStore
-	Enqueuer    JobEnqueuer
-	Log         *slog.Logger
+	VerifyToken       string
+	Secrets           []string
+	AllowUnsigned     bool // local/dev only — Meta posts still arrive when App Secret is wrong
+	Store             WebhookStore
+	Enqueuer          JobEnqueuer
+	Log               *slog.Logger
 }
 
 func NewWebhooksHandler(verifyToken string, secrets []string, store WebhookStore, enqueuer JobEnqueuer) *WebhooksHandler {
@@ -66,8 +67,27 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 
 	sig := c.GetHeader("X-Hub-Signature-256")
 	if !webhooks.VerifySignature(raw, sig, h.Secrets) {
-		c.Status(http.StatusUnauthorized)
-		return
+		if h.AllowUnsigned {
+			if h.Log != nil {
+				h.Log.Warn("instagram webhook signature bypassed (WEBHOOK_INSECURE_SKIP_SIGNATURE)",
+					"has_signature", sig != "",
+					"signature_prefix", trimSigPrefix(sig),
+					"secrets_configured", len(h.Secrets),
+					"body_bytes", len(raw),
+				)
+			}
+		} else {
+			if h.Log != nil {
+				h.Log.Warn("instagram webhook signature rejected",
+					"has_signature", sig != "",
+					"signature_prefix", trimSigPrefix(sig),
+					"secrets_configured", len(h.Secrets),
+					"body_bytes", len(raw),
+				)
+			}
+			c.Status(http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Always 200 after a valid signature — Meta retries non-200s.
@@ -91,11 +111,25 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 		payload = map[string]any{}
 	}
 
+	comments := webhooks.ParseCommentEvents(payload)
+	postbacks := webhooks.ParsePostbackEvents(payload)
+	messages := webhooks.ParseMessageEvents(payload)
+	reads := webhooks.ParseReadEvents(payload)
+	if h.Log != nil {
+		h.Log.Info("instagram webhook received",
+			"object", payload["object"],
+			"comments", len(comments),
+			"postbacks", len(postbacks),
+			"messages", len(messages),
+			"reads", len(reads),
+		)
+	}
+
 	if h.Store == nil {
 		return
 	}
 
-	for _, event := range webhooks.ParseCommentEvents(payload) {
+	for _, event := range comments {
 		text := event.CommentText
 		if len(text) > maxCommentTextJobLen {
 			text = text[:maxCommentTextJobLen]
@@ -116,7 +150,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 		h.enqueue(jobID)
 	}
 
-	for _, event := range webhooks.ParsePostbackEvents(payload) {
+	for _, event := range postbacks {
 		if strings.HasPrefix(event.Payload, "reveal:") {
 			automationID := strings.TrimPrefix(event.Payload, "reveal:")
 			jobPayload := map[string]any{
@@ -146,7 +180,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 		}
 	}
 
-	for _, event := range webhooks.ParseMessageEvents(payload) {
+	for _, event := range messages {
 		jobPayload := map[string]any{
 			"instagram_account_id": event.InstagramAccountID,
 			"message_id":           event.MessageID,
@@ -161,7 +195,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 		h.enqueue(jobID)
 	}
 
-	for _, event := range webhooks.ParseReadEvents(payload) {
+	for _, event := range reads {
 		readJobPayload := map[string]any{
 			"instagram_account_id": event.InstagramAccountID,
 			"user_id":              event.UserID,
@@ -189,4 +223,11 @@ func (h *WebhooksHandler) warn(msg string, err error) {
 	if h.Log != nil {
 		h.Log.Warn(msg, "error", err)
 	}
+}
+
+func trimSigPrefix(sig string) string {
+	if len(sig) <= 18 {
+		return sig
+	}
+	return sig[:18] + "…"
 }

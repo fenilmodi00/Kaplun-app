@@ -35,7 +35,14 @@ func VerifySignature(rawBody []byte, signatureHeader string, secrets []string) b
 	}
 
 	for _, secret := range secrets {
+		if secret == "" {
+			continue
+		}
 		expected := ComputeTestSignature(secret, rawBody)
+		// OpenReply: timingSafeEqual fails on length mismatch — treat as non-match.
+		if len(signatureHeader) != len(expected) {
+			continue
+		}
 		if hmac.Equal([]byte(signatureHeader), []byte(expected)) {
 			return true
 		}

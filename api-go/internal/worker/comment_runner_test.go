@@ -253,6 +253,11 @@ func (g *fakeGraph) SendPrivateReplyWithButton(_ context.Context, ig, commentID,
 	return g.dmErr
 }
 
+func (g *fakeGraph) SendPrivateReplyWithLinkButton(_ context.Context, ig, commentID, text, buttonTitle, url, accessToken string) error {
+	g.calls = append(g.calls, graphCall{Kind: "link_button_dm", Args: []any{ig, commentID, text, buttonTitle, url, accessToken}})
+	return g.dmErr
+}
+
 func (g *fakeGraph) SendDirectMessage(_ context.Context, ig, userID, text, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_dm", Args: []any{ig, userID, text, accessToken}})
 	return g.dmErr
@@ -260,6 +265,11 @@ func (g *fakeGraph) SendDirectMessage(_ context.Context, ig, userID, text, acces
 
 func (g *fakeGraph) SendDirectMessageWithButton(_ context.Context, ig, userID, text, buttonTitle, payload, accessToken string) error {
 	g.calls = append(g.calls, graphCall{Kind: "direct_button_dm", Args: []any{ig, userID, text, buttonTitle, payload, accessToken}})
+	return g.dmErr
+}
+
+func (g *fakeGraph) SendDirectMessageWithLinkButton(_ context.Context, ig, userID, text, buttonTitle, url, accessToken string) error {
+	g.calls = append(g.calls, graphCall{Kind: "direct_link_button_dm", Args: []any{ig, userID, text, buttonTitle, url, accessToken}})
 	return g.dmErr
 }
 
@@ -558,6 +568,27 @@ func TestButtonModeCallsSendPrivateReplyWithButton(t *testing.T) {
 	}
 	if log["action"] != "button_dm_sent" || log["reason"] != nil {
 		t.Fatalf("log: %#v", log)
+	}
+}
+
+func TestButtonModeRequireFollowUsesFollowcheckPayload(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore([]map[string]any{makeAutomation(map[string]any{
+		"opening_dm_mode": "button",
+		"button_text":     "Get link",
+		"reveal_message":  "https://kaplun.tech",
+		"require_follow":  true,
+	})}, map[string]map[string]any{"user1": testCreator}, 0)
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	if got := kinds(graph.calls); len(got) != 2 || got[1] != "button_dm" {
+		t.Fatalf("calls: %v", got)
+	}
+	if graph.calls[1].Args[4] != "followcheck:a1" {
+		t.Fatalf("expected followcheck payload, got %#v", graph.calls[1].Args)
 	}
 }
 

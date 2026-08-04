@@ -351,29 +351,38 @@ func CountClicksQueries(linkID string) []string {
 }
 
 func automationToData(a models.Automation) map[string]any {
+	publicReplyMessages := a.PublicReplyMessages
+	if publicReplyMessages == nil {
+		publicReplyMessages = []string{}
+	}
 	return map[string]any{
-		"clerk_user_id":        a.ClerkUserID,
-		"ig_user_id":           a.IGUserID,
-		"name":                 a.Name,
-		"target_type":          a.TargetType,
-		"media_ids":            a.MediaIDs,
-		"bound_media_ids":      a.BoundMediaIDs,
-		"keywords":             a.Keywords,
-		"match_mode":           a.MatchMode,
-		"match_any_word":       a.MatchAnyWord,
-		"opening_dm_mode":      a.OpeningDMMode,
-		"dm_message":           a.DMMessage,
-		"button_text":          a.ButtonText,
-		"reveal_message":       a.RevealMessage,
-		"track_links":          a.TrackLinks,
-		"public_reply_enabled":    a.PublicReplyEnabled,
-		"public_reply_message":    a.PublicReplyMessage,
-		"follow_up_enabled":       a.FollowUpEnabled,
-		"follow_up_message":       a.FollowUpMessage,
-		"follow_up_delay_minutes": a.FollowUpDelayMinutes,
-		"status":                  a.Status,
-		"created_at":           a.CreatedAt,
-		"updated_at":           a.UpdatedAt,
+		"clerk_user_id":               a.ClerkUserID,
+		"ig_user_id":                  a.IGUserID,
+		"name":                        a.Name,
+		"target_type":                 a.TargetType,
+		"media_ids":                   a.MediaIDs,
+		"bound_media_ids":             a.BoundMediaIDs,
+		"keywords":                    a.Keywords,
+		"match_mode":                  a.MatchMode,
+		"match_any_word":              a.MatchAnyWord,
+		"opening_dm_mode":             a.OpeningDMMode,
+		"dm_message":                  a.DMMessage,
+		"button_text":                 a.ButtonText,
+		"reveal_message":              a.RevealMessage,
+		"track_links":                 a.TrackLinks,
+		"public_reply_enabled":        a.PublicReplyEnabled,
+		"public_reply_message":        a.PublicReplyMessage,
+		"public_reply_messages":       publicReplyMessages,
+		"require_follow":              a.RequireFollow,
+		"follow_prompt_message":       a.FollowPromptMessage,
+		"follow_prompt_button_label":  a.FollowPromptButtonLabel,
+		"follow_up_enabled":           a.FollowUpEnabled,
+		"follow_up_message":           a.FollowUpMessage,
+		"follow_up_delay_minutes":     a.FollowUpDelayMinutes,
+		"dm_trigger_enabled":          a.DMTriggerEnabled,
+		"status":                      a.Status,
+		"created_at":                  a.CreatedAt,
+		"updated_at":                  a.UpdatedAt,
 	}
 }
 
@@ -390,6 +399,9 @@ func decodeAutomation(row map[string]any) (models.Automation, error) {
 	}
 	if a.Keywords == nil {
 		a.Keywords = []string{}
+	}
+	if a.PublicReplyMessages == nil {
+		a.PublicReplyMessages = []string{}
 	}
 	return a, nil
 }

@@ -214,6 +214,35 @@ func TestCreateSuccessAndInstagramRequired(t *testing.T) {
 	}
 }
 
+func TestCreateRespectsButtonOpeningMode(t *testing.T) {
+	t.Parallel()
+
+	btn := "Get link"
+	reveal := "https://example.com"
+	store := newFakeStore()
+	store.creators["clerk_1"] = models.CreatorRow{
+		ClerkUserID: "clerk_1", IGUserID: "ig_123", AccessToken: "tok",
+	}
+	svc := automations.NewService(store)
+
+	row, err := svc.Create(context.Background(), "clerk_1", models.AutomationCreate{
+		Name: "Button campaign", TargetType: "all_posts", Keywords: []string{"link"},
+		DMMessage: "Tap below", OpeningDMMode: "button", ButtonText: &btn, RevealMessage: &reveal,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if row.OpeningDMMode != "button" {
+		t.Fatalf("expected opening_dm_mode=button, got %q", row.OpeningDMMode)
+	}
+	if row.ButtonText == nil || *row.ButtonText != btn {
+		t.Fatalf("button_text not persisted: %#v", row.ButtonText)
+	}
+	if row.RevealMessage == nil || *row.RevealMessage != reveal {
+		t.Fatalf("reveal_message not persisted: %#v", row.RevealMessage)
+	}
+}
+
 func TestOwnershipMasking(t *testing.T) {
 	t.Parallel()
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,7 @@ func (h *AutomationsHandler) List(c *gin.Context) {
 	}
 	rows, err := h.service.List(c.Request.Context(), clerkUserID)
 	if err != nil {
-		writeInternal(c)
+		writeInternal(c, err)
 		return
 	}
 	if rows == nil {
@@ -99,7 +100,7 @@ func (h *AutomationsHandler) OverviewStats(c *gin.Context) {
 	}
 	stats, err := h.service.OverviewStats(c.Request.Context(), clerkUserID)
 	if err != nil {
-		writeInternal(c)
+		writeInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, stats)
@@ -215,11 +216,18 @@ func writeAutomationsError(c *gin.Context, err error) {
 			Message: msg,
 		})
 	default:
-		writeInternal(c)
+		writeInternal(c, err)
 	}
 }
 
-func writeInternal(c *gin.Context) {
+func writeInternal(c *gin.Context, err ...error) {
+	if len(err) > 0 && err[0] != nil {
+		slog.Error("automations handler internal error",
+			"path", c.FullPath(),
+			"method", c.Request.Method,
+			"error", err[0],
+		)
+	}
 	c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 		Error:   "internal_error",
 		Message: "Internal server error",

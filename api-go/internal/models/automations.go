@@ -19,24 +19,24 @@ const (
 
 // Automation matches Expo Automation / FastAPI automation row shape.
 type Automation struct {
-	ID                 string   `json:"$id"`
-	ClerkUserID        string   `json:"clerk_user_id"`
-	IGUserID           string   `json:"ig_user_id"`
-	Name               string   `json:"name"`
-	TargetType         string   `json:"target_type"`
-	MediaIDs           []string `json:"media_ids"`
-	BoundMediaIDs      []string `json:"bound_media_ids"`
-	Keywords           []string `json:"keywords"`
-	MatchMode          string   `json:"match_mode"`
-	MatchAnyWord       bool     `json:"match_any_word"`
-	OpeningDMMode      string   `json:"opening_dm_mode"`
-	DMMessage          string   `json:"dm_message"`
-	ButtonText         *string  `json:"button_text"`
-	RevealMessage      *string  `json:"reveal_message"`
-	TrackLinks         bool     `json:"track_links"`
-	PublicReplyEnabled   bool     `json:"public_reply_enabled"`
-	PublicReplyMessage   *string  `json:"public_reply_message"`
-	PublicReplyMessages  []string `json:"public_reply_messages"`
+	ID                      string   `json:"$id"`
+	ClerkUserID             string   `json:"clerk_user_id"`
+	IGUserID                string   `json:"ig_user_id"`
+	Name                    string   `json:"name"`
+	TargetType              string   `json:"target_type"`
+	MediaIDs                []string `json:"media_ids"`
+	BoundMediaIDs           []string `json:"bound_media_ids"`
+	Keywords                []string `json:"keywords"`
+	MatchMode               string   `json:"match_mode"`
+	MatchAnyWord            bool     `json:"match_any_word"`
+	OpeningDMMode           string   `json:"opening_dm_mode"`
+	DMMessage               string   `json:"dm_message"`
+	ButtonText              *string  `json:"button_text"`
+	RevealMessage           *string  `json:"reveal_message"`
+	TrackLinks              bool     `json:"track_links"`
+	PublicReplyEnabled      bool     `json:"public_reply_enabled"`
+	PublicReplyMessage      *string  `json:"public_reply_message"`
+	PublicReplyMessages     []string `json:"public_reply_messages"`
 	RequireFollow           bool     `json:"require_follow"`
 	FollowPromptMessage     *string  `json:"follow_prompt_message"`
 	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
@@ -45,8 +45,8 @@ type Automation struct {
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
 	DMTriggerEnabled        bool     `json:"dm_trigger_enabled"`
 	Status                  string   `json:"status"`
-	CreatedAt          string   `json:"created_at"`
-	UpdatedAt          string   `json:"updated_at"`
+	CreatedAt               string   `json:"created_at"`
+	UpdatedAt               string   `json:"updated_at"`
 }
 
 // AutomationLog matches Expo AutomationLog.
@@ -65,19 +65,19 @@ type AutomationLog struct {
 
 // AutomationCreate is the POST /automations body.
 type AutomationCreate struct {
-	Name               string   `json:"name"`
-	TargetType         string   `json:"target_type"`
-	MediaIDs           []string `json:"media_ids"`
-	Keywords           []string `json:"keywords"`
-	MatchMode          string   `json:"match_mode"`
-	MatchAnyWord       bool     `json:"match_any_word"`
-	DMMessage          string   `json:"dm_message"`
-	OpeningDMMode      string   `json:"opening_dm_mode"`
-	ButtonText         *string  `json:"button_text"`
-	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled   bool     `json:"public_reply_enabled"`
-	PublicReplyMessage   *string  `json:"public_reply_message"`
-	PublicReplyMessages  []string `json:"public_reply_messages"`
+	Name                    string   `json:"name"`
+	TargetType              string   `json:"target_type"`
+	MediaIDs                []string `json:"media_ids"`
+	Keywords                []string `json:"keywords"`
+	MatchMode               string   `json:"match_mode"`
+	MatchAnyWord            bool     `json:"match_any_word"`
+	DMMessage               string   `json:"dm_message"`
+	OpeningDMMode           string   `json:"opening_dm_mode"`
+	ButtonText              *string  `json:"button_text"`
+	RevealMessage           *string  `json:"reveal_message"`
+	PublicReplyEnabled      bool     `json:"public_reply_enabled"`
+	PublicReplyMessage      *string  `json:"public_reply_message"`
+	PublicReplyMessages     []string `json:"public_reply_messages"`
 	RequireFollow           bool     `json:"require_follow"`
 	FollowPromptMessage     *string  `json:"follow_prompt_message"`
 	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
@@ -90,17 +90,17 @@ type AutomationCreate struct {
 
 // AutomationPatch is the PATCH /automations/:id body.
 type AutomationPatch struct {
-	Name               *string  `json:"name"`
-	Keywords           []string `json:"keywords"`
-	MatchMode          *string  `json:"match_mode"`
-	MatchAnyWord       *bool    `json:"match_any_word"`
-	DMMessage          *string  `json:"dm_message"`
-	OpeningDMMode      *string  `json:"opening_dm_mode"`
-	ButtonText         *string  `json:"button_text"`
-	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled   *bool    `json:"public_reply_enabled"`
-	PublicReplyMessage   *string  `json:"public_reply_message"`
-	PublicReplyMessages  []string `json:"public_reply_messages"`
+	Name                    *string  `json:"name"`
+	Keywords                []string `json:"keywords"`
+	MatchMode               *string  `json:"match_mode"`
+	MatchAnyWord            *bool    `json:"match_any_word"`
+	DMMessage               *string  `json:"dm_message"`
+	OpeningDMMode           *string  `json:"opening_dm_mode"`
+	ButtonText              *string  `json:"button_text"`
+	RevealMessage           *string  `json:"reveal_message"`
+	PublicReplyEnabled      *bool    `json:"public_reply_enabled"`
+	PublicReplyMessage      *string  `json:"public_reply_message"`
+	PublicReplyMessages     []string `json:"public_reply_messages"`
 	RequireFollow           *bool    `json:"require_follow"`
 	FollowPromptMessage     *string  `json:"follow_prompt_message"`
 	FollowPromptButtonLabel *string  `json:"follow_prompt_button_label"`
@@ -109,9 +109,9 @@ type AutomationPatch struct {
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
 	DMTriggerEnabled        *bool    `json:"dm_trigger_enabled"`
 	TrackLinks              *bool    `json:"track_links"`
-	Status             *string  `json:"status"`
-	TargetType         *string  `json:"target_type"`
-	MediaIDs           []string `json:"media_ids"`
+	Status                  *string  `json:"status"`
+	TargetType              *string  `json:"target_type"`
+	MediaIDs                []string `json:"media_ids"`
 }
 
 // AutomationsListResponse wraps list results.
@@ -150,13 +150,13 @@ type DailySent struct {
 
 // AutomationStats matches Expo AutomationStats (bare object, not wrapped).
 type AutomationStats struct {
-	Sent         int        `json:"sent"`
-	Skipped      int        `json:"skipped"`
-	Failed       int        `json:"failed"`
-	Clicks       int        `json:"clicks"`
-	CTR          float64    `json:"ctr"`
-	TopKeywords  [][]any    `json:"top_keywords"`
-	Daily        []DailySent `json:"daily"`
+	Sent        int         `json:"sent"`
+	Skipped     int         `json:"skipped"`
+	Failed      int         `json:"failed"`
+	Clicks      int         `json:"clicks"`
+	CTR         float64     `json:"ctr"`
+	TopKeywords [][]any     `json:"top_keywords"`
+	Daily       []DailySent `json:"daily"`
 }
 
 // OverviewStats matches Expo OverviewStats (bare object, not wrapped).

@@ -259,6 +259,25 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		logger.Warn("automations store disabled: set all APPWRITE_*_TABLE_ID env vars")
 	}
 
+	// Worker pool + sweeper first so reconcile can enqueue jobs immediately.
+	var pool *worker.Pool
+	if cfg.AutomationSweeperEnabled && autoStore != nil {
+		pool = worker.NewPool(4, 64)
+		cleanups = append(cleanups, pool.Shutdown)
+		sweeper := worker.NewSweeper(autoStore, commentRunner, time.Minute)
+		sweeper.Log = logger
+		sweeper.Start()
+		cleanups = append(cleanups, sweeper.Stop)
+		logger.Info("automation sweeper started")
+	} else if cfg.AutomationSweeperEnabled {
+		logger.Warn("automation sweeper skipped: store unavailable")
+	}
+
+	var reconcileEnqueuer jobEnqueuer
+	if pool != nil && commentRunner != nil {
+		reconcileEnqueuer = &poolEnqueuer{pool: pool, runner: commentRunner, log: logger}
+	}
+
 	// Comment reconciler (polling safety net for comments webhooks miss —
 	// mirrors openreply's dm-worker poll). Runs in-process on an interval so
 	// no external scheduler is required.
@@ -274,20 +293,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	if reconcileSvc != nil && cfg.AutomationSweeperEnabled {
 		loopCtx, loopCancel := context.WithCancel(context.Background())
 		cleanups = append(cleanups, loopCancel)
-		startReconcileLoop(loopCtx, reconcileSvc, reconcilePollInterval(), logger)
-	}
-
-	var pool *worker.Pool
-	if cfg.AutomationSweeperEnabled && autoStore != nil {
-		pool = worker.NewPool(4, 64)
-		cleanups = append(cleanups, pool.Shutdown)
-		sweeper := worker.NewSweeper(autoStore, commentRunner, time.Minute)
-		sweeper.Log = logger
-		sweeper.Start()
-		cleanups = append(cleanups, sweeper.Stop)
-		logger.Info("automation sweeper started")
-	} else if cfg.AutomationSweeperEnabled {
-		logger.Warn("automation sweeper skipped: store unavailable")
+		startReconcileLoop(loopCtx, reconcileSvc, reconcilePollInterval(), reconcileEnqueuer, logger)
 	}
 
 	if autoStore != nil && deps.ClerkAuth != nil {
@@ -313,6 +319,11 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			webhookStore = autoStore.AsWorker()
 		}
 		deps.Webhooks = handlers.NewWebhooksHandler(cfg.WebhookVerifyToken, secrets, webhookStore, enqueuer)
+		deps.Webhooks.Log = logger
+		if os.Getenv("WEBHOOK_INSECURE_SKIP_SIGNATURE") == "1" || os.Getenv("WEBHOOK_INSECURE_SKIP_SIGNATURE") == "true" {
+			deps.Webhooks.AllowUnsigned = true
+			logger.Warn("WEBHOOK_INSECURE_SKIP_SIGNATURE enabled — accepting unsigned Instagram webhooks")
+		}
 		if webhookStore == nil {
 			logger.Info("route enabled", "path", "/webhooks/instagram (verify + events; persistence deferred — no automation store)")
 		} else {

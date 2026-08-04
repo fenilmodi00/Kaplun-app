@@ -30,7 +30,8 @@ type TokenResult struct {
 }
 
 type Profile struct {
-	ID                string
+	ID                string // app-scoped id from /me?fields=id
+	UserID            string // professional account id from /me?fields=user_id (webhooks + messaging)
 	Username          string
 	Name              string
 	AccountType       string
@@ -128,7 +129,7 @@ func (s *Service) ExchangeForLongToken(ctx context.Context, shortToken string) (
 }
 
 func (s *Service) FetchInstagramProfile(ctx context.Context, accessToken string) (Profile, error) {
-	fields := "id,username,name,account_type,media_count,followers_count,follows_count,profile_picture_url,biography,website"
+	fields := "id,user_id,username,name,account_type,media_count,followers_count,follows_count,profile_picture_url,biography,website"
 	endpoint := fmt.Sprintf(
 		"https://graph.instagram.com/%s/me?fields=%s&access_token=%s",
 		s.cfg.GraphVersion,
@@ -151,6 +152,7 @@ func (s *Service) FetchInstagramProfile(ctx context.Context, accessToken string)
 	if id == "" {
 		return Profile{}, fmt.Errorf("missing id in profile response: %v", data)
 	}
+	userID := asString(data["user_id"])
 
 	followers, _ := asInt(data["followers_count"])
 	follows, _ := asInt(data["follows_count"])
@@ -158,6 +160,7 @@ func (s *Service) FetchInstagramProfile(ctx context.Context, accessToken string)
 
 	return Profile{
 		ID:                id,
+		UserID:            userID,
 		Username:          asString(data["username"]),
 		Name:              asString(data["name"]),
 		AccountType:       asString(data["account_type"]),
@@ -190,9 +193,17 @@ func BuildCreatorData(profile Profile, accessToken, tokenExpiresAt, clerkID stri
 		accountType = "creator"
 	}
 
+	// OpenReply / Meta Instagram Login: webhooks put professional `user_id`
+	// in entry.id and the messaging API keys off the same id. Fall back to
+	// app-scoped `id` only when user_id is absent.
+	professionalID := profile.UserID
+	if professionalID == "" {
+		professionalID = profile.ID
+	}
+
 	return map[string]any{
 		"clerk_user_id":    clerkID,
-		"ig_user_id":       profile.ID,
+		"ig_user_id":       professionalID,
 		"ig_scoped_id":     profile.ID,
 		"username":         profile.Username,
 		"full_name":        profile.Name,

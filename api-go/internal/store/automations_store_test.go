@@ -175,3 +175,40 @@ func TestAutomationsStoreCountClicksUsesSlugQuery(t *testing.T) {
 		t.Fatalf("queries=%#v", fake.listCalls[0].queries)
 	}
 }
+
+func TestFindLogQueriesNewestRowFirst(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeRows{
+		rows: map[string]appwrite.RowsResult{
+			"logs": {Rows: []map[string]any{{"$id": "l1"}}},
+		},
+	}
+	s := store.NewAutomationsStore(fake, store.Tables{Logs: "logs"})
+
+	row, err := s.FindLog(context.Background(), "a1", "postback:u1")
+	if err != nil {
+		t.Fatalf("FindLog: %v", err)
+	}
+	if row == nil || row["$id"] != "l1" {
+		t.Fatalf("row=%#v", row)
+	}
+	if len(fake.listCalls) != 1 {
+		t.Fatalf("listCalls=%#v", fake.listCalls)
+	}
+	got := fake.listCalls[0].queries
+	want := []string{
+		`{"method":"equal","attribute":"automation_id","values":["a1"]}`,
+		`{"method":"equal","attribute":"comment_id","values":["postback:u1"]}`,
+		`{"method":"orderDesc","attribute":"created_at"}`,
+		`{"method":"limit","values":[1]}`,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("queries=%#v want=%#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queries[%d]=%q want %q", i, got[i], want[i])
+		}
+	}
+}

@@ -40,6 +40,14 @@ func (s *Sender) SendPrivateReplyWithButton(ctx context.Context, igAccountID, co
 	return err
 }
 
+func (s *Sender) SendPrivateReplyWithLinkButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, url, accessToken string) error {
+	if s == nil || s.Client == nil {
+		return fmt.Errorf("meta sender not configured")
+	}
+	_, err := s.Client.SendPrivateReplyWithLinkButton(ctx, igAccountID, commentID, text, buttonTitle, url, accessToken)
+	return err
+}
+
 func (s *Sender) SendDirectMessage(ctx context.Context, igAccountID, userID, text, accessToken string) error {
 	if s == nil || s.Client == nil {
 		return fmt.Errorf("meta sender not configured")
@@ -53,6 +61,14 @@ func (s *Sender) SendDirectMessageWithButton(ctx context.Context, igAccountID, u
 		return fmt.Errorf("meta sender not configured")
 	}
 	_, err := s.Client.SendDirectMessageWithButton(ctx, igAccountID, userID, text, buttonTitle, payload, accessToken)
+	return err
+}
+
+func (s *Sender) SendDirectMessageWithLinkButton(ctx context.Context, igAccountID, userID, text, buttonTitle, url, accessToken string) error {
+	if s == nil || s.Client == nil {
+		return fmt.Errorf("meta sender not configured")
+	}
+	_, err := s.Client.SendDirectMessageWithLinkButton(ctx, igAccountID, userID, text, buttonTitle, url, accessToken)
 	return err
 }
 

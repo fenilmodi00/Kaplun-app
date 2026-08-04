@@ -38,13 +38,62 @@ func (s *AutomationsStore) ListActiveForIG(ctx context.Context, igUserID string)
 	if err != nil {
 		return nil, err
 	}
+	if len(result.Rows) > 0 {
+		return result.Rows, nil
+	}
+
+	// Account-id trap (OpenReply): webhook entry.id is the professional
+	// user_id, while older rows may still store the app-scoped id. Resolve
+	// the alternate from the creators row and retry once.
+	alt, aerr := s.resolveAlternateIGID(ctx, igUserID)
+	if aerr != nil || alt == "" || alt == igUserID {
+		return result.Rows, nil
+	}
+	result, err = s.client.ListRows(ctx, s.tables.Automations, []string{
+		appwrite.QueryEqual("ig_user_id", alt),
+		appwrite.QueryEqual("status", "active"),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return result.Rows, nil
+}
+
+func (s *AutomationsStore) resolveAlternateIGID(ctx context.Context, igUserID string) (string, error) {
+	byUser, err := s.client.ListRows(ctx, s.tables.Creators, []string{
+		appwrite.QueryEqual("ig_user_id", igUserID),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(byUser.Rows) > 0 {
+		scoped := stringField(byUser.Rows[0], "ig_scoped_id")
+		if scoped != "" && scoped != igUserID {
+			return scoped, nil
+		}
+	}
+	byScoped, err := s.client.ListRows(ctx, s.tables.Creators, []string{
+		appwrite.QueryEqual("ig_scoped_id", igUserID),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(byScoped.Rows) > 0 {
+		professional := stringField(byScoped.Rows[0], "ig_user_id")
+		if professional != "" && professional != igUserID {
+			return professional, nil
+		}
+	}
+	return "", nil
 }
 
 func (s *AutomationsStore) FindLog(ctx context.Context, automationID, commentID string) (map[string]any, error) {
 	result, err := s.client.ListRows(ctx, s.tables.Logs, []string{
 		appwrite.QueryEqual("automation_id", automationID),
 		appwrite.QueryEqual("comment_id", commentID),
+		appwrite.QueryOrderDesc("created_at"),
 		appwrite.QueryLimit(1),
 	})
 	if err != nil {
@@ -76,6 +125,7 @@ func (s *AutomationsStore) FindButtonDMForUser(ctx context.Context, automationID
 		appwrite.QueryEqual("automation_id", automationID),
 		appwrite.QueryEqual("commenter_id", userID),
 		appwrite.QueryEqual("action", "button_dm_sent"),
+		appwrite.QueryOrderDesc("created_at"),
 		appwrite.QueryLimit(1),
 	})
 	if err != nil {

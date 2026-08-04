@@ -206,7 +206,8 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	}
 	h.logger.Info("instagram oauth profile ok",
 		"clerk_user_id", clerkID,
-		"ig_user_id", profile.ID,
+		"ig_user_id", firstNonEmpty(profile.UserID, profile.ID),
+		"ig_scoped_id", profile.ID,
 		"username", username,
 		"account_type", profile.AccountType,
 	)
@@ -220,7 +221,7 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("instagram oauth store profile failed",
 			"clerk_user_id", clerkID,
-			"ig_user_id", profile.ID,
+			"ig_user_id", firstNonEmpty(profile.UserID, profile.ID),
 			"err", err,
 		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to save your profile: "+err.Error(), redirectURL)))
@@ -229,34 +230,37 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	if !ok {
 		h.logger.Error("instagram oauth store profile returned false",
 			"clerk_user_id", clerkID,
-			"ig_user_id", profile.ID,
+			"ig_user_id", firstNonEmpty(profile.UserID, profile.ID),
 		)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage("Failed to save your profile. Please try again.", redirectURL)))
 		return
 	}
 	h.logger.Info("instagram oauth creator profile saved",
 		"clerk_user_id", clerkID,
-		"ig_user_id", profile.ID,
+		"ig_user_id", firstNonEmpty(profile.UserID, profile.ID),
+		"ig_scoped_id", profile.ID,
 		"username", username,
 		"token_expires_at", tokenExpiresAt,
 	)
 
 	if h.Subscriber != nil {
+		// OpenReply / Meta: subscribe with professional user_id (webhook entry.id).
+		subscribeID := firstNonEmpty(profile.UserID, profile.ID)
 		if subErr := h.Subscriber.SubscribeToWebhooks(
 			c.Request.Context(),
-			profile.ID,
+			subscribeID,
 			longToken.AccessToken,
 			[]string{"comments", "messages", "messaging_postbacks"},
 		); subErr != nil {
 			h.logger.Warn("instagram oauth webhook subscribe failed",
 				"clerk_user_id", clerkID,
-				"ig_user_id", profile.ID,
+				"ig_user_id", subscribeID,
 				"err", subErr,
 			)
 		} else {
 			h.logger.Info("instagram oauth webhook subscribed",
 				"clerk_user_id", clerkID,
-				"ig_user_id", profile.ID,
+				"ig_user_id", subscribeID,
 			)
 		}
 	}

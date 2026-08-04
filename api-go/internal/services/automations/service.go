@@ -93,41 +93,44 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 	if matchMode == "" {
 		matchMode = "whole_word"
 	}
-	// Match FastAPI create: opening_dm_mode is forced to "direct" on insert.
+	opening := body.OpeningDMMode
+	if opening == "" {
+		opening = "direct"
+	}
 	keywords := cleanKeywords(body.Keywords)
 	if body.MatchAnyWord {
 		// Any-word campaigns carry no keyword list — every comment matches.
 		keywords = []string{}
 	}
-		row := models.Automation{
-			ClerkUserID:        clerkUserID,
-			IGUserID:           creator.IGUserID,
-			Name:               body.Name,
-			TargetType:         body.TargetType,
-			MediaIDs:           mediaIDs,
-			BoundMediaIDs:      []string{},
-			Keywords:           keywords,
-			MatchMode:          matchMode,
-			MatchAnyWord:       body.MatchAnyWord,
-			OpeningDMMode:      "direct",
-			DMMessage:          body.DMMessage,
-			ButtonText:         body.ButtonText,
-			RevealMessage:      body.RevealMessage,
-			TrackLinks:         body.TrackLinks,
-			PublicReplyEnabled:  body.PublicReplyEnabled,
-			PublicReplyMessage:  body.PublicReplyMessage,
-			PublicReplyMessages: body.PublicReplyMessages,
-			RequireFollow:           body.RequireFollow,
-			FollowPromptMessage:     body.FollowPromptMessage,
-			FollowPromptButtonLabel: body.FollowPromptButtonLabel,
-			FollowUpEnabled:         body.FollowUpEnabled,
-			FollowUpMessage:         body.FollowUpMessage,
-			FollowUpDelayMinutes:    body.FollowUpDelayMinutes,
-			DMTriggerEnabled:        body.DMTriggerEnabled,
-			Status:                  "active",
-			CreatedAt:          now,
-			UpdatedAt:          now,
-		}
+	row := models.Automation{
+		ClerkUserID:             clerkUserID,
+		IGUserID:                creator.IGUserID,
+		Name:                    body.Name,
+		TargetType:              body.TargetType,
+		MediaIDs:                mediaIDs,
+		BoundMediaIDs:           []string{},
+		Keywords:                keywords,
+		MatchMode:               matchMode,
+		MatchAnyWord:            body.MatchAnyWord,
+		OpeningDMMode:           opening,
+		DMMessage:               body.DMMessage,
+		ButtonText:              body.ButtonText,
+		RevealMessage:           body.RevealMessage,
+		TrackLinks:              body.TrackLinks,
+		PublicReplyEnabled:      body.PublicReplyEnabled,
+		PublicReplyMessage:      body.PublicReplyMessage,
+		PublicReplyMessages:     body.PublicReplyMessages,
+		RequireFollow:           body.RequireFollow,
+		FollowPromptMessage:     body.FollowPromptMessage,
+		FollowPromptButtonLabel: body.FollowPromptButtonLabel,
+		FollowUpEnabled:         body.FollowUpEnabled,
+		FollowUpMessage:         body.FollowUpMessage,
+		FollowUpDelayMinutes:    body.FollowUpDelayMinutes,
+		DMTriggerEnabled:        body.DMTriggerEnabled,
+		Status:                  "active",
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	}
 
 	created, err := s.store.CreateAutomation(ctx, row)
 	if err != nil {

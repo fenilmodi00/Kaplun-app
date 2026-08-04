@@ -119,13 +119,20 @@ func TestBuildCreatorDataAndExpiry(t *testing.T) {
 	}
 
 	data := oauth.BuildCreatorData(oauth.Profile{
-		ID: "ig1", Username: "alice", Name: "Alice", AccountType: "professional",
+		ID: "ig1", UserID: "pro1", Username: "alice", Name: "Alice", AccountType: "professional",
 	}, "tok", at, "clerk1", now)
 	if data["account_type"] != "creator" || data["is_business"] != false {
 		t.Fatalf("data: %#v", data)
 	}
-	if data["clerk_user_id"] != "clerk1" || data["ig_user_id"] != "ig1" {
+	// OpenReply: store professional user_id as ig_user_id; keep app-scoped id separately.
+	if data["clerk_user_id"] != "clerk1" || data["ig_user_id"] != "pro1" || data["ig_scoped_id"] != "ig1" {
 		t.Fatalf("ids: %#v", data)
+	}
+	fallback := oauth.BuildCreatorData(oauth.Profile{
+		ID: "ig1", Username: "alice", Name: "Alice", AccountType: "professional",
+	}, "tok", at, "clerk1", now)
+	if fallback["ig_user_id"] != "ig1" {
+		t.Fatalf("fallback ig_user_id: %#v", fallback)
 	}
 	if _, ok := data["ig_session_json"]; ok {
 		t.Fatalf("ig_session_json must not be sent — creators table has no such column")

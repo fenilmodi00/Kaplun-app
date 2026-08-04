@@ -129,6 +129,30 @@ func (c *Client) SendDirectMessageWithButton(ctx context.Context, igAccountID, u
 	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
 }
 
+// SendDirectMessageWithLinkButton sends a web_url button template as a DM.
+// Used for the reveal step (after postback) so the link is tappable without
+// another postback round-trip — matching OpenReply's tracked link buttons.
+func (c *Client) SendDirectMessageWithLinkButton(ctx context.Context, igAccountID, userID, text, buttonTitle, url, accessToken string) (map[string]any, error) {
+	body := map[string]any{
+		"recipient": map[string]any{"id": userID},
+		"message": map[string]any{
+			"attachment": map[string]any{
+				"type": "template",
+				"payload": map[string]any{
+					"template_type": "button",
+					"text":          truncateRunes(text, 640),
+					"buttons": []map[string]any{{
+						"type":  "web_url",
+						"url":   url,
+						"title": truncateRunes(buttonTitle, 20),
+					}},
+				},
+			},
+		},
+	}
+	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
+}
+
 // GetUserFollowStatus checks whether a user follows the business account.
 // Calls GET /{recipientId}?fields=is_user_follow_business.
 // Returns true/false, or nil if the field is not available (fail-open).
