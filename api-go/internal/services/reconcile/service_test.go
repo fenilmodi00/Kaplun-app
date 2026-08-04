@@ -9,15 +9,17 @@ import (
 )
 
 type fakeStore struct {
-	autos      []reconcile.Automation
-	creator    reconcile.Creator
-	hasCreator bool
-	logs       map[string]bool
-	buttonDMs  map[string]time.Time
-	postbacks  map[string]postbackRow
-	pending    map[string]bool
-	jobs       []map[string]any
-	updates    []map[string]any
+	autos           []reconcile.Automation
+	creator         reconcile.Creator
+	hasCreator      bool
+	logs            map[string]bool
+	buttonDMs       map[string]time.Time
+	postbacks       map[string]postbackRow
+	pending         map[string]bool
+	jobs            []map[string]any
+	updates         []map[string]any
+	findButtonDMErr map[string]bool
+	updateErr       map[string]bool
 }
 
 type postbackRow struct {
@@ -38,6 +40,9 @@ func (f *fakeStore) FindLog(_ context.Context, automationID, commentID string) (
 }
 
 func (f *fakeStore) FindButtonDMForUser(_ context.Context, automationID, userID string) (bool, time.Time, error) {
+	if f.findButtonDMErr != nil && f.findButtonDMErr[automationID+":"+userID] {
+		return false, time.Time{}, context.Canceled
+	}
 	t, ok := f.buttonDMs[automationID+":"+userID]
 	return ok, t, nil
 }
@@ -61,7 +66,10 @@ func (f *fakeStore) CreateJob(_ context.Context, jobType string, payload map[str
 	return "j1", nil
 }
 
-func (f *fakeStore) UpdateAutomation(_ context.Context, _ string, data map[string]any) error {
+func (f *fakeStore) UpdateAutomation(_ context.Context, automationID string, data map[string]any) error {
+	if f.updateErr != nil && f.updateErr[automationID] {
+		return context.Canceled
+	}
 	f.updates = append(f.updates, data)
 	return nil
 }
@@ -321,6 +329,79 @@ func TestReconcilePostbacksOnceEnqueuesAfterNewerButtonDM(t *testing.T) {
 	}
 	if res.Enqueued != 1 {
 		t.Fatalf("enqueued=%d jobs=%v", res.Enqueued, store.jobs)
+	}
+}
+
+func TestReconcilePostbacksOnceContinuesOnStoreErrors(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	store := &fakeStore{
+		autos: []reconcile.Automation{
+			{
+				ID: "a1", ClerkUserID: "u1", IgUserID: "ig1",
+				OpeningDMMode: "button", ButtonText: "Boom 💥",
+			},
+			{
+				ID: "a2", ClerkUserID: "u2", IgUserID: "ig2",
+				OpeningDMMode: "button", ButtonText: "Tap",
+			},
+		},
+		creator:    reconcile.Creator{AccessToken: "tok"},
+		hasCreator: true,
+		buttonDMs: map[string]time.Time{
+			"a1:fan1": now.Add(-time.Minute),
+			"a2:fan2": now.Add(-time.Minute),
+		},
+		postbacks:       map[string]postbackRow{},
+		pending:         map[string]bool{},
+		findButtonDMErr: map[string]bool{"a1:fan1": true},
+	}
+	graph := &fakeGraph{
+		conversations: []reconcile.Conversation{{ID: "conv1", UpdatedTime: now}},
+		messages: map[string][]reconcile.ConversationMessage{
+			"conv1": {
+				{ID: "m1", FromID: "fan1", Text: "Boom 💥", CreatedTime: now.Add(-time.Minute)},
+				{ID: "m2", FromID: "fan2", Text: "Tap", CreatedTime: now.Add(-time.Minute)},
+			},
+		},
+	}
+	svc := reconcile.NewService(store, graph, plainCrypto{}, alwaysMatch{})
+	svc.Now = func() time.Time { return now }
+
+	res, err := svc.ReconcilePostbacksOnce(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.Enqueued != 1 {
+		t.Fatalf("enqueued=%d jobs=%v", res.Enqueued, store.jobs)
+	}
+	if len(res.Errors) == 0 {
+		t.Fatal("expected errors for a1 failure")
+	}
+}
+
+func TestAttachNextReelsContinuesOnErrors(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		autos: []reconcile.Automation{
+			{ID: "a1", ClerkUserID: "u1", TargetType: "next_reel", BoundMediaIDs: []string{"old"}},
+			{ID: "a2", ClerkUserID: "u2", TargetType: "next_reel", BoundMediaIDs: []string{"old2"}},
+		},
+		creator:    reconcile.Creator{AccessToken: "tok"},
+		hasCreator: true,
+		updateErr:  map[string]bool{"a1": true},
+	}
+	graph := &fakeGraph{media: []reconcile.Media{{ID: "newest"}}}
+	svc := reconcile.NewService(store, graph, plainCrypto{}, alwaysMatch{})
+
+	n, err := svc.AttachNextReels(context.Background())
+	if err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("attached=%d", n)
 	}
 }
 

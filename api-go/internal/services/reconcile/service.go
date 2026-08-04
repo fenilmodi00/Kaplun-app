@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -9,6 +11,9 @@ import (
 const (
 	LookbackHours         = 72
 	MaxMediaPerAutomation = 10
+	// MaxNewPerSweep caps the number of comment jobs a single campaign can
+	// enqueue in one reconcile tick. Mirrors openreply's comment-reconciler.
+	MaxNewPerSweep = 30
 )
 
 type Automation struct {
@@ -84,6 +89,8 @@ type KeywordMatcher interface {
 type Result struct {
 	Enqueued int      `json:"enqueued"`
 	JobIDs   []string `json:"job_ids,omitempty"`
+	Errors   []string `json:"errors,omitempty"`
+	Attached int      `json:"attached,omitempty"`
 }
 
 type Service struct {
@@ -92,6 +99,7 @@ type Service struct {
 	Crypto  TokenDecryptor
 	Matcher KeywordMatcher
 	Now     func() time.Time
+	Log     *slog.Logger
 }
 
 func NewService(store Store, graph GraphClient, crypto TokenDecryptor, matcher KeywordMatcher) *Service {
@@ -104,11 +112,20 @@ func NewService(store Store, graph GraphClient, crypto TokenDecryptor, matcher K
 	}
 }
 
+func (s *Service) logWarn(msg string, attrs ...any) {
+	if s.Log != nil {
+		s.Log.Warn(msg, attrs...)
+	} else {
+		slog.Warn(msg, attrs...)
+	}
+}
+
 // ReconcileOnce scans active automations for unmatched comments and enqueues jobs.
 func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 	sinceMS := s.Now().UTC().Add(-time.Duration(LookbackHours) * time.Hour).UnixMilli()
 	enqueued := 0
 	var jobIDs []string
+	var errs []string
 
 	autos, err := s.Store.ListAllActiveAutomations(ctx)
 	if err != nil {
@@ -118,7 +135,9 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 	for _, auto := range autos {
 		creator, ok, err := s.Store.GetCreatorByClerkID(ctx, auto.ClerkUserID)
 		if err != nil {
-			return Result{}, err
+			s.logWarn("reconcile creator lookup failed", "automation_id", auto.ID, "clerk_user_id", auto.ClerkUserID, "error", err)
+			errs = append(errs, fmt.Sprintf("creator lookup for %s: %v", auto.ID, err))
+			continue
 		}
 		if !ok || creator.AccessToken == "" {
 			continue
@@ -130,6 +149,7 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 		if auto.TargetType == "all_posts" {
 			media, err := s.Graph.GetUserMedia(ctx, MaxMediaPerAutomation, token)
 			if err != nil {
+				s.logWarn("reconcile media list failed", "automation_id", auto.ID, "error", err)
 				continue
 			}
 			mediaIDs = make([]string, 0, len(media))
@@ -143,19 +163,27 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 		}
 
 		wholeWord := auto.MatchMode == "" || auto.MatchMode == "whole_word"
+		newThisAuto := 0
+	mediaLoop:
 		for _, mediaID := range mediaIDs {
 			comments, err := s.Graph.GetRecentMediaComments(ctx, mediaID, sinceMS, token)
 			if err != nil {
+				s.logWarn("reconcile comments fetch failed", "automation_id", auto.ID, "media_id", mediaID, "error", err)
 				continue
 			}
 			for _, c := range comments {
+				if newThisAuto >= MaxNewPerSweep {
+					break mediaLoop
+				}
 				commenterID := c.From["id"]
 				if commenterID == auto.IgUserID {
 					continue
 				}
 				exists, err := s.Store.FindLog(ctx, auto.ID, c.ID)
 				if err != nil {
-					return Result{}, err
+					s.logWarn("reconcile find log failed", "automation_id", auto.ID, "comment_id", c.ID, "error", err)
+					errs = append(errs, fmt.Sprintf("find log for %s/%s: %v", auto.ID, c.ID, err))
+					continue
 				}
 				if exists {
 					continue
@@ -174,9 +202,12 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 				}
 				jobID, err := s.Store.CreateJob(ctx, "process_comment", payload, "")
 				if err != nil {
-					return Result{}, err
+					s.logWarn("reconcile create job failed", "automation_id", auto.ID, "comment_id", c.ID, "error", err)
+					errs = append(errs, fmt.Sprintf("create job for %s/%s: %v", auto.ID, c.ID, err))
+					continue
 				}
 				enqueued++
+				newThisAuto++
 				if jobID != "" {
 					jobIDs = append(jobIDs, jobID)
 				}
@@ -184,7 +215,7 @@ func (s *Service) ReconcileOnce(ctx context.Context) (Result, error) {
 		}
 	}
 
-	return Result{Enqueued: enqueued, JobIDs: jobIDs}, nil
+	return Result{Enqueued: enqueued, JobIDs: jobIDs, Errors: errs}, nil
 }
 
 const (
@@ -202,6 +233,7 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 	since := s.Now().UTC().Add(-time.Duration(PostbackLookbackHours) * time.Hour)
 	enqueued := 0
 	var jobIDs []string
+	var errs []string
 
 	autos, err := s.Store.ListAllActiveAutomations(ctx)
 	if err != nil {
@@ -222,7 +254,9 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 		if !ok {
 			creator, found, err := s.Store.GetCreatorByClerkID(ctx, auto.ClerkUserID)
 			if err != nil {
-				return Result{}, err
+				s.logWarn("postback reconcile creator lookup failed", "automation_id", auto.ID, "clerk_user_id", auto.ClerkUserID, "error", err)
+				errs = append(errs, fmt.Sprintf("creator lookup for %s: %v", auto.ID, err))
+				continue
 			}
 			if !found || creator.AccessToken == "" {
 				continue
@@ -236,6 +270,7 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 	for _, bucket := range byClerk {
 		conversations, err := s.Graph.ListConversations(ctx, MaxConversationsPerCreator, bucket.token)
 		if err != nil {
+			s.logWarn("postback reconcile list conversations failed", "error", err)
 			continue
 		}
 		for _, conv := range conversations {
@@ -244,6 +279,7 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 			}
 			messages, err := s.Graph.ListConversationMessages(ctx, conv.ID, MaxMessagesPerConversation, bucket.token)
 			if err != nil {
+				s.logWarn("postback reconcile list messages failed", "conversation_id", conv.ID, "error", err)
 				continue
 			}
 			for _, msg := range messages {
@@ -260,14 +296,18 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 					// Only users who actually received this automation's button DM.
 					hasButton, buttonAt, err := s.Store.FindButtonDMForUser(ctx, auto.ID, msg.FromID)
 					if err != nil {
-						return Result{}, err
+						s.logWarn("postback reconcile find button dm failed", "automation_id", auto.ID, "user_id", msg.FromID, "error", err)
+						errs = append(errs, fmt.Sprintf("find button dm for %s/%s: %v", auto.ID, msg.FromID, err))
+						continue
 					}
 					if !hasButton {
 						continue
 					}
 					action, logAt, found, err := s.Store.GetPostbackLog(ctx, auto.ID, msg.FromID)
 					if err != nil {
-						return Result{}, err
+						s.logWarn("postback reconcile get postback log failed", "automation_id", auto.ID, "user_id", msg.FromID, "error", err)
+						errs = append(errs, fmt.Sprintf("get postback log for %s/%s: %v", auto.ID, msg.FromID, err))
+						continue
 					}
 					// One reveal per opening-DM cycle: skip if we already revealed
 					// after (or without) this button_dm. A newer button_dm_sent
@@ -287,7 +327,9 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 					}
 					pending, err := s.Store.HasPendingSendReveal(ctx, auto.ID, msg.FromID)
 					if err != nil {
-						return Result{}, err
+						s.logWarn("postback reconcile has pending send reveal failed", "automation_id", auto.ID, "user_id", msg.FromID, "error", err)
+						errs = append(errs, fmt.Sprintf("has pending send reveal for %s/%s: %v", auto.ID, msg.FromID, err))
+						continue
 					}
 					if pending {
 						continue
@@ -300,7 +342,9 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 					}
 					jobID, err := s.Store.CreateJob(ctx, "send_reveal", payload, "")
 					if err != nil {
-						return Result{}, err
+						s.logWarn("postback reconcile create job failed", "automation_id", auto.ID, "user_id", msg.FromID, "error", err)
+						errs = append(errs, fmt.Sprintf("create job for %s/%s: %v", auto.ID, msg.FromID, err))
+						continue
 					}
 					enqueued++
 					if jobID != "" {
@@ -311,7 +355,7 @@ func (s *Service) ReconcilePostbacksOnce(ctx context.Context) (Result, error) {
 		}
 	}
 
-	return Result{Enqueued: enqueued, JobIDs: jobIDs}, nil
+	return Result{Enqueued: enqueued, JobIDs: jobIDs, Errors: errs}, nil
 }
 
 func buttonTextEqual(got, want string) bool {
@@ -321,6 +365,7 @@ func buttonTextEqual(got, want string) bool {
 // AttachNextReels appends newest media to next_reel automations.
 func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 	attached := 0
+	var errs []string
 	autos, err := s.Store.ListAllActiveAutomations(ctx)
 	if err != nil {
 		return 0, err
@@ -332,7 +377,9 @@ func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 		}
 		creator, ok, err := s.Store.GetCreatorByClerkID(ctx, auto.ClerkUserID)
 		if err != nil {
-			return 0, err
+			s.logWarn("attach next reels creator lookup failed", "automation_id", auto.ID, "error", err)
+			errs = append(errs, fmt.Sprintf("creator lookup for %s: %v", auto.ID, err))
+			continue
 		}
 		if !ok || creator.AccessToken == "" {
 			continue
@@ -356,9 +403,12 @@ func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 		}
 		bound = append(bound, newestID)
 		if err := s.Store.UpdateAutomation(ctx, auto.ID, map[string]any{"bound_media_ids": bound}); err != nil {
-			return attached, err
+			s.logWarn("attach next reels update failed", "automation_id", auto.ID, "error", err)
+			errs = append(errs, fmt.Sprintf("update automation %s: %v", auto.ID, err))
+			continue
 		}
 		attached++
 	}
+	_ = errs
 	return attached, nil
 }
