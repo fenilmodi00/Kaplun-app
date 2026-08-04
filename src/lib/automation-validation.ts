@@ -17,6 +17,7 @@ export interface AutomationDraft {
   revealMessage: string;
   publicReplyEnabled: boolean;
   publicReplyMessage: string;
+  publicReplyMessages: string[];
 }
 
 /**
@@ -42,7 +43,7 @@ export function validateAutomationDraft(draft: AutomationDraft): string[] {
     errors.push('Select at least one post');
   }
 
-  if (draft.publicReplyEnabled && !draft.publicReplyMessage.trim()) {
+  if (draft.publicReplyEnabled && !draft.publicReplyMessage.trim() && (!draft.publicReplyMessages || draft.publicReplyMessages.length === 0)) {
     errors.push('Public reply text is required when enabled');
   }
 

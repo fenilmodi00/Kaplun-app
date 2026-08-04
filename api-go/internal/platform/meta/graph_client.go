@@ -1,6 +1,10 @@
 package meta
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 type MetaAPIError struct {
 	Code      int
@@ -74,4 +78,23 @@ func WrapRequestError(err error) error {
 		return nil
 	}
 	return fmt.Errorf("meta request failed: %w", err)
+}
+
+// IsTemplateRejection reports whether err is a Meta API error indicating
+// a button template was rejected (e.g., messaging window closed).
+// Meta returns code 100/10 with messages containing "template" or "button"
+// when a button template DM cannot be delivered.
+func IsTemplateRejection(err error) bool {
+	if err == nil {
+		return false
+	}
+	var metaErr *MetaAPIError
+	if !errors.As(err, &metaErr) {
+		return false
+	}
+	if metaErr.Code != 100 && metaErr.Code != 10 {
+		return false
+	}
+	msg := strings.ToLower(metaErr.Message)
+	return strings.Contains(msg, "template") || strings.Contains(msg, "button")
 }

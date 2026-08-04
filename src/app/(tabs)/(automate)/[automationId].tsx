@@ -343,9 +343,21 @@ export default function AutomationDetail() {
                 <View style={styles.configRow}>
                   <Text style={styles.configLabel}>Public reply</Text>
                   <Text style={styles.configValue}>
-                    {automation.public_reply_enabled ? 'On' : 'Off'}
+                    {automation.public_reply_enabled
+                      ? `On${automation.public_reply_messages?.length ? ` (${automation.public_reply_messages.length + (automation.public_reply_message ? 1 : 0)} in pool)` : ''}`
+                      : 'Off'}
                   </Text>
                 </View>
+                {automation.public_reply_enabled && automation.public_reply_messages?.length > 0 && (
+                  <View style={styles.poolWrap}>
+                    {automation.public_reply_message && (
+                      <Text style={styles.poolItem} numberOfLines={1}>• {automation.public_reply_message}</Text>
+                    )}
+                    {automation.public_reply_messages.map((msg) => (
+                      <Text key={msg} style={styles.poolItem} numberOfLines={1}>• {msg}</Text>
+                    ))}
+                  </View>
+                )}
               </View>
 
               {logs.length > 0 ? (
@@ -561,6 +573,17 @@ const styles = StyleSheet.create({
   },
   capitalize: {
     textTransform: 'capitalize',
+  },
+  poolWrap: {
+    gap: 2,
+    paddingLeft: 4,
+  },
+  poolItem: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.muted,
+    includeFontPadding: false,
   },
   activityTitle: {
     marginTop: 4,

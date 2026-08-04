@@ -242,8 +242,18 @@ func TestNoKeywordMatchCreatesNoLogsAndSendsNothing(t *testing.T) {
 	if err != nil || result != "done" {
 		t.Fatalf("result=%s err=%v", result, err)
 	}
-	if len(store.logs) != 0 || len(graph.calls) != 0 {
-		t.Fatalf("expected no side effects, logs=%d calls=%d", len(store.logs), len(graph.calls))
+	if len(graph.calls) != 0 {
+		t.Fatalf("expected no graph calls, got %d", len(graph.calls))
+	}
+	if len(store.logs) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(store.logs))
+	}
+	var logEntry map[string]any
+	for _, l := range store.logs {
+		logEntry = l
+	}
+	if logEntry["action"] != "skipped_no_match" || logEntry["reason"] != "skipped_no_match" {
+		t.Fatalf("expected skipped_no_match log, got action=%v reason=%v", logEntry["action"], logEntry["reason"])
 	}
 }
 

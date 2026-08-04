@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"regexp"
 	"strings"
@@ -89,6 +90,20 @@ func Personalize(text, commenterName string) string {
 	return usernameTokenRE.ReplaceAllString(text, name)
 }
 
+// buildInlineLinkFallback builds a plain-text fallback message when a button
+// template DM is rejected. It personalizes {username}, replaces {link} with
+// the tracked URL, and appends the URL if no {link} token is present.
+func buildInlineLinkFallback(dmMessage, commenterName, trackedURL string) string {
+	msg := Personalize(dmMessage, commenterName)
+	linkToken := "{link}"
+	if strings.Contains(msg, linkToken) {
+		msg = strings.ReplaceAll(msg, linkToken, trackedURL)
+	} else if trackedURL != "" && !strings.Contains(msg, trackedURL) {
+		msg += "\n\n" + trackedURL
+	}
+	return msg
+}
+
 // ProcessCommentEvent processes one comment across all matching automations.
 // Returns "done" or "requeue". Meta API errors (other than token-expired /
 // rate-limit handled inline) are returned for job-level retry.
@@ -116,6 +131,9 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 
 			m := keywords.MatchKeywords(commentText, mapStringSlice(auto, "keywords"), wholeWord)
 			if !m.Matched {
+				if err := r.failLog(ctx, nil, auto, event, "skipped_no_match"); err != nil {
+					return "done", err
+				}
 				continue
 			}
 			matchedKeyword = m.MatchedKeyword
@@ -225,7 +243,13 @@ func (r *CommentRunner) sendAutomationMessages(
 
 	// STEP 7: public reply FIRST — MetaApiError never blocks the DM.
 	if mapBool(auto, "public_reply_enabled") {
-		if msg := mapString(auto, "public_reply_message"); msg != "" {
+		msg := ""
+		if msgs := mapStringSlice(auto, "public_reply_messages"); len(msgs) > 0 {
+			msg = msgs[rand.Intn(len(msgs))]
+		} else {
+			msg = mapString(auto, "public_reply_message")
+		}
+		if msg != "" {
 			if err := r.Graph.SendCommentReply(ctx, commentID, Personalize(msg, commenterName), token); err != nil {
 				if meta.IsMetaAPIError(err) {
 					if r.Log != nil {
@@ -244,13 +268,14 @@ func (r *CommentRunner) sendAutomationMessages(
 	dmText := mapString(auto, "dm_message")
 	revealText := mapString(auto, "reveal_message")
 
+	var trackedURL string
 	if mapBool(auto, "track_links") {
 		link, err := r.Store.GetTrackedLinkForAutomation(ctx, mapString(auto, "$id"))
 		if err != nil {
 			return err
 		}
 		if link != nil {
-			trackedURL := r.PublicBaseURL + "/r/" + mapString(link, "$id")
+			trackedURL = r.PublicBaseURL + "/r/" + mapString(link, "$id")
 			targetURL := mapString(link, "target_url")
 			dmText = tracking.RenderMessageWithTracking(dmText, commenterName, trackedURL, targetURL)
 			if revealText != "" {
@@ -269,6 +294,20 @@ func (r *CommentRunner) sendAutomationMessages(
 			"reveal:"+mapString(auto, "$id"),
 			token,
 		); err != nil {
+			if meta.IsTemplateRejection(err) {
+				commenterID := mapString(event, "commenter_id")
+				if commenterID == "" {
+					return err
+				}
+				fallbackMsg := buildInlineLinkFallback(dmText, commenterName, trackedURL)
+				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
+					return err
+				}
+				return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+					"action": "dm_sent",
+					"reason": nil,
+				})
+			}
 			return err
 		}
 		return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
@@ -486,7 +525,9 @@ func (r *CommentRunner) failJobUnexpected(ctx context.Context, jobID string, job
 
 func (r *CommentRunner) failLog(ctx context.Context, existing, auto, event map[string]any, reason string) error {
 	action := "failed"
-	if strings.HasPrefix(reason, "skipped") {
+	if reason == "skipped_no_match" || reason == "skipped_dedup" {
+		action = reason
+	} else if strings.HasPrefix(reason, "skipped") {
 		action = "skipped"
 	}
 	if existing != nil {

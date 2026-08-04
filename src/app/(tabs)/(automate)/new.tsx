@@ -309,6 +309,7 @@ export default function NewAutomationScreen() {
   const [revealMessage, setRevealMessage] = useState('');
   const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
   const [publicReplyMessage, setPublicReplyMessage] = useState('');
+  const [publicReplyMessages, setPublicReplyMessages] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isConnectingIg, setIsConnectingIg] = useState(false);
   const [savingPaused, setSavingPaused] = useState(false);
@@ -470,8 +471,9 @@ export default function NewAutomationScreen() {
       revealMessage,
       publicReplyEnabled,
       publicReplyMessage,
+      publicReplyMessages,
     }),
-    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage]
+    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages]
   );
 
   const validationErrors = useMemo(() => validateAutomationDraft(draft), [draft]);
@@ -494,7 +496,12 @@ export default function NewAutomationScreen() {
         : { button_text: null, reveal_message: null }),
       public_reply_enabled: publicReplyEnabled,
       ...(targetType === 'specific_posts' ? { media_ids: selectedMediaIds } : {}),
-      ...(publicReplyEnabled ? { public_reply_message: publicReplyMessage.trim() } : { public_reply_message: null }),
+      ...(publicReplyEnabled
+        ? {
+            public_reply_message: publicReplyMessage.trim() || null,
+            public_reply_messages: publicReplyMessages.filter((m) => m.trim()),
+          }
+        : { public_reply_message: null, public_reply_messages: [] }),
     };
 
     if (!goLive) setSavingPaused(true);
@@ -527,7 +534,7 @@ export default function NewAutomationScreen() {
   }, [
     isValid, creating, savingPaused, name, targetType, keywords, matchAnyWord, matchMode, dmMessage,
     openingDmMode, buttonText, revealMessage,
-    publicReplyEnabled, publicReplyMessage, selectedMediaIds,
+    publicReplyEnabled, publicReplyMessage, publicReplyMessages, selectedMediaIds,
     createAutomation, refreshAutomations, getToken, router,
   ]);
 
@@ -846,6 +853,25 @@ export default function NewAutomationScreen() {
                 multiline
                 accessibilityLabel="Public reply message"
               />
+              <Text style={styles.caption}>
+                Add more replies (one per line) — one will be randomly selected each time
+              </Text>
+              <TextInput
+                style={styles.inputMultiline}
+                placeholder="Thanks for commenting!&#10;Glad you liked it!&#10;Appreciate the support!"
+                placeholderTextColor={COLORS.mutedSoft}
+                value={publicReplyMessages.join('\n')}
+                onChangeText={(text) => setPublicReplyMessages(text.split('\n'))}
+                onFocus={(e) => handleInputFocus(e.currentTarget)}
+                onBlur={handleInputBlur}
+                multiline
+                accessibilityLabel="Additional public reply messages"
+              />
+              {publicReplyMessages.filter((m) => m.trim()).length > 0 && (
+                <Text style={styles.poolCount}>
+                  Pool: {publicReplyMessages.filter((m) => m.trim()).length + (publicReplyMessage.trim() ? 1 : 0)} messages
+                </Text>
+              )}
             </>
           )}
         </View>
@@ -1078,6 +1104,13 @@ const styles = StyleSheet.create({
   },
   charCounterError: {
     color: COLORS.error,
+  },
+  poolCount: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.lavender,
+    includeFontPadding: false,
   },
 
   /* ── Template chips ── */

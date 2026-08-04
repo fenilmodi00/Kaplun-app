@@ -31,6 +31,7 @@ export interface Automation {
   track_links: boolean;
   public_reply_enabled: boolean;
   public_reply_message: string | null;
+  public_reply_messages: string[];
   status: AutomationStatus;
   created_at: string;
   updated_at: string;
@@ -43,7 +44,7 @@ export interface AutomationLog {
   commenter_username: string | null;
   comment_text: string | null;
   matched_keyword: string | null;
-  action: 'pending' | 'dm_sent' | 'button_dm_sent' | 'reveal_sent' | 'reply_sent' | 'skipped' | 'failed';
+  action: 'pending' | 'dm_sent' | 'button_dm_sent' | 'reveal_sent' | 'reply_sent' | 'skipped' | 'skipped_dedup' | 'skipped_no_match' | 'failed';
   reason: string | null;
   created_at: string;
 }
@@ -61,6 +62,7 @@ export interface CreateAutomationInput {
   reveal_message?: string | null;
   public_reply_enabled: boolean;
   public_reply_message?: string | null;
+  public_reply_messages?: string[];
 }
 
 export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;

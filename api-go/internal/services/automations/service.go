@@ -114,9 +114,10 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 		ButtonText:         body.ButtonText,
 		RevealMessage:      body.RevealMessage,
 		TrackLinks:         body.TrackLinks,
-		PublicReplyEnabled: body.PublicReplyEnabled,
-		PublicReplyMessage: body.PublicReplyMessage,
-		Status:             "active",
+		PublicReplyEnabled:  body.PublicReplyEnabled,
+		PublicReplyMessage:  body.PublicReplyMessage,
+		PublicReplyMessages: body.PublicReplyMessages,
+		Status:              "active",
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
@@ -380,8 +381,10 @@ func validateCreate(body models.AutomationCreate) error {
 		}
 	}
 	if body.PublicReplyEnabled {
-		if body.PublicReplyMessage == nil || strings.TrimSpace(*body.PublicReplyMessage) == "" {
-			return &ValidationError{Message: "public_reply_message is required when public replies are enabled"}
+		hasSingle := body.PublicReplyMessage != nil && strings.TrimSpace(*body.PublicReplyMessage) != ""
+		hasPool := len(body.PublicReplyMessages) > 0
+		if !hasSingle && !hasPool {
+			return &ValidationError{Message: "public_reply_message or public_reply_messages is required when public replies are enabled"}
 		}
 	}
 	return nil
@@ -444,6 +447,9 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 	}
 	if body.PublicReplyMessage != nil {
 		data["public_reply_message"] = *body.PublicReplyMessage
+	}
+	if body.PublicReplyMessages != nil {
+		data["public_reply_messages"] = body.PublicReplyMessages
 	}
 	if body.TrackLinks != nil {
 		data["track_links"] = *body.TrackLinks

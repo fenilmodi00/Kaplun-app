@@ -1,5 +1,18 @@
 package models
 
+// AutomationLog action constants.
+const (
+	ActionPending        = "pending"
+	ActionDMSent         = "dm_sent"
+	ActionButtonDMSent   = "button_dm_sent"
+	ActionRevealSent     = "reveal_sent"
+	ActionReplySent      = "reply_sent"
+	ActionSkipped        = "skipped"
+	ActionSkippedDedup   = "skipped_dedup"
+	ActionSkippedNoMatch = "skipped_no_match"
+	ActionFailed         = "failed"
+)
+
 // Automation matches Expo Automation / FastAPI automation row shape.
 type Automation struct {
 	ID                 string   `json:"$id"`
@@ -17,9 +30,10 @@ type Automation struct {
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
 	TrackLinks         bool     `json:"track_links"`
-	PublicReplyEnabled bool     `json:"public_reply_enabled"`
-	PublicReplyMessage *string  `json:"public_reply_message"`
-	Status             string   `json:"status"`
+	PublicReplyEnabled  bool     `json:"public_reply_enabled"`
+	PublicReplyMessage  *string  `json:"public_reply_message"`
+	PublicReplyMessages []string `json:"public_reply_messages"`
+	Status              string   `json:"status"`
 	CreatedAt          string   `json:"created_at"`
 	UpdatedAt          string   `json:"updated_at"`
 }
@@ -50,9 +64,10 @@ type AutomationCreate struct {
 	OpeningDMMode      string   `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled bool     `json:"public_reply_enabled"`
-	PublicReplyMessage *string  `json:"public_reply_message"`
-	TrackLinks         bool     `json:"track_links"`
+	PublicReplyEnabled  bool     `json:"public_reply_enabled"`
+	PublicReplyMessage  *string  `json:"public_reply_message"`
+	PublicReplyMessages []string `json:"public_reply_messages"`
+	TrackLinks          bool     `json:"track_links"`
 }
 
 // AutomationPatch is the PATCH /automations/:id body.
@@ -65,9 +80,10 @@ type AutomationPatch struct {
 	OpeningDMMode      *string  `json:"opening_dm_mode"`
 	ButtonText         *string  `json:"button_text"`
 	RevealMessage      *string  `json:"reveal_message"`
-	PublicReplyEnabled *bool    `json:"public_reply_enabled"`
-	PublicReplyMessage *string  `json:"public_reply_message"`
-	TrackLinks         *bool    `json:"track_links"`
+	PublicReplyEnabled  *bool    `json:"public_reply_enabled"`
+	PublicReplyMessage  *string  `json:"public_reply_message"`
+	PublicReplyMessages []string `json:"public_reply_messages"`
+	TrackLinks          *bool    `json:"track_links"`
 	Status             *string  `json:"status"`
 	TargetType         *string  `json:"target_type"`
 	MediaIDs           []string `json:"media_ids"`
