@@ -10,7 +10,7 @@ import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimatio
 import { AnimatedView } from '@/tw/animated';
 import { ensureAppwriteSession } from '@/lib/auth-bridge';
 import { useBridge } from '@/lib/bridge-context';
-import { fetchProfile, disconnectInstagram, type InstagramProfileResponse } from '@/lib/instagram';
+import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
@@ -45,17 +45,7 @@ function profileFromCreator(creator: Creator): InstagramProfileResponse {
 }
 
 function hasUsableToken(creator: Creator | null): boolean {
-  if (!creator || !creator.access_token) return false;
-  const ENCRYPTED_TOKEN_PREFIX = 'enc1:';
-  return !creator.access_token.startsWith(ENCRYPTED_TOKEN_PREFIX);
-}
-
-async function clearInstagramTokenSilently(): Promise<void> {
-  try {
-    await disconnectInstagram();
-  } catch {
-    /* no-op */
-  }
+  return !!creator?.access_token;
 }
 
 function getInitials(name: string): string {
@@ -386,14 +376,10 @@ export default function HomeScreen() {
         }
         try {
           // Prefer Appwrite TablesDB as source of truth. Only call Graph when we
-          // already have a usable plaintext token — otherwise fetchProfile throws
+          // already have a usable token — otherwise fetchProfile throws
           // session_expired and the catch below used to wipe the row.
           const creator = await getCreatorByClerkId(clerkUserId);
-          if (creator?.access_token?.startsWith('enc1:')) {
-            // Legacy encrypted tokens cannot be used by the direct Graph client.
-            await clearInstagramTokenSilently();
-            if (!cancelled) setProfile(null);
-          } else if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
+          if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
             if (!cancelled) setProfile(profileFromCreator(creator));
           } else if (hasUsableToken(creator)) {
             const p = await fetchProfile();

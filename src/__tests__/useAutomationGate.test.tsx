@@ -63,7 +63,7 @@ describe('useAutomationGate', () => {
     });
   });
 
-  it('returns connected: false for legacy enc1: tokens', async () => {
+  it('treats legacy enc1: tokens as usable now that the prefix gate is removed', async () => {
     mockGetCreatorByClerkId.mockResolvedValue({
       $id: 'creator-1',
       access_token: 'enc1:cipher',
@@ -75,7 +75,7 @@ describe('useAutomationGate', () => {
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
-      expect(result.current.connected).toBe(false);
+      expect(result.current.connected).toBe(true);
     });
   });
 

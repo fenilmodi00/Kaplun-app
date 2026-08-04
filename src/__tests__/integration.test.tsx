@@ -3,6 +3,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import Home from '@/app/(tabs)/(home)/index';
 import { fetchMedia, fetchInsights, disconnectInstagram, fetchProfile } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
+import { getCreatorByClerkId } from '@/lib/repository';
+
+const mockGetCreator = getCreatorByClerkId as jest.Mock;
+
+// Matches the connect gate: a creators row is "connected" only with an
+// onboarded username and a stored token.
+const connectedCreator = {
+  $id: 'creator-1',
+  clerk_user_id: 'test-user-id',
+  ig_user_id: '1',
+  username: 'testuser',
+  access_token: 'plain-token',
+  is_onboarded: true,
+};
 
 const mockFetchMedia = fetchMedia as jest.Mock;
 const mockFetchInsights = fetchInsights as jest.Mock;
@@ -121,13 +135,17 @@ describe('Integration Tests', () => {
 
   describe('Home Screen', () => {
     it('renders connected state with username', async () => {
+      mockGetCreator.mockResolvedValueOnce(connectedCreator);
       await render(<Home />);
 
-      expect(screen.getByText('@testuser')).toBeTruthy();
-      expect(screen.getByText('Connected')).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByText('@testuser')).toBeTruthy();
+        expect(screen.getByText('Connected')).toBeTruthy();
+      });
     });
 
     it('shows connected chip after successful login', async () => {
+      mockGetCreator.mockResolvedValueOnce(connectedCreator);
       await render(<Home />);
 
       await waitFor(() => {

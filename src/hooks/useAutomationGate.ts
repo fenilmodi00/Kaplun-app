@@ -8,11 +8,8 @@ import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
 
-const ENCRYPTED_TOKEN_PREFIX = 'enc1:';
-
 function hasUsableInstagramToken(token: string | null | undefined): boolean {
-  if (!token) return false;
-  return !token.startsWith(ENCRYPTED_TOKEN_PREFIX);
+  return !!token;
 }
 
 /** Gate: automations need an OAuth-connected IG professional account
@@ -53,9 +50,8 @@ export function useAutomationGate() {
 
     const creator = await getCreatorByClerkId(user.id);
     const tokenLen = creator?.access_token?.length ?? 0;
-    const encrypted = !!creator?.access_token?.startsWith(ENCRYPTED_TOKEN_PREFIX);
     addLog(
-      `automation-gate: post-oauth creator username=${creator?.username ?? '(none)'} token_len=${tokenLen} encrypted=${encrypted} onboarded=${creator?.is_onboarded ?? false}`
+      `automation-gate: post-oauth creator username=${creator?.username ?? '(none)'} token_len=${tokenLen} onboarded=${creator?.is_onboarded ?? false}`
     );
     if (!hasUsableInstagramToken(creator?.access_token)) {
       throw new Error(
