@@ -17,9 +17,9 @@ go test ./internal/services/automations  # one package
 - `cmd/server/main.go` + `adapters.go` — entry: `loadDotEnv()` → `config.Load()` → `buildDependencies()` → `router.New()` → listen immediately, tunnels in background; adapters wire concrete services to handler/worker interface ports
 - `internal/router` — Gin engine, route registration
 - `internal/middleware` — RequestID, Recovery, CORS, Clerk auth, `X-Cron-Secret`
-- `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth, tracked_links)
-- `internal/services` — business logic (bridge, automations, oauth, reconcile, trackedlinks, templates, keywords, ratelimit, tracking)
-- `internal/store` — Appwrite persistence (automations, jobs, logs, links, clicks, reconcile)
+- `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth)
+- `internal/services` — business logic (bridge, automations, oauth, reconcile, templates, keywords, ratelimit)
+- `internal/store` — Appwrite persistence (automations, jobs, logs, reconcile)
 - `internal/platform` — external clients: `appwrite`, `clerk` (JWT verify), `meta` (Graph API + webhook HMAC), `crypto` (token encryption), `cloudflare`/`ngrok` (tunnels)
 - `internal/worker` — job pool, sweeper, comment_runner (process_comment / send_reveal jobs)
 - `internal/models` — request/response types; `ErrorResponse{error, message}` is the standard error shape
@@ -29,7 +29,7 @@ go test ./internal/services/automations  # one package
 - **Nil-dependency route skipping** — `router.Dependencies` fields are optional; nil means the route group is not registered, so `/health` still answers when secrets are missing. Keep this pattern when adding routes.
 - **Env loading** — `main.go` loads `api-go/.env` via godotenv before `config.Load()`; process env vars override `.env`.
 - **Cloudflare quick tunnel on by default** — logs the public URL + OAuth/webhook paths a few seconds after listen. Quick tunnels get a NEW `*.trycloudflare.com` host each restart: update Meta redirect URIs, `REDIRECT_URI`, and the app's `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`. Disable with `CLOUDFLARE_TUNNEL_ENABLED=false`. Needs `cloudflared` on PATH (or `tools/cloudflared.exe`).
-- **Auth modes** — Clerk Bearer (app calls), `X-Cron-Secret` (`/cron/*`), Meta HMAC `x-hub-signature-256` (`POST /webhooks/instagram`), none (`/health`, `/r/:slug`, `/instagram/callback`, `GET /webhooks/instagram`).
+- **Auth modes** — Clerk Bearer (app calls), `X-Cron-Secret` (`/cron/*`), Meta HMAC `x-hub-signature-256` (`POST /webhooks/instagram`), none (`/health`, `/instagram/callback`, `GET /webhooks/instagram`).
 - **Contract preservation** — ownership mismatches return `404` (not 403); expired sessions return `401 {"error":"session_expired"}`; automation list/detail responses are wrapped (`{"automation":{...}}`), stats are bare objects; valid webhooks always return `200 {"status":"ok"}` even when processing fails.
 - **Instagram auth** — The app uses the official Meta Graph API for all Instagram operations. Instagram OAuth (`GET /instagram/callback`) exchanges codes for long-lived tokens via `services/oauth`. The old instagrapi-based `POST /login`, `GET /profile|/media|/insights`, and `POST /disconnect` endpoints have been removed.
 - **Logging** — `log/slog` JSON to stdout; pass `*slog.Logger` down, don't use `log.Println`.

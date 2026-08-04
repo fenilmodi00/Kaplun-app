@@ -38,7 +38,6 @@ go test ./...
 | `POST /auth/appwrite-session` | Clerk Bearer |
 | *(removed — instagrapi proxy endpoints deleted)* | |
 | `/automations/*` | Clerk Bearer (templates unauthenticated) |
-| `GET /r/:slug` | none |
 | `GET\|POST /webhooks/instagram` | Meta verify / HMAC |
 | `/cron/*` | `X-Cron-Secret` |
 | `GET /instagram/callback` | none (OAuth redirect) |

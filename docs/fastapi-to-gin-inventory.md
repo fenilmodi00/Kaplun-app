@@ -81,15 +81,15 @@ match the existing mobile and backend contracts intentionally.
 | `/automations/{automation_id}` | PATCH | Clerk Bearer | partial automation patch | `200 {"automation":{...}}` | `404 {"error":"not_found","message":"Automation not found"}` and validation errors | updates automation |
 | `/automations/{automation_id}` | DELETE | Clerk Bearer | path param | `204` no body | `404 {"error":"not_found","message":"Automation not found"}` | deletes automation |
 | `/automations/{automation_id}/logs` | GET | Clerk Bearer | path param | `200 {"logs":[...]}` | `404 {"error":"not_found","message":"Automation not found"}` | ownership check |
-| `/automations/{automation_id}/stats` | GET | Clerk Bearer | path param | `200 {"sent","skipped","failed","clicks","ctr","top_keywords","daily"}` | `404 {"error":"not_found","message":"Automation not found"}` | aggregates logs and clicks |
+| `/automations/{automation_id}/stats` | GET | Clerk Bearer | path param | `200 {"sent","skipped","failed"}` | `404 {"error":"not_found","message":"Automation not found"}` | aggregates logs |
 | `/cron/refresh-tokens` | POST | `X-Cron-Secret` | none | `200 {"refreshed":n,"failed":n}` | `401` empty body | refreshes expiring Instagram tokens |
 | `/cron/reconcile` | POST | `X-Cron-Secret` | none | `200` reconcile payload plus `attached` | `401` empty body | polls for unmatched comments and attaches next reels |
-| `/cron/retain-logs` | POST | `X-Cron-Secret` | none | `200 {"deleted_logs":n,"deleted_webhook_events":n}` | `401` empty body | deletes old automation logs and webhook events |
-| `/cron/health` | GET | `X-Cron-Secret` | none | `200 {"pending","processing","failed","done","last_webhook_event_at"}` | `401` empty body | none |
+| `/cron/retain-logs` | POST | `X-Cron-Secret` | none | `200 {"deleted_logs":n}` | `401` empty body | deletes old automation logs |
+| `/cron/health` | GET | `X-Cron-Secret` | none | `200 {"pending","processing","failed","done"}` | `401` empty body | none |
 | `/instagram/callback` | GET | none | query `code`, `state`, error params | `200` HTML success/error page with app redirect | HTML error page, OAuth/network failures | exchanges tokens, fetches profile, stores creator data, attempts webhook subscription |
 | `/webhooks/instagram` | GET | none | query `hub.mode`, `hub.verify_token`, `hub.challenge` | plain-text challenge body | `403` empty body | none |
-| `/webhooks/instagram` | POST | HMAC signature | raw JSON body | `200 {"status":"ok"}` after valid signature | `401` empty body on bad signature | records raw payload, parses comment/postback events, creates jobs, enqueues worker tasks |
-| `/r/{slug}` | GET | none | path param | `302` redirect to target URL | `404 {"error":"not_found","message":"Tracked link not found"}` | records click before redirect |
+| `/webhooks/instagram` | POST | HMAC signature | raw JSON body | `200 {"status":"ok"}` after valid signature | `401` empty body on bad signature | parses comment/postback events, creates jobs, enqueues worker tasks |
+| ~~`/r/{slug}`~~ | — | — | — | — | — | removed — link tracking dropped (never enabled by the app) |
 
 ## Automation Contract Details
 
