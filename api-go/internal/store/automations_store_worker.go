@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -188,20 +190,24 @@ func (s *AutomationsStore) GetJob(ctx context.Context, jobID string) (map[string
 	return row, nil
 }
 
-func (s *AutomationsStore) CountRecentDMActions(igUserID, since string) int {
-	result, err := s.client.ListRows(context.Background(), s.tables.Logs, []string{
+func (s *AutomationsStore) CountRecentDMActions(ctx context.Context, igUserID, since string) (int, error) {
+	result, err := s.client.ListRows(ctx, s.tables.Logs, []string{
 		appwrite.QueryEqual("ig_user_id", igUserID),
 		appwrite.QueryGreaterThan("created_at", since),
 		appwrite.QueryEqual("action", "pending", "dm_sent", "button_dm_sent"),
 		appwrite.QueryLimit(1),
 	})
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return result.Total
+	return result.Total, nil
 }
 
-func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
+// CreateJob persists a durable job. When dedupKey is non-empty the row ID is
+// deterministic — "j" + first 31 hex chars of sha256(jobType + "|" + dedupKey) —
+// so a redelivered webhook collides on the primary key; the Appwrite 409 then
+// means the job already exists and is treated as success, returning that ID.
+func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt, dedupKey string) (string, error) {
 	now := s.now().Format(time.RFC3339Nano)
 	if runAt == "" {
 		runAt = now
@@ -210,7 +216,12 @@ func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payloa
 	if err != nil {
 		return "", err
 	}
-	row, err := s.client.CreateRow(ctx, s.tables.Jobs, appwrite.UniqueID, map[string]any{
+	rowID := appwrite.UniqueID
+	if dedupKey != "" {
+		sum := sha256.Sum256([]byte(jobType + "|" + dedupKey))
+		rowID = "j" + hex.EncodeToString(sum[:])[:31]
+	}
+	row, err := s.client.CreateRow(ctx, s.tables.Jobs, rowID, map[string]any{
 		"type":       jobType,
 		"payload":    string(encoded),
 		"status":     "pending",
@@ -220,6 +231,11 @@ func (s *AutomationsStore) CreateJob(ctx context.Context, jobType string, payloa
 		"updated_at": now,
 	}, nil)
 	if err != nil {
+		if dedupKey != "" {
+			if apiErr, ok := err.(*appwrite.APIError); ok && apiErr.Status == http.StatusConflict {
+				return rowID, nil
+			}
+		}
 		return "", err
 	}
 	id, _ := row["$id"].(string)
@@ -289,9 +305,9 @@ func (s *AutomationsStore) ListCreatorsWithTokenExpiringBefore(ctx context.Conte
 	return out, nil
 }
 
-func (s *AutomationsStore) UpdateCreatorToken(ctx context.Context, creatorID, encryptedToken, expiresAtISO string) error {
+func (s *AutomationsStore) UpdateCreatorToken(ctx context.Context, creatorID, token, expiresAtISO string) error {
 	_, err := s.client.UpdateRow(ctx, s.tables.Creators, creatorID, map[string]any{
-		"access_token":     encryptedToken,
+		"access_token":     token,
 		"token_expires_at": expiresAtISO,
 	}, nil)
 	return err
@@ -332,24 +348,19 @@ func (s *AutomationsStore) deleteOlderThan(ctx context.Context, tableID, field, 
 	return totalDeleted, nil
 }
 
+// CountJobsByStatus reads per-status totals via LIMIT 1 count queries instead
+// of paging the whole jobs table in-process.
 func (s *AutomationsStore) CountJobsByStatus(ctx context.Context) (map[string]int, error) {
-	counts := map[string]int{
-		"pending":    0,
-		"processing": 0,
-		"failed":     0,
-		"done":       0,
-	}
-	result, err := s.client.ListRows(ctx, s.tables.Jobs, []string{
-		appwrite.QueryLimit(10000),
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range result.Rows {
-		status := stringField(row, "status")
-		if _, ok := counts[status]; ok {
-			counts[status]++
+	counts := map[string]int{}
+	for _, status := range []string{"pending", "processing", "failed", "done"} {
+		result, err := s.client.ListRows(ctx, s.tables.Jobs, []string{
+			appwrite.QueryEqual("status", status),
+			appwrite.QueryLimit(1),
+		})
+		if err != nil {
+			return nil, err
 		}
+		counts[status] = result.Total
 	}
 	return counts, nil
 }

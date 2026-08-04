@@ -117,7 +117,7 @@ func (r ReconcileStore) HasPendingSendReveal(ctx context.Context, automationID, 
 }
 
 func (r ReconcileStore) CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt string) (string, error) {
-	return r.store.CreateJob(ctx, jobType, payload, runAt)
+	return r.store.CreateJob(ctx, jobType, payload, runAt, "")
 }
 
 func (r ReconcileStore) UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error {
