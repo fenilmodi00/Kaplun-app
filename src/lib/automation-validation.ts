@@ -24,6 +24,7 @@ export interface AutomationDraft {
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes: number;
+  dmTriggerEnabled: boolean;
 }
 
 /**

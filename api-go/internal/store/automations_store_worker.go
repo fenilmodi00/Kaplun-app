@@ -56,6 +56,18 @@ func (s *AutomationsStore) FindLog(ctx context.Context, automationID, commentID 
 	return result.Rows[0], nil
 }
 
+func (s *AutomationsStore) FindLogByCommentID(ctx context.Context, commentID string) ([]map[string]any, error) {
+	result, err := s.client.ListRows(ctx, s.tables.Logs, []string{
+		appwrite.QueryEqual("comment_id", commentID),
+		appwrite.QueryEqual("action", "dm_sent", "button_dm_sent", "reveal_sent"),
+		appwrite.QueryLimit(10),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Rows, nil
+}
+
 func (s *AutomationsStore) CreateLog(ctx context.Context, data map[string]any) (map[string]any, error) {
 	row, err := s.client.CreateRow(ctx, s.tables.Logs, appwrite.UniqueID, data, nil)
 	if err != nil {

@@ -17,8 +17,8 @@ go test ./internal/services/automations  # one package
 - `cmd/server/main.go` + `adapters.go` — entry: `loadDotEnv()` → `config.Load()` → `buildDependencies()` → `router.New()` → listen immediately, tunnels in background; adapters wire concrete services to handler/worker interface ports
 - `internal/router` — Gin engine, route registration
 - `internal/middleware` — RequestID, Recovery, CORS, Clerk auth, `X-Cron-Secret`
-- `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth, instagram_auth, instagram_proxy, tracked_links)
-- `internal/services` — business logic (bridge, session, automations, oauth, reconcile, trackedlinks, templates, keywords, ratelimit, tracking)
+- `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth, tracked_links)
+- `internal/services` — business logic (bridge, automations, oauth, reconcile, trackedlinks, templates, keywords, ratelimit, tracking)
 - `internal/store` — Appwrite persistence (automations, jobs, logs, links, clicks, reconcile)
 - `internal/platform` — external clients: `appwrite`, `clerk` (JWT verify), `meta` (Graph API + webhook HMAC), `crypto` (token encryption), `cloudflare`/`ngrok` (tunnels)
 - `internal/worker` — job pool, sweeper, comment_runner (process_comment / send_reveal jobs)
@@ -31,7 +31,7 @@ go test ./internal/services/automations  # one package
 - **Cloudflare quick tunnel on by default** — logs the public URL + OAuth/webhook paths a few seconds after listen. Quick tunnels get a NEW `*.trycloudflare.com` host each restart: update Meta redirect URIs, `REDIRECT_URI`, and the app's `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`. Disable with `CLOUDFLARE_TUNNEL_ENABLED=false`. Needs `cloudflared` on PATH (or `tools/cloudflared.exe`).
 - **Auth modes** — Clerk Bearer (app calls), `X-Cron-Secret` (`/cron/*`), Meta HMAC `x-hub-signature-256` (`POST /webhooks/instagram`), none (`/health`, `/r/:slug`, `/instagram/callback`, `GET /webhooks/instagram`).
 - **Contract preservation** — ownership mismatches return `404` (not 403); expired sessions return `401 {"error":"session_expired"}`; automation list/detail responses are wrapped (`{"automation":{...}}`), stats are bare objects; valid webhooks always return `200 {"status":"ok"}` even when processing fails.
-- **Instagram login** — `POST /login` uses `github.com/felipeinf/instago` (Go instagrapi equivalent) via `services/session` (LRU + persistence). This is server-side only; the app-side "no instagrapi" rule still stands.
+- **Instagram auth** — The app uses the official Meta Graph API for all Instagram operations. Instagram OAuth (`GET /instagram/callback`) exchanges codes for long-lived tokens via `services/oauth`. The old instagrapi-based `POST /login`, `GET /profile|/media|/insights`, and `POST /disconnect` endpoints have been removed.
 - **Logging** — `log/slog` JSON to stdout; pass `*slog.Logger` down, don't use `log.Println`.
 
 ## TESTS

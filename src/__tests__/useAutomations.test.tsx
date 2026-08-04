@@ -49,6 +49,7 @@ const mockAutomation: Automation = {
   follow_up_enabled: false,
   follow_up_message: null,
   follow_up_delay_minutes: null,
+  dm_trigger_enabled: false,
   status: 'active',
   created_at: '2026-07-29T00:00:00Z',
   updated_at: '2026-07-29T00:00:00Z',

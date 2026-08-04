@@ -396,6 +396,12 @@ export default function AutomationDetail() {
                     </Text>
                   </View>
                 )}
+                <View style={styles.configRow}>
+                  <Text style={styles.configLabel}>DM trigger</Text>
+                  <Text style={styles.configValue}>
+                    {automation.dm_trigger_enabled ? 'On' : 'Off'}
+                  </Text>
+                </View>
               </View>
 
               {logs.length > 0 ? (

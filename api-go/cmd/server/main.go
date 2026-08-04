@@ -29,7 +29,6 @@ import (
 	"kaplun/api-go/internal/services/bridge"
 	"kaplun/api-go/internal/services/oauth"
 	"kaplun/api-go/internal/services/reconcile"
-	"kaplun/api-go/internal/services/session"
 	"kaplun/api-go/internal/services/trackedlinks"
 	"kaplun/api-go/internal/store"
 	"kaplun/api-go/internal/worker"
@@ -382,24 +381,6 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		}
 	} else {
 		logger.Warn("instagram oauth disabled: set INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, REDIRECT_URI")
-	}
-
-	if awClient != nil && deps.ClerkAuth != nil {
-		sessionSvc := session.NewService(session.Options{
-			Store:  awClient,
-			Logger: logger,
-		})
-		cleanups = append(cleanups, func() {
-			n := sessionSvc.LogoutAll()
-			logger.Info("instagram sessions logged out", "count", n)
-		})
-		deps.InstagramAuth = handlers.NewInstagramAuthHandler(sessionSvc, awClient, logger)
-		deps.InstagramProxy = handlers.NewInstagramProxyHandler(sessionSvc, awClient, logger)
-		logger.Info("route enabled", "path", "POST /login, GET /profile|/media|/insights, POST /disconnect")
-	} else if awClient != nil {
-		logger.Warn("instagram login/proxy skipped: clerk auth required")
-	} else {
-		logger.Warn("instagram login/proxy skipped: appwrite required")
 	}
 
 	return deps, cleanup

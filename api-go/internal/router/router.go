@@ -23,10 +23,8 @@ type Dependencies struct {
 	TrackedLinks   *handlers.TrackedLinksHandler
 	Webhooks       *handlers.WebhooksHandler
 	Cron           *handlers.CronHandler
-	InstagramOAuth *handlers.InstagramOAuthHandler
-	InstagramAuth  *handlers.InstagramAuthHandler
-	InstagramProxy *handlers.InstagramProxyHandler
-}
+		InstagramOAuth *handlers.InstagramOAuthHandler
+	}
 
 // New builds the Gin engine with shared middleware and optional route groups.
 func New(cfg config.Config, deps Dependencies) *gin.Engine {
@@ -75,15 +73,5 @@ func registerRoutes(engine *gin.Engine, deps Dependencies) {
 		engine.GET("/instagram/callback", deps.InstagramOAuth.Callback)
 	}
 
-	if deps.InstagramAuth != nil && deps.ClerkAuth != nil {
-		engine.POST("/login", deps.ClerkAuth, deps.InstagramAuth.Login)
-	}
 
-	if deps.InstagramProxy != nil && deps.ClerkAuth != nil {
-		authed := engine.Group("", deps.ClerkAuth)
-		authed.GET("/profile", deps.InstagramProxy.Profile)
-		authed.GET("/media", deps.InstagramProxy.Media)
-		authed.GET("/insights", deps.InstagramProxy.Insights)
-		authed.POST("/disconnect", deps.InstagramProxy.Disconnect)
-	}
 }

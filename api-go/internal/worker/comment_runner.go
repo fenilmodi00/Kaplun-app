@@ -32,6 +32,7 @@ var usernameTokenRE = regexp.MustCompile(`(?i)\{username\}`)
 type CommentStore interface {
 	ListActiveForIG(ctx context.Context, igUserID string) ([]map[string]any, error)
 	FindLog(ctx context.Context, automationID, commentID string) (map[string]any, error)
+	FindLogByCommentID(ctx context.Context, commentID string) ([]map[string]any, error)
 	CreateLog(ctx context.Context, data map[string]any) (map[string]any, error)
 	UpdateLog(ctx context.Context, logID string, data map[string]any) error
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
@@ -265,6 +266,30 @@ func (r *CommentRunner) sendAutomationMessages(
 					return err
 				}
 			}
+		}
+	}
+
+	// Cross-campaign dedup: Meta allows exactly one private reply per comment.
+	// If another campaign already sent a DM for this comment, skip the DM leg
+	// but keep the public reply (which is per-campaign and not subject to the limit).
+	autoID := mapString(auto, "$id")
+	existingLogs, err := r.Store.FindLogByCommentID(ctx, commentID)
+	if err != nil {
+		return err
+	}
+	for _, other := range existingLogs {
+		if mapString(other, "automation_id") != autoID {
+			if r.Log != nil {
+				r.Log.InfoContext(ctx, "cross-campaign dedup",
+					"comment_id", commentID,
+					"automation_id", autoID,
+					"other_automation_id", mapString(other, "automation_id"),
+				)
+			}
+			return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+				"action": "skipped_dedup",
+				"reason": "another campaign already sent a DM for this comment",
+			})
 		}
 	}
 
@@ -621,6 +646,139 @@ func (r *CommentRunner) scheduleFollowUp(ctx context.Context, auto map[string]an
 	}
 }
 
+// RunProcessMessage executes a process_message job payload.
+// It matches the DM text against active automations with dmTriggerEnabled,
+// and sends the reveal directly via sendRevealMessage.
+func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[string]any) error {
+	if r.Store == nil || r.Graph == nil {
+		return fmt.Errorf("comment runner not configured")
+	}
+
+	igID := mapString(payload, "instagram_account_id")
+	messageID := mapString(payload, "message_id")
+	messageText := mapString(payload, "message_text")
+	senderID := mapString(payload, "sender_id")
+
+	if igID == "" || messageID == "" || senderID == "" {
+		return fmt.Errorf("process_message job missing required fields")
+	}
+
+	allActive, err := r.Store.ListActiveForIG(ctx, igID)
+	if err != nil {
+		return err
+	}
+
+	for _, auto := range allActive {
+		// Only process automations with DM trigger enabled.
+		if !mapBool(auto, "dm_trigger_enabled") {
+			continue
+		}
+
+		matchedKeyword := ""
+		if !mapBool(auto, "match_any_word") {
+			mode := mapString(auto, "match_mode")
+			wholeWord := mode == "" || mode == "whole_word"
+
+			m := keywords.MatchKeywords(messageText, mapStringSlice(auto, "keywords"), wholeWord)
+			if !m.Matched {
+				if err := r.failLog(ctx, nil, auto, payload, "skipped_no_match"); err != nil {
+					return err
+				}
+				continue
+			}
+			matchedKeyword = m.MatchedKeyword
+		}
+
+		// Dedup by message ID.
+		commentID := "dm:" + messageID
+		existing, err := r.Store.FindLog(ctx, mapString(auto, "$id"), commentID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			action := mapString(existing, "action")
+			if action == "dm_sent" || action == "reveal_sent" || action == "skipped" {
+				continue
+			}
+		}
+
+		creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
+		if err != nil {
+			return err
+		}
+		if creator == nil || mapString(creator, "access_token") == "" {
+			if err := r.failLog(ctx, existing, auto, payload, "no_access_token"); err != nil {
+				return err
+			}
+			continue
+		}
+
+		token, derr := r.decryptToken(mapString(creator, "access_token"))
+		if derr != nil {
+			if err := r.failLog(ctx, existing, auto, payload, "token_decrypt_failed"); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Create a log entry for the DM match.
+		logRow := existing
+		if logRow == nil {
+			textTrim := messageText
+			if len(textTrim) > 1000 {
+				textTrim = textTrim[:1000]
+			}
+			created, cerr := r.Store.CreateLog(ctx, map[string]any{
+				"automation_id":      mapString(auto, "$id"),
+				"clerk_user_id":      mapString(auto, "clerk_user_id"),
+				"ig_user_id":         igID,
+				"media_id":           "",
+				"comment_id":         commentID,
+				"commenter_username": nil,
+				"comment_text":       textTrim,
+				"matched_keyword":    nilIfEmpty(matchedKeyword),
+				"action":             "pending",
+				"created_at":         r.nowISO(),
+			})
+			if cerr != nil {
+				if IsDuplicateKey(cerr) {
+					continue
+				}
+				return cerr
+			}
+			logRow = created
+		}
+
+		// Send the reveal directly via sendRevealMessage.
+		// The DM path skips the opening DM entirely and delivers the reveal.
+		if err := r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token); err != nil {
+			if meta.IsTokenExpired(err) {
+				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
+					"status":     "error",
+					"updated_at": r.nowISO(),
+				})
+				_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+					"action": "failed",
+					"reason": "token_expired",
+				})
+				continue
+			}
+			if meta.IsGraphRateLimit(err) {
+				return err
+			}
+			return err
+		}
+
+		// Update log to dm_sent after successful reveal.
+		_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+			"action": "dm_sent",
+			"reason": nil,
+		})
+	}
+
+	return nil
+}
+
 // RunFollowUp executes a send_followup job payload.
 func (r *CommentRunner) RunFollowUp(ctx context.Context, payload map[string]any) error {
 	if r.Store == nil || r.Graph == nil {
@@ -733,6 +891,19 @@ func (r *CommentRunner) RunJob(ctx context.Context, jobID string) error {
 
 	if mapString(job, "type") == JobTypeSendReveal {
 		if err := r.RunSendReveal(ctx, payload); err != nil {
+			if meta.IsMetaAPIError(err) {
+				return r.retryMetaAPIError(ctx, jobID, job, err)
+			}
+			return r.failJobUnexpected(ctx, jobID, job, err)
+		}
+		return r.Store.UpdateJob(ctx, jobID, map[string]any{
+			"status":     "done",
+			"updated_at": r.nowISO(),
+		})
+	}
+
+	if mapString(job, "type") == JobTypeProcessMessage {
+		if err := r.RunProcessMessage(ctx, payload); err != nil {
 			if meta.IsMetaAPIError(err) {
 				return r.retryMetaAPIError(ctx, jobID, job, err)
 			}

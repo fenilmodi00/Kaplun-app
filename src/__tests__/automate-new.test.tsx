@@ -60,6 +60,7 @@ function makeDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft {
     followUpEnabled: false,
     followUpMessage: '',
     followUpDelayMinutes: 0,
+    dmTriggerEnabled: false,
     ...overrides,
   };
 }

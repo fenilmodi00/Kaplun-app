@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -144,6 +146,24 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			}
 			h.enqueue(jobID)
 		}
+	}
+
+	for _, event := range webhooks.ParseMessageEvents(payload) {
+		jobPayload := map[string]any{
+			"instagram_account_id": event.InstagramAccountID,
+			"message_id":           event.MessageID,
+			"message_text":         event.MessageText,
+			"sender_id":            event.SenderID,
+		}
+		// Deterministic job ID: message_<accountId>_<base64(messageId)>
+		encodedMID := base64.RawURLEncoding.EncodeToString([]byte(event.MessageID))
+		jobID := fmt.Sprintf("message_%s_%s", event.InstagramAccountID, encodedMID)
+		_, err := h.Store.CreateJob(c.Request.Context(), "process_message", jobPayload, "")
+		if err != nil {
+			h.warn("create process_message job failed", err)
+			continue
+		}
+		h.enqueue(jobID)
 	}
 
 	for _, event := range webhooks.ParseReadEvents(payload) {

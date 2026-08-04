@@ -120,6 +120,71 @@ func ParsePostbackEvents(payload map[string]any) []PostbackEvent {
 	return events
 }
 
+// MessageEvent represents an inbound DM text message from the Instagram
+// webhook messaging[].message payload.
+type MessageEvent struct {
+	InstagramAccountID string
+	MessageID          string
+	MessageText        string
+	SenderID           string
+}
+
+// ParseMessageEvents extracts inbound DM text messages from an Instagram
+// webhook payload. It parses entry[].messaging[].message events, filtering
+// out echoes, deletions, attachment-only messages, and self-messages.
+func ParseMessageEvents(payload map[string]any) []MessageEvent {
+	events := make([]MessageEvent, 0)
+	if payload["object"] != "instagram" {
+		return events
+	}
+
+	for _, entryValue := range asSlice(payload["entry"]) {
+		entry := asMap(entryValue)
+		entryID := asString(entry["id"])
+		for _, messagingValue := range asSlice(entry["messaging"]) {
+			messaging := asMap(messagingValue)
+			msg := asMap(messaging["message"])
+			if len(msg) == 0 {
+				continue
+			}
+
+			// Filter out echoes (messages the business account sent).
+			if asBool(msg["is_echo"]) {
+				continue
+			}
+
+			// Filter out deletions.
+			if asBool(msg["is_deleted"]) {
+				continue
+			}
+
+			// Filter out unsupported message types (no text).
+			messageText := asString(msg["text"])
+			if messageText == "" {
+				continue
+			}
+
+			messageID := asString(msg["mid"])
+			senderID := asString(asMap(messaging["sender"])["id"])
+			accountID := firstNonEmpty(entryID, asString(asMap(messaging["recipient"])["id"]))
+
+			// Filter out self-messages (sender === account).
+			if senderID == "" || accountID == "" || senderID == accountID {
+				continue
+			}
+
+			events = append(events, MessageEvent{
+				InstagramAccountID: accountID,
+				MessageID:          messageID,
+				MessageText:        messageText,
+				SenderID:           senderID,
+			})
+		}
+	}
+
+	return events
+}
+
 // ParseReadEvents extracts read-receipt events from an Instagram webhook payload.
 // Instagram sends `read` events in the messaging array when a user opens a DM.
 func ParseReadEvents(payload map[string]any) []ReadEvent {
@@ -185,6 +250,15 @@ func asString(value any) string {
 		return v.String()
 	default:
 		return ""
+	}
+}
+
+func asBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	default:
+		return false
 	}
 }
 

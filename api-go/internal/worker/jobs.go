@@ -10,6 +10,7 @@ const (
 	JobTypeProcessComment = "process_comment"
 	JobTypeSendReveal     = "send_reveal"
 	JobTypeFollowUp       = "send_followup"
+	JobTypeProcessMessage = "process_message"
 
 	MaxAttempts            = 3
 	StaleProcessingMinutes = 10
@@ -39,12 +40,25 @@ type FollowUpHandler interface {
 	SendFollowUp(ctx context.Context, payload map[string]any) error
 }
 
+// ProcessMessageHandler handles process_message job payloads.
+type ProcessMessageHandler interface {
+	ProcessMessage(ctx context.Context, payload map[string]any) error
+}
+
 // FollowUpJob is the payload for a send_followup job.
 type FollowUpJob struct {
 	InstagramAccountID string `json:"instagram_account_id"`
 	UserID             string `json:"user_id"`
 	AutomationID       string `json:"automation_id"`
 	CommenterName      string `json:"commenter_name"`
+}
+
+// ProcessMessageJob is the payload for a process_message job.
+type ProcessMessageJob struct {
+	InstagramAccountID string `json:"instagram_account_id"`
+	MessageID          string `json:"message_id"`
+	MessageText        string `json:"message_text"`
+	SenderID           string `json:"sender_id"`
 }
 
 // SafeRunner wraps a JobRunner so background callers never observe panics or errors.

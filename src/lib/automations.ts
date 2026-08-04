@@ -38,6 +38,7 @@ export interface Automation {
   follow_up_enabled: boolean;
   follow_up_message: string | null;
   follow_up_delay_minutes: number | null;
+  dm_trigger_enabled: boolean;
   status: AutomationStatus;
   created_at: string;
   updated_at: string;
@@ -75,6 +76,7 @@ export interface CreateAutomationInput {
   follow_up_enabled?: boolean;
   follow_up_message?: string | null;
   follow_up_delay_minutes?: number | null;
+  dm_trigger_enabled?: boolean;
 }
 
 export type PatchAutomationInput = Partial<CreateAutomationInput & { status: 'active' | 'paused' }>;

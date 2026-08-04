@@ -36,7 +36,7 @@ go test ./...
 |------|------|
 | `GET /health` | none |
 | `POST /auth/appwrite-session` | Clerk Bearer |
-| `POST /login`, `GET /profile\|media\|insights`, `POST /disconnect` | Clerk Bearer |
+| *(removed — instagrapi proxy endpoints deleted)* | |
 | `/automations/*` | Clerk Bearer (templates unauthenticated) |
 | `GET /r/:slug` | none |
 | `GET\|POST /webhooks/instagram` | Meta verify / HMAC |

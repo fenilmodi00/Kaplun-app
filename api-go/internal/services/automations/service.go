@@ -123,6 +123,7 @@ func (s *Service) Create(ctx context.Context, clerkUserID string, body models.Au
 			FollowUpEnabled:         body.FollowUpEnabled,
 			FollowUpMessage:         body.FollowUpMessage,
 			FollowUpDelayMinutes:    body.FollowUpDelayMinutes,
+			DMTriggerEnabled:        body.DMTriggerEnabled,
 			Status:                  "active",
 			CreatedAt:          now,
 			UpdatedAt:          now,
@@ -482,6 +483,9 @@ func patchToMap(body models.AutomationPatch) (map[string]any, error) {
 		}
 		if body.FollowUpDelayMinutes != nil {
 			data["follow_up_delay_minutes"] = *body.FollowUpDelayMinutes
+		}
+		if body.DMTriggerEnabled != nil {
+			data["dm_trigger_enabled"] = *body.DMTriggerEnabled
 		}
 		if body.TrackLinks != nil {
 		data["track_links"] = *body.TrackLinks

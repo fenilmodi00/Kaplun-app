@@ -92,6 +92,19 @@ func (f *fakeStore) FindLog(_ context.Context, automationID, commentID string) (
 	return nil, nil
 }
 
+func (f *fakeStore) FindLogByCommentID(_ context.Context, commentID string) ([]map[string]any, error) {
+	var out []map[string]any
+	for _, log := range f.logs {
+		if log["comment_id"] == commentID {
+			action, _ := log["action"].(string)
+			if action == "dm_sent" || action == "button_dm_sent" || action == "reveal_sent" {
+				out = append(out, log)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeStore) CreateLog(_ context.Context, data map[string]any) (map[string]any, error) {
 	if f.raise409OnCreate {
 		return nil, worker.ErrDuplicateKey
@@ -339,6 +352,42 @@ func TestExistingDMSentLogDedupsAllSends(t *testing.T) {
 	}
 	if len(graph.calls) != 0 || len(store.logs) != 1 {
 		t.Fatalf("expected dedup, calls=%d logs=%d", len(graph.calls), len(store.logs))
+	}
+}
+
+func TestCrossCampaignDedupSkipsDMWhenAnotherCampaignAlreadySent(t *testing.T) {
+	t.Parallel()
+	auto1 := makeAutomation(map[string]any{"$id": "a1"})
+	auto2 := makeAutomation(map[string]any{"$id": "a2"})
+	store := newFakeStore([]map[string]any{auto1, auto2}, map[string]map[string]any{"user1": testCreator}, 0)
+	// a1 already sent a DM for this comment
+	_, _ = store.CreateLog(context.Background(), map[string]any{
+		"automation_id": "a1",
+		"comment_id":    "c1",
+		"action":        "dm_sent",
+		"created_at":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	graph := &fakeGraph{}
+	result, err := newRunner(store, graph).ProcessCommentEvent(context.Background(), testEvent, 0)
+	if err != nil || result != "done" {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	// a1: existing dm_sent log → skipped (no calls)
+	// a2: public reply sent, DM skipped due to cross-campaign dedup
+	if got := kinds(graph.calls); len(got) != 1 || got[0] != "reply" {
+		t.Fatalf("expected 1 reply call (from a2), got %v", got)
+	}
+	var a2Log map[string]any
+	for _, l := range store.logs {
+		if l["automation_id"] == "a2" {
+			a2Log = l
+		}
+	}
+	if a2Log == nil {
+		t.Fatal("expected a log for a2")
+	}
+	if a2Log["action"] != "skipped_dedup" {
+		t.Fatalf("expected a2 log action=skipped_dedup, got %v", a2Log["action"])
 	}
 }
 

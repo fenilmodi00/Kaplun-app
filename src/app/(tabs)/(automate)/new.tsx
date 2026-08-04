@@ -316,6 +316,7 @@ export default function NewAutomationScreen() {
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState('');
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(1440);
+  const [dmTriggerEnabled, setDmTriggerEnabled] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isConnectingIg, setIsConnectingIg] = useState(false);
   const [savingPaused, setSavingPaused] = useState(false);
@@ -484,8 +485,9 @@ export default function NewAutomationScreen() {
       followUpEnabled,
       followUpMessage,
       followUpDelayMinutes,
+      dmTriggerEnabled,
     }),
-    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages, requireFollow, followPromptMessage, followPromptButtonLabel, followUpEnabled, followUpMessage, followUpDelayMinutes]
+    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages, requireFollow, followPromptMessage, followPromptButtonLabel, followUpEnabled, followUpMessage, followUpDelayMinutes, dmTriggerEnabled]
   );
 
   const validationErrors = useMemo(() => validateAutomationDraft(draft), [draft]);
@@ -514,6 +516,7 @@ export default function NewAutomationScreen() {
             follow_prompt_button_label: followPromptButtonLabel.trim() || null,
           }
         : { follow_prompt_message: null, follow_prompt_button_label: null }),
+      dm_trigger_enabled: dmTriggerEnabled,
       follow_up_enabled: followUpEnabled,
       ...(followUpEnabled
         ? {
@@ -562,7 +565,7 @@ export default function NewAutomationScreen() {
     openingDmMode, buttonText, revealMessage,
     publicReplyEnabled, publicReplyMessage, publicReplyMessages, selectedMediaIds,
     requireFollow, followPromptMessage, followPromptButtonLabel,
-    followUpEnabled, followUpMessage, followUpDelayMinutes,
+    followUpEnabled, followUpMessage, followUpDelayMinutes, dmTriggerEnabled,
     createAutomation, refreshAutomations, getToken, router,
   ]);
 
@@ -710,6 +713,14 @@ export default function NewAutomationScreen() {
               </RadioCard>
             ))}
           </View>
+
+          <ToggleCard
+            title="also reply to DMs containing keywords"
+            description="Auto-reply to inbound DMs that match your keywords"
+            value={dmTriggerEnabled}
+            onValueChange={setDmTriggerEnabled}
+            switchAccessibilityLabel="Enable DM trigger"
+          />
         </View>
 
         {/* ── Keywords ── */}

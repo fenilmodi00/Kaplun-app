@@ -39,6 +39,7 @@ type Automation struct {
 	FollowUpEnabled         bool     `json:"follow_up_enabled"`
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	DMTriggerEnabled        bool     `json:"dm_trigger_enabled"`
 	Status                  string   `json:"status"`
 	CreatedAt          string   `json:"created_at"`
 	UpdatedAt          string   `json:"updated_at"`
@@ -79,6 +80,7 @@ type AutomationCreate struct {
 	FollowUpEnabled         bool     `json:"follow_up_enabled"`
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	DMTriggerEnabled        bool     `json:"dm_trigger_enabled"`
 	TrackLinks              bool     `json:"track_links"`
 }
 
@@ -101,6 +103,7 @@ type AutomationPatch struct {
 	FollowUpEnabled         *bool    `json:"follow_up_enabled"`
 	FollowUpMessage         *string  `json:"follow_up_message"`
 	FollowUpDelayMinutes    *int     `json:"follow_up_delay_minutes"`
+	DMTriggerEnabled        *bool    `json:"dm_trigger_enabled"`
 	TrackLinks              *bool    `json:"track_links"`
 	Status             *string  `json:"status"`
 	TargetType         *string  `json:"target_type"`
