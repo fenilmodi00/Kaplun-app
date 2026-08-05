@@ -220,12 +220,12 @@ func writeAutomationsError(c *gin.Context, err error) {
 	}
 }
 
-func writeInternal(c *gin.Context, err ...error) {
-	if len(err) > 0 && err[0] != nil {
+func writeInternal(c *gin.Context, err error) {
+	if err != nil {
 		slog.Error("automations handler internal error",
 			"path", c.FullPath(),
 			"method", c.Request.Method,
-			"error", err[0],
+			"error", err,
 		)
 	}
 	c.JSON(http.StatusInternalServerError, models.ErrorResponse{

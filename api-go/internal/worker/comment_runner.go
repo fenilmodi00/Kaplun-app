@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -232,14 +233,7 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 			return r.sendAutomationMessages(ctx, auto, event, logRow, token, commenterName)
 		}); err != nil {
 			if meta.IsTokenExpired(err) {
-				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
-					"status":     "error",
-					"updated_at": r.nowISO(),
-				})
-				_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-					"action": "failed",
-					"reason": "token_expired",
-				})
+				r.markTokenExpired(ctx, auto, logRow)
 				continue
 			}
 			if meta.IsGraphRateLimit(err) {
@@ -893,18 +887,8 @@ func (r *CommentRunner) RunProcessMessage(ctx context.Context, payload map[strin
 			return r.sendRevealMessage(ctx, auto, igID, senderID, commentID, token, mapString(logRow, "$id"))
 		}); err != nil {
 			if meta.IsTokenExpired(err) {
-				_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
-					"status":     "error",
-					"updated_at": r.nowISO(),
-				})
-				_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-					"action": "failed",
-					"reason": "token_expired",
-				})
+				r.markTokenExpired(ctx, auto, logRow)
 				continue
-			}
-			if meta.IsGraphRateLimit(err) {
-				return err
 			}
 			return err
 		}
@@ -1037,43 +1021,17 @@ func (r *CommentRunner) RunJob(ctx context.Context, jobID string) error {
 		}
 	}()
 
-	if mapString(job, "type") == JobTypeSendReveal {
-		if err := r.RunSendReveal(ctx, payload); err != nil {
-			if meta.IsMetaAPIError(err) {
-				return r.retryMetaAPIError(ctx, jobID, job, err)
-			}
-			return r.failJobUnexpected(ctx, jobID, job, err)
-		}
-		return r.Store.UpdateJob(ctx, jobID, map[string]any{
-			"status":     "done",
-			"updated_at": r.nowISO(),
-		})
+	var run func(context.Context, map[string]any) error
+	switch mapString(job, "type") {
+	case JobTypeSendReveal:
+		run = r.RunSendReveal
+	case JobTypeProcessMessage:
+		run = r.RunProcessMessage
+	case JobTypeFollowUp:
+		run = r.RunFollowUp
 	}
-
-	if mapString(job, "type") == JobTypeProcessMessage {
-		if err := r.RunProcessMessage(ctx, payload); err != nil {
-			if meta.IsMetaAPIError(err) {
-				return r.retryMetaAPIError(ctx, jobID, job, err)
-			}
-			return r.failJobUnexpected(ctx, jobID, job, err)
-		}
-		return r.Store.UpdateJob(ctx, jobID, map[string]any{
-			"status":     "done",
-			"updated_at": r.nowISO(),
-		})
-	}
-
-	if mapString(job, "type") == JobTypeFollowUp {
-		if err := r.RunFollowUp(ctx, payload); err != nil {
-			if meta.IsMetaAPIError(err) {
-				return r.retryMetaAPIError(ctx, jobID, job, err)
-			}
-			return r.failJobUnexpected(ctx, jobID, job, err)
-		}
-		return r.Store.UpdateJob(ctx, jobID, map[string]any{
-			"status":     "done",
-			"updated_at": r.nowISO(),
-		})
+	if run != nil {
+		return r.finishJob(ctx, jobID, job, run(ctx, payload))
 	}
 
 	requeueAttempt := mapInt(payload, "requeue_attempt")
@@ -1101,6 +1059,21 @@ func (r *CommentRunner) RunJob(ctx context.Context, jobID string) error {
 	return r.Store.UpdateJob(ctx, jobID, map[string]any{
 		"status":     "done",
 		"updated_at": nowISO,
+	})
+}
+
+// finishJob applies the shared post-run bookkeeping for job types without
+// requeue semantics: Meta API errors get backoff retry, anything else fails.
+func (r *CommentRunner) finishJob(ctx context.Context, jobID string, job map[string]any, err error) error {
+	if err != nil {
+		if meta.IsMetaAPIError(err) {
+			return r.retryMetaAPIError(ctx, jobID, job, err)
+		}
+		return r.failJobUnexpected(ctx, jobID, job, err)
+	}
+	return r.Store.UpdateJob(ctx, jobID, map[string]any{
+		"status":     "done",
+		"updated_at": r.nowISO(),
 	})
 }
 
@@ -1167,6 +1140,20 @@ func (r *CommentRunner) failLog(ctx context.Context, existing, auto, event map[s
 		return nil
 	}
 	return err
+}
+
+// markTokenExpired records a Meta 190 on the automation and its pending log
+// row: automation goes to status=error, the log row to failed/token_expired.
+// Best-effort — the caller continues with the next automation either way.
+func (r *CommentRunner) markTokenExpired(ctx context.Context, auto, logRow map[string]any) {
+	_ = r.Store.UpdateAutomation(ctx, mapString(auto, "$id"), map[string]any{
+		"status":     "error",
+		"updated_at": r.nowISO(),
+	})
+	_ = r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
+		"action": "failed",
+		"reason": "token_expired",
+	})
 }
 
 // sendWithFreshToken runs send with the creator's stored token. On a Meta 190
@@ -1237,8 +1224,8 @@ func filterAutomationsForMedia(all []map[string]any, mediaID string) []map[strin
 			out = append(out, a)
 			continue
 		}
-		if containsString(mapStringSlice(a, "media_ids"), mediaID) ||
-			containsString(mapStringSlice(a, "bound_media_ids"), mediaID) {
+		if slices.Contains(mapStringSlice(a, "media_ids"), mediaID) ||
+			slices.Contains(mapStringSlice(a, "bound_media_ids"), mediaID) {
 			out = append(out, a)
 		}
 	}
@@ -1360,15 +1347,6 @@ func mapStringSlice(m map[string]any, key string) []string {
 	default:
 		return nil
 	}
-}
-
-func containsString(items []string, want string) bool {
-	for _, item := range items {
-		if item == want {
-			return true
-		}
-	}
-	return false
 }
 
 func nilIfEmpty(s string) any {

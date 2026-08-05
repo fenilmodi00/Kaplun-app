@@ -3,7 +3,7 @@ package insights
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -260,7 +260,7 @@ func (c *metaClient) GetAccountInsightsDay(ctx context.Context, accessToken, sin
 	for d := range byDate {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 	out := make([]InsightDay, 0, len(dates))
 	for _, d := range dates {
 		out = append(out, *byDate[d])

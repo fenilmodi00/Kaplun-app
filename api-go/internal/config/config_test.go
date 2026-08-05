@@ -116,9 +116,6 @@ func TestFromMapDefaultsAppwriteAndSweeper(t *testing.T) {
 	if !cfg.AutomationSweeperEnabled {
 		t.Fatal("expected sweeper enabled by default")
 	}
-	if cfg.NgrokEnabled {
-		t.Fatal("expected ngrok disabled by default (use Cloudflare Tunnel)")
-	}
 	if !cfg.CloudflareTunnelEnabled {
 		t.Fatal("expected cloudflare tunnel enabled by default")
 	}

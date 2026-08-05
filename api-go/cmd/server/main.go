@@ -22,7 +22,6 @@ import (
 	"kaplun/api-go/internal/platform/clerk"
 	"kaplun/api-go/internal/platform/cloudflare"
 	"kaplun/api-go/internal/platform/meta"
-	"kaplun/api-go/internal/platform/ngrok"
 	"kaplun/api-go/internal/router"
 	"kaplun/api-go/internal/services/automations"
 	"kaplun/api-go/internal/services/bridge"
@@ -60,7 +59,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Listen immediately — do not block on ngrok (it can take several seconds).
+	// Listen immediately — do not block on tunnel startup (it can take several seconds).
 	go func() {
 		logger.Info("server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -71,7 +70,6 @@ func main() {
 
 	var (
 		tunnelMu sync.Mutex
-		ngrokTun *ngrok.Tunnel
 		cfTun    *cloudflare.Tunnel
 	)
 
@@ -113,38 +111,12 @@ func main() {
 		logger.Info("cloudflare tunnel disabled (set CLOUDFLARE_TUNNEL_ENABLED=true)")
 	}
 
-	if cfg.NgrokEnabled {
-		tunnelURL := ngrok.ResolveURL(cfg.NgrokDomain, cfg.PublicBaseURL)
-		logger.Info("ngrok starting in background", "url", tunnelURL, "local", ":"+cfg.Port)
-		go func() {
-			t, err := ngrok.Start(ctx, ngrok.Options{
-				Port:   cfg.Port,
-				URL:    tunnelURL,
-				Logger: logger,
-			})
-			if err != nil {
-				logger.Warn("ngrok start failed (server continues locally)", "error", err)
-				return
-			}
-			tunnelMu.Lock()
-			ngrokTun = t
-			tunnelMu.Unlock()
-			logPublicEndpoints(t.PublicURL)
-		}()
-	}
-
 	<-ctx.Done()
 	logger.Info("shutting down")
 
 	tunnelMu.Lock()
-	n := ngrokTun
 	c := cfTun
 	tunnelMu.Unlock()
-	if n != nil {
-		if stopErr := n.Stop(); stopErr != nil {
-			logger.Warn("ngrok stop", "error", stopErr)
-		}
-	}
 	if c != nil {
 		if stopErr := c.Stop(); stopErr != nil {
 			logger.Warn("cloudflare tunnel stop", "error", stopErr)

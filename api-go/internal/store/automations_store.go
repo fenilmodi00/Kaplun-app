@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"kaplun/api-go/internal/models"
@@ -185,11 +186,11 @@ func (s *AutomationsStore) TopKeywords(ctx context.Context, clerkUserID, sinceIS
 	for kw, count := range kwCounts {
 		pairs = append(pairs, pair{kw: kw, count: count})
 	}
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].count == pairs[j].count {
-			return pairs[i].kw < pairs[j].kw
+	slices.SortFunc(pairs, func(a, b pair) int {
+		if a.count != b.count {
+			return b.count - a.count
 		}
-		return pairs[i].count > pairs[j].count
+		return strings.Compare(a.kw, b.kw)
 	})
 	if len(pairs) > limit {
 		pairs = pairs[:limit]
@@ -250,14 +251,6 @@ func (s *AutomationsStore) ListStaleProcessingJobs(ctx context.Context, staleBef
 func (s *AutomationsStore) UpdateJob(ctx context.Context, jobID string, data map[string]any) error {
 	_, err := s.client.UpdateRow(ctx, s.tables.Jobs, jobID, data, nil)
 	return err
-}
-
-// ListAutomationsQueries returns the Appwrite queries used by ListAutomations (test helper).
-func ListAutomationsQueries(clerkUserID string) []string {
-	return []string{
-		appwrite.QueryEqual("clerk_user_id", clerkUserID),
-		appwrite.QueryOrderDesc("created_at"),
-	}
 }
 
 func automationToData(a models.Automation) map[string]any {

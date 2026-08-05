@@ -12,7 +12,7 @@ import (
 func TestListAutomationsQueries(t *testing.T) {
 	t.Parallel()
 
-	got := store.ListAutomationsQueries("clerk_1")
+	got := listAutomationsQueries("clerk_1")
 	want := []string{
 		`{"method":"equal","attribute":"clerk_user_id","values":["clerk_1"]}`,
 		`{"method":"orderDesc","attribute":"created_at"}`,
@@ -24,6 +24,13 @@ func TestListAutomationsQueries(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("[%d]=%q want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func listAutomationsQueries(clerkUserID string) []string {
+	return []string{
+		appwrite.QueryEqual("clerk_user_id", clerkUserID),
+		appwrite.QueryOrderDesc("created_at"),
 	}
 }
 

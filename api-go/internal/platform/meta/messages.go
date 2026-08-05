@@ -55,46 +55,14 @@ func (c *Client) SendPrivateReply(ctx context.Context, igAccountID, commentID, t
 
 // SendPrivateReplyWithButton sends a private reply with a postback button.
 func (c *Client) SendPrivateReplyWithButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, payload, accessToken string) (map[string]any, error) {
-	body := map[string]any{
-		"recipient": map[string]any{"comment_id": commentID},
-		"message": map[string]any{
-			"attachment": map[string]any{
-				"type": "template",
-				"payload": map[string]any{
-					"template_type": "button",
-					"text":          truncateRunes(text, 640),
-					"buttons": []map[string]any{{
-						"type":    "postback",
-						"title":   truncateRunes(buttonTitle, 20),
-						"payload": payload,
-					}},
-				},
-			},
-		},
-	}
-	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
+	return c.sendButtonTemplate(ctx, igAccountID, map[string]any{"comment_id": commentID}, text,
+		map[string]any{"type": "postback", "title": truncateRunes(buttonTitle, 20), "payload": payload}, accessToken)
 }
 
 // SendPrivateReplyWithLinkButton sends a private reply with a web_url button.
 func (c *Client) SendPrivateReplyWithLinkButton(ctx context.Context, igAccountID, commentID, text, buttonTitle, url, accessToken string) (map[string]any, error) {
-	body := map[string]any{
-		"recipient": map[string]any{"comment_id": commentID},
-		"message": map[string]any{
-			"attachment": map[string]any{
-				"type": "template",
-				"payload": map[string]any{
-					"template_type": "button",
-					"text":          truncateRunes(text, 640),
-					"buttons": []map[string]any{{
-						"type":  "web_url",
-						"url":   url,
-						"title": truncateRunes(buttonTitle, 20),
-					}},
-				},
-			},
-		},
-	}
-	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
+	return c.sendButtonTemplate(ctx, igAccountID, map[string]any{"comment_id": commentID}, text,
+		map[string]any{"type": "web_url", "url": url, "title": truncateRunes(buttonTitle, 20)}, accessToken)
 }
 
 // SendDirectMessage sends a DM to a user by IG scoped user id.
@@ -109,43 +77,28 @@ func (c *Client) SendDirectMessage(ctx context.Context, igAccountID, userID, tex
 // SendDirectMessageWithButton sends a button template as a direct message (not private reply).
 // Uses recipient: {id: userID} and a button template attachment.
 func (c *Client) SendDirectMessageWithButton(ctx context.Context, igAccountID, userID, text, buttonTitle, payload, accessToken string) (map[string]any, error) {
-	body := map[string]any{
-		"recipient": map[string]any{"id": userID},
-		"message": map[string]any{
-			"attachment": map[string]any{
-				"type": "template",
-				"payload": map[string]any{
-					"template_type": "button",
-					"text":          truncateRunes(text, 640),
-					"buttons": []map[string]any{{
-						"type":    "postback",
-						"title":   truncateRunes(buttonTitle, 20),
-						"payload": payload,
-					}},
-				},
-			},
-		},
-	}
-	return c.request(ctx, http.MethodPost, c.base()+"/"+igAccountID+"/messages", accessToken, body)
+	return c.sendButtonTemplate(ctx, igAccountID, map[string]any{"id": userID}, text,
+		map[string]any{"type": "postback", "title": truncateRunes(buttonTitle, 20), "payload": payload}, accessToken)
 }
 
 // SendDirectMessageWithLinkButton sends a web_url button template as a DM.
 // Used for the reveal step (after postback) so the link is tappable without
 // another postback round-trip — matching OpenReply's tracked link buttons.
 func (c *Client) SendDirectMessageWithLinkButton(ctx context.Context, igAccountID, userID, text, buttonTitle, url, accessToken string) (map[string]any, error) {
+	return c.sendButtonTemplate(ctx, igAccountID, map[string]any{"id": userID}, text,
+		map[string]any{"type": "web_url", "url": url, "title": truncateRunes(buttonTitle, 20)}, accessToken)
+}
+
+func (c *Client) sendButtonTemplate(ctx context.Context, igAccountID string, recipient map[string]any, text string, button map[string]any, accessToken string) (map[string]any, error) {
 	body := map[string]any{
-		"recipient": map[string]any{"id": userID},
+		"recipient": recipient,
 		"message": map[string]any{
 			"attachment": map[string]any{
 				"type": "template",
 				"payload": map[string]any{
 					"template_type": "button",
 					"text":          truncateRunes(text, 640),
-					"buttons": []map[string]any{{
-						"type":  "web_url",
-						"url":   url,
-						"title": truncateRunes(buttonTitle, 20),
-					}},
+					"buttons":       []map[string]any{button},
 				},
 			},
 		},

@@ -365,7 +365,6 @@ func buttonTextEqual(got, want string) bool {
 // AttachNextReels appends newest media to next_reel automations.
 func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 	attached := 0
-	var errs []string
 	autos, err := s.Store.ListAllActiveAutomations(ctx)
 	if err != nil {
 		return 0, err
@@ -378,7 +377,6 @@ func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 		creator, ok, err := s.Store.GetCreatorByClerkID(ctx, auto.ClerkUserID)
 		if err != nil {
 			s.logWarn("attach next reels creator lookup failed", "automation_id", auto.ID, "error", err)
-			errs = append(errs, fmt.Sprintf("creator lookup for %s: %v", auto.ID, err))
 			continue
 		}
 		if !ok || creator.AccessToken == "" {
@@ -404,11 +402,9 @@ func (s *Service) AttachNextReels(ctx context.Context) (int, error) {
 		bound = append(bound, newestID)
 		if err := s.Store.UpdateAutomation(ctx, auto.ID, map[string]any{"bound_media_ids": bound}); err != nil {
 			s.logWarn("attach next reels update failed", "automation_id", auto.ID, "error", err)
-			errs = append(errs, fmt.Sprintf("update automation %s: %v", auto.ID, err))
 			continue
 		}
 		attached++
 	}
-	_ = errs
 	return attached, nil
 }

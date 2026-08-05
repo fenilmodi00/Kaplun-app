@@ -20,7 +20,7 @@ go test ./internal/services/automations  # one package
 - `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth)
 - `internal/services` — business logic (bridge, automations, oauth, reconcile, templates, keywords, ratelimit)
 - `internal/store` — Appwrite persistence (automations, jobs, logs, reconcile)
-- `internal/platform` — external clients: `appwrite`, `clerk` (JWT verify), `meta` (Graph API + webhook HMAC), `crypto` (token encryption), `cloudflare`/`ngrok` (tunnels)
+- `internal/platform` — external clients: `appwrite`, `clerk` (JWT verify), `meta` (Graph API + webhook HMAC), `cloudflare` (tunnel)
 - `internal/worker` — job pool, sweeper, comment_runner (process_comment / send_reveal jobs)
 - `internal/models` — request/response types; `ErrorResponse{error, message}` is the standard error shape
 
@@ -42,5 +42,5 @@ go test ./internal/services/automations  # one package
 ## GOTCHAS
 
 - `server.exe` / `tools/*.log` are gitignored build/runtime artifacts — don't commit.
-- Token encryption key is `TOKEN_ENCRYPTION_KEY`; tokens at rest are encrypted in `platform/crypto`.
+- Creator tokens are stored **plaintext by design** — the Expo app reads `access_token` directly and calls graph.instagram.com (see `plaintextTokenDecryptor` in `cmd/server/adapters.go`).
 - `AUTOMATION_SWEEPER_ENABLED=true` starts the sweeper loop that retries pending jobs — required for comment automations to actually send. The same flag also starts the in-process reconcile poller (`startReconcileLoop`), the safety net for comments webhooks miss — no external scheduler needed.

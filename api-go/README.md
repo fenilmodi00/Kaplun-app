@@ -16,7 +16,7 @@ By default it also starts a **Cloudflare quick Tunnel** (`cloudflared`) to `IG_A
 
 Requires the `cloudflared` CLI on PATH (or `api-go/tools/cloudflared.exe`). Disable with `CLOUDFLARE_TUNNEL_ENABLED=false` once the API is deployed.
 
-Named tunnel (stable hostname after `cloudflared tunnel create` + `route dns`): set `CLOUDFLARE_TUNNEL_NAME` + `CLOUDFLARE_TUNNEL_URL` — uses `~/.cloudflared/<uuid>.json`, no token needed. Zero Trust dashboard path: `CLOUDFLARE_TUNNEL_TOKEN` + `CLOUDFLARE_TUNNEL_URL`. Empty name+token = ephemeral `*.trycloudflare.com` quick tunnel. Legacy ngrok: `NGROK_ENABLED=true` (defaults off).
+Named tunnel (stable hostname after `cloudflared tunnel create` + `route dns`): set `CLOUDFLARE_TUNNEL_NAME` + `CLOUDFLARE_TUNNEL_URL` — uses `~/.cloudflared/<uuid>.json`, no token needed. Zero Trust dashboard path: `CLOUDFLARE_TUNNEL_TOKEN` + `CLOUDFLARE_TUNNEL_URL`. Empty name+token = ephemeral `*.trycloudflare.com` quick tunnel.
 
 Default listen: `:8000` (`IG_API_PORT`). You should see `"msg":"loaded env file"`, then `"msg":"server listening"`, then `"msg":"cloudflare quick tunnel ready"` / `"tunnel public URL"`.
 

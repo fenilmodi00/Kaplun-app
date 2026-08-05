@@ -358,10 +358,6 @@ func drainLines(lines <-chan string) {
 	}
 }
 
-func drain(r io.Reader) {
-	_, _ = io.Copy(io.Discard, r)
-}
-
 func clip(s string, max int) string {
 	if len(s) <= max {
 		return s

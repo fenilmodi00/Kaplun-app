@@ -7,7 +7,6 @@ import (
 	"maps"
 	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -360,7 +359,7 @@ func computeDerived(items []MediaItemWithInsights, totals map[string]int64, now 
 	var avgReelViews, medianReelViews float64
 	var maxReelViews, minReelViews int64
 	if len(reelViews) > 0 {
-		sort.Slice(reelViews, func(i, j int) bool { return reelViews[i] < reelViews[j] })
+		slices.Sort(reelViews)
 		minReelViews = reelViews[0]
 		maxReelViews = reelViews[len(reelViews)-1]
 		var sum int64
@@ -384,7 +383,7 @@ func computeDerived(items []MediaItemWithInsights, totals map[string]int64, now 
 
 	lastPostAt := ""
 	if len(timestamps) > 0 {
-		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i].Before(timestamps[j]) })
+		slices.SortFunc(timestamps, func(a, b time.Time) int { return a.Compare(b) })
 		latest := timestamps[len(timestamps)-1]
 		derived["last_post_days"] = int(now.Sub(latest).Hours() / 24)
 		lastPostAt = latest.Format(time.RFC3339Nano)

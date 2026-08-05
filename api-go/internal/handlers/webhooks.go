@@ -144,35 +144,27 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 	}
 
 	for _, event := range postbacks {
-		if strings.HasPrefix(event.Payload, "reveal:") {
-			automationID := strings.TrimPrefix(event.Payload, "reveal:")
-			jobPayload := map[string]any{
-				"instagram_account_id": event.InstagramAccountID,
-				"user_id":              event.UserID,
-				"automation_id":        automationID,
-			}
-			jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload, "", postbackDedupKey(event))
-			if err != nil {
-				h.warn("create send_reveal job failed", err)
-				enqueueErrs = append(enqueueErrs, fmt.Sprintf("send_reveal %s: %v", event.UserID, err))
-				continue
-			}
-			h.enqueue(jobID)
-		} else if strings.HasPrefix(event.Payload, "followcheck:") {
-			automationID := strings.TrimPrefix(event.Payload, "followcheck:")
-			jobPayload := map[string]any{
-				"instagram_account_id": event.InstagramAccountID,
-				"user_id":              event.UserID,
-				"automation_id":        automationID,
-			}
-			jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload, "", postbackDedupKey(event))
-			if err != nil {
-				h.warn("create send_reveal job (followcheck) failed", err)
-				enqueueErrs = append(enqueueErrs, fmt.Sprintf("send_reveal followcheck %s: %v", event.UserID, err))
-				continue
-			}
-			h.enqueue(jobID)
+		var automationID, kind string
+		switch {
+		case strings.HasPrefix(event.Payload, "reveal:"):
+			automationID, kind = strings.TrimPrefix(event.Payload, "reveal:"), "reveal"
+		case strings.HasPrefix(event.Payload, "followcheck:"):
+			automationID, kind = strings.TrimPrefix(event.Payload, "followcheck:"), "followcheck"
+		default:
+			continue
 		}
+		jobPayload := map[string]any{
+			"instagram_account_id": event.InstagramAccountID,
+			"user_id":              event.UserID,
+			"automation_id":        automationID,
+		}
+		jobID, err := h.Store.CreateJob(c.Request.Context(), "send_reveal", jobPayload, "", postbackDedupKey(event))
+		if err != nil {
+			h.warn("create send_reveal job failed", err)
+			enqueueErrs = append(enqueueErrs, fmt.Sprintf("send_reveal %s %s: %v", kind, event.UserID, err))
+			continue
+		}
+		h.enqueue(jobID)
 	}
 
 	for _, event := range messages {

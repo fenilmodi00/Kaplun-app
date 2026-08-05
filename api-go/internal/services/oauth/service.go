@@ -27,7 +27,6 @@ type TokenResult struct {
 	AccessToken string
 	UserID      string
 	ExpiresIn   *int
-	Raw         map[string]any
 }
 
 type Profile struct {
@@ -42,7 +41,6 @@ type Profile struct {
 	ProfilePictureURL string
 	Biography         string
 	Website           string
-	Raw               map[string]any
 }
 
 type Config struct {
@@ -94,7 +92,6 @@ func (s *Service) ExchangeCodeForShortToken(ctx context.Context, code string) (T
 	return TokenResult{
 		AccessToken: token,
 		UserID:      userID,
-		Raw:         data,
 	}, nil
 }
 
@@ -125,7 +122,6 @@ func (s *Service) ExchangeForLongToken(ctx context.Context, shortToken string) (
 	return TokenResult{
 		AccessToken: token,
 		ExpiresIn:   expires,
-		Raw:         data,
 	}, nil
 }
 
@@ -171,7 +167,6 @@ func (s *Service) FetchInstagramProfile(ctx context.Context, accessToken string)
 		ProfilePictureURL: asString(data["profile_picture_url"]),
 		Biography:         asString(data["biography"]),
 		Website:           asString(data["website"]),
-		Raw:               data,
 	}, nil
 }
 

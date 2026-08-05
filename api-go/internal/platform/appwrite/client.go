@@ -83,15 +83,6 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Endpoint() string        { return c.endpoint }
-func (c *Client) ProjectID() string       { return c.projectID }
-func (c *Client) DatabaseID() string      { return c.databaseID }
-func (c *Client) CreatorsTableID() string { return c.creatorsTableID }
-
-func (c *Client) CreateSessionEndpoint() string {
-	return fmt.Sprintf("%s/account/sessions/token", c.endpoint)
-}
-
 // RowsResult is the TablesDB list response.
 type RowsResult struct {
 	Total int              `json:"total"`
