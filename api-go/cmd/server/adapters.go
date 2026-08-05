@@ -10,6 +10,7 @@ import (
 
 	"kaplun/api-go/internal/handlers"
 	"kaplun/api-go/internal/platform/meta"
+	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/services/keywords"
 	"kaplun/api-go/internal/services/reconcile"
 )
@@ -232,4 +233,53 @@ func startTokenRefreshLoop(ctx context.Context, store handlers.TokenRefreshStore
 		}
 	}()
 	logger.Info("token refresh loop started", "interval", interval.String())
+}
+
+// startInsightsSyncLoop runs the first-party insights sync in-process: a boot
+// backfill (sequential, spaced — see Service.Backfill) so existing creators get
+// data immediately, then a daily sweep. First tick one minute after boot, same
+// shape as startTokenRefreshLoop. Gated on INSIGHTS_SYNC_ENABLED.
+func startInsightsSyncLoop(ctx context.Context, svc *insights.Service, enabled bool, logger *slog.Logger) {
+	if !enabled || svc == nil {
+		return
+	}
+	go func() {
+		backfillCtx, backfillCancel := context.WithTimeout(ctx, 30*time.Minute)
+		backfillResults := svc.Backfill(backfillCtx)
+		backfillCancel()
+		synced, failed := countSyncResults(backfillResults)
+		if synced > 0 || failed > 0 {
+			logger.Info("insights backfill complete", "synced", synced, "failed", failed)
+		}
+
+		timer := time.NewTimer(time.Minute)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				sweepCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+				results := svc.SyncAll(sweepCtx)
+				cancel()
+				s, f := countSyncResults(results)
+				if s > 0 || f > 0 {
+					logger.Info("insights sync sweep complete", "synced", s, "failed", f)
+				}
+				timer.Reset(24 * time.Hour)
+			}
+		}
+	}()
+	logger.Info("insights sync loop started", "interval", "24h")
+}
+
+func countSyncResults(results []*insights.SyncResult) (synced, failed int) {
+	for _, r := range results {
+		if r.Error != "" {
+			failed++
+		} else {
+			synced++
+		}
+	}
+	return synced, failed
 }

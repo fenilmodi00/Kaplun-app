@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"kaplun/api-go/internal/services/insights"
 )
 
 const (
@@ -48,20 +50,28 @@ type ReconcileService interface {
 	AttachNextReels(ctx context.Context) (int, error)
 }
 
-type CronHandler struct {
-	Store      CronStore
-	Refresher  TokenRefresher
-	Reconciler ReconcileService
-	Log        *slog.Logger
-	Now        func() time.Time
+// InsightsSyncer is the first-party insights sweep surface; *insights.Service
+// satisfies it directly.
+type InsightsSyncer interface {
+	SyncAll(ctx context.Context) []*insights.SyncResult
 }
 
-func NewCronHandler(store CronStore, refresher TokenRefresher, reconcile ReconcileService) *CronHandler {
+type CronHandler struct {
+	Store        CronStore
+	Refresher    TokenRefresher
+	Reconciler   ReconcileService
+	InsightsSync InsightsSyncer
+	Log          *slog.Logger
+	Now          func() time.Time
+}
+
+func NewCronHandler(store CronStore, refresher TokenRefresher, reconcile ReconcileService, insightsSync InsightsSyncer) *CronHandler {
 	return &CronHandler{
-		Store:      store,
-		Refresher:  refresher,
-		Reconciler: reconcile,
-		Now:        time.Now,
+		Store:        store,
+		Refresher:    refresher,
+		Reconciler:   reconcile,
+		InsightsSync: insightsSync,
+		Now:          time.Now,
 	}
 }
 
@@ -134,6 +144,23 @@ func (h *CronHandler) Reconcile(c *gin.Context) {
 		result["attached"] = 0
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// SyncInsights runs a full first-party insights sweep on demand — the same
+// fan-out the in-process daily loop runs. Nil-safe: reports zero counts when
+// no insights service is wired.
+func (h *CronHandler) SyncInsights(c *gin.Context) {
+	synced, failed := 0, 0
+	if h.InsightsSync != nil {
+		for _, r := range h.InsightsSync.SyncAll(c.Request.Context()) {
+			if r.Error != "" {
+				failed++
+			} else {
+				synced++
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"synced": synced, "failed": failed})
 }
 
 func (h *CronHandler) RetainLogs(c *gin.Context) {

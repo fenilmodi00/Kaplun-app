@@ -61,6 +61,7 @@ func registerRoutes(engine *gin.Engine, deps Dependencies) {
 		cron.POST("/refresh-tokens", deps.Cron.RefreshTokens)
 		cron.POST("/reconcile", deps.Cron.Reconcile)
 		cron.POST("/retain-logs", deps.Cron.RetainLogs)
+		cron.POST("/sync-insights", deps.Cron.SyncInsights)
 		cron.GET("/health", deps.Cron.Health)
 	}
 

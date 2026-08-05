@@ -44,14 +44,15 @@ func (f *fakeOAuth) FetchInstagramProfile(context.Context, string) (oauth.Profil
 }
 
 type fakeCreatorStore struct {
-	ok   bool
-	data map[string]any
-	err  error
+	ok    bool
+	rowID string
+	data  map[string]any
+	err   error
 }
 
-func (f *fakeCreatorStore) StoreCreatorProfile(_ context.Context, _ string, data map[string]any) (bool, error) {
+func (f *fakeCreatorStore) StoreCreatorProfile(_ context.Context, _ string, data map[string]any) (string, bool, error) {
 	f.data = data
-	return f.ok, f.err
+	return f.rowID, f.ok, f.err
 }
 
 func TestInstagramCallbackSuccess(t *testing.T) {

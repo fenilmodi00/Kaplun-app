@@ -77,7 +77,7 @@ func TestCronRefreshAuthViaMiddleware(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{}, &fakeRefresher{}, &fakeReconcile{})
+	h := handlers.NewCronHandler(&fakeCronStore{}, &fakeRefresher{}, &fakeReconcile{}, nil)
 	engine := gin.New()
 	engine.POST("/cron/refresh-tokens", middleware.CronSecret("test-cron-secret"), h.RefreshTokens)
 
@@ -113,7 +113,7 @@ func TestCronRefreshSuccessAndSkip(t *testing.T) {
 		},
 	}
 	refresher := &fakeRefresher{result: handlers.TokenRefreshResult{AccessToken: "new_token", ExpiresIn: 5184000}}
-	h := handlers.NewCronHandler(store, refresher, &fakeReconcile{})
+	h := handlers.NewCronHandler(store, refresher, &fakeReconcile{}, nil)
 	fixed := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	h.Now = func() time.Time { return fixed }
 
@@ -144,7 +144,7 @@ func TestCronRefreshFailure(t *testing.T) {
 			{ID: "c1", AccessToken: "tok"},
 		},
 	}
-	h := handlers.NewCronHandler(store, &fakeRefresher{err: errors.New("timeout")}, nil)
+	h := handlers.NewCronHandler(store, &fakeRefresher{err: errors.New("timeout")}, nil, nil)
 	engine := gin.New()
 	engine.POST("/cron/refresh-tokens", h.RefreshTokens)
 
@@ -169,7 +169,7 @@ func TestCronReconcile(t *testing.T) {
 	h := handlers.NewCronHandler(&fakeCronStore{}, nil, &fakeReconcile{
 		once:     map[string]any{"enqueued": 3},
 		attached: 2,
-	})
+	}, nil)
 	engine := gin.New()
 	engine.POST("/cron/reconcile", h.Reconcile)
 
@@ -188,7 +188,7 @@ func TestCronRetainLogs(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1}, nil, nil)
+	h := handlers.NewCronHandler(&fakeCronStore{deletedLogs: 1}, nil, nil, nil)
 	engine := gin.New()
 	engine.POST("/cron/retain-logs", h.RetainLogs)
 
@@ -209,7 +209,7 @@ func TestCronHealth(t *testing.T) {
 
 	h := handlers.NewCronHandler(&fakeCronStore{
 		counts: map[string]int{"pending": 1, "processing": 1, "failed": 1, "done": 2},
-	}, nil, nil)
+	}, nil, nil, nil)
 	engine := gin.New()
 	engine.GET("/cron/health", h.Health)
 

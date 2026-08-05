@@ -43,6 +43,12 @@ type Config struct {
 	PublicBaseURL            string
 	AutomationSweeperEnabled bool
 
+	// First-party Insights sync — Appwrite Table IDs + flag
+	AppwriteCreatorMediaTableID                string
+	AppwriteCreatorInsightDaysTableID          string
+	AppwriteCreatorAudienceDemographicsTableID string
+	InsightsSyncEnabled                        bool
+
 	// Local tunnel (until production deploy)
 	NgrokEnabled bool
 	NgrokDomain  string
@@ -83,6 +89,10 @@ func FromMap(values map[string]string) (Config, error) {
 		AppwriteAutomationLogsTableID: strings.TrimSpace(values["APPWRITE_AUTOMATION_LOGS_TABLE_ID"]),
 		AppwriteAutomationJobsTableID: strings.TrimSpace(values["APPWRITE_AUTOMATION_JOBS_TABLE_ID"]),
 
+		AppwriteCreatorMediaTableID:                strings.TrimSpace(values["APPWRITE_CREATOR_MEDIA_TABLE_ID"]),
+		AppwriteCreatorInsightDaysTableID:          strings.TrimSpace(values["APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID"]),
+		AppwriteCreatorAudienceDemographicsTableID: strings.TrimSpace(values["APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID"]),
+
 		WebhookVerifyToken: strings.TrimSpace(values["WEBHOOK_VERIFY_TOKEN"]),
 		FacebookAppSecret:  strings.TrimSpace(values["FACEBOOK_APP_SECRET"]),
 		CronSecret:         strings.TrimSpace(values["CRON_SECRET"]),
@@ -115,6 +125,12 @@ func FromMap(values map[string]string) (Config, error) {
 		return Config{}, fmt.Errorf("AUTOMATION_SWEEPER_ENABLED: %w", err)
 	}
 	cfg.AutomationSweeperEnabled = sweeper
+
+	insightsSync, err := parseBoolDefault(values["INSIGHTS_SYNC_ENABLED"], false)
+	if err != nil {
+		return Config{}, fmt.Errorf("INSIGHTS_SYNC_ENABLED: %w", err)
+	}
+	cfg.InsightsSyncEnabled = insightsSync
 
 	// Prefer Cloudflare Tunnel for local Meta webhooks/OAuth (no free-ngrok interstitial).
 	cfOn, err := parseBoolDefault(values["CLOUDFLARE_TUNNEL_ENABLED"], true)
@@ -154,6 +170,13 @@ func (c Config) HasAutomationTables() bool {
 		c.AppwriteAutomationJobsTableID != ""
 }
 
+// HasInsightsTables reports whether all first-party insights table IDs are set.
+func (c Config) HasInsightsTables() bool {
+	return c.AppwriteCreatorMediaTableID != "" &&
+		c.AppwriteCreatorInsightDaysTableID != "" &&
+		c.AppwriteCreatorAudienceDemographicsTableID != ""
+}
+
 func envMap() map[string]string {
 	keys := []string{
 		"CLERK_SECRET_KEY",
@@ -172,6 +195,10 @@ func envMap() map[string]string {
 		"APPWRITE_AUTOMATIONS_TABLE_ID",
 		"APPWRITE_AUTOMATION_LOGS_TABLE_ID",
 		"APPWRITE_AUTOMATION_JOBS_TABLE_ID",
+		"APPWRITE_CREATOR_MEDIA_TABLE_ID",
+		"APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID",
+		"APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID",
+		"INSIGHTS_SYNC_ENABLED",
 		"WEBHOOK_VERIFY_TOKEN",
 		"FACEBOOK_APP_SECRET",
 		"CRON_SECRET",

@@ -22,7 +22,7 @@ type OAuthTokenExchanger interface {
 }
 
 type CreatorProfileStore interface {
-	StoreCreatorProfile(ctx context.Context, clerkID string, data map[string]any) (bool, error)
+	StoreCreatorProfile(ctx context.Context, clerkID string, data map[string]any) (rowID string, ok bool, err error)
 }
 
 type WebhookSubscriber interface {
@@ -37,7 +37,11 @@ type InstagramOAuthHandler struct {
 	AppSecret   string
 	RedirectURI string
 	Now         func() time.Time
-	logger      *slog.Logger
+	// InsightsFirstSync, when set, runs the first-party insights sync for the
+	// freshly connected creator in a background goroutine after their profile
+	// is stored — the app has data on first open instead of after the daily sweep.
+	InsightsFirstSync func(ctx context.Context, creatorRowID, accessToken, igUserID string)
+	logger            *slog.Logger
 }
 
 func NewInstagramOAuthHandler(
@@ -209,7 +213,7 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	// directly from the creators row and calls graph.instagram.com, so it must
 	// be usable without backend decryption.
 	creatorData := oauth.BuildCreatorData(profile, longToken.AccessToken, tokenExpiresAt, clerkID, now)
-	ok, err := h.Store.StoreCreatorProfile(c.Request.Context(), clerkID, creatorData)
+	rowID, ok, err := h.Store.StoreCreatorProfile(c.Request.Context(), clerkID, creatorData)
 	if err != nil {
 		h.logger.Error("instagram oauth store profile failed",
 			"clerk_user_id", clerkID,
@@ -234,6 +238,21 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 		"username", username,
 		"token_expires_at", tokenExpiresAt,
 	)
+
+	if h.InsightsFirstSync != nil && rowID != "" {
+		accessToken := longToken.AccessToken
+		igUserID := firstNonEmpty(profile.UserID, profile.ID)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			defer func() {
+				if rec := recover(); rec != nil {
+					h.logger.Error("insights first sync panic recovered", "creator_id", rowID, "recover", rec)
+				}
+			}()
+			h.InsightsFirstSync(ctx, rowID, accessToken, igUserID)
+		}()
+	}
 
 	if h.Subscriber != nil {
 		// OpenReply / Meta: subscribe with professional user_id (webhook entry.id).

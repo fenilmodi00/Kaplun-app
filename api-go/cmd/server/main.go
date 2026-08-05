@@ -26,6 +26,7 @@ import (
 	"kaplun/api-go/internal/router"
 	"kaplun/api-go/internal/services/automations"
 	"kaplun/api-go/internal/services/bridge"
+	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/services/oauth"
 	"kaplun/api-go/internal/services/reconcile"
 	"kaplun/api-go/internal/store"
@@ -245,6 +246,25 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		logger.Warn("automations store disabled: set all APPWRITE_*_TABLE_ID env vars")
 	}
 
+	var insightsStore *store.InsightsStore
+	if awClient != nil && cfg.HasInsightsTables() {
+		insightsStore = store.NewInsightsStore(awClient, store.InsightsTables{
+			Creators:                    cfg.AppwriteCreatorsTableID,
+			CreatorMedia:                cfg.AppwriteCreatorMediaTableID,
+			CreatorInsightDays:          cfg.AppwriteCreatorInsightDaysTableID,
+			CreatorAudienceDemographics: cfg.AppwriteCreatorAudienceDemographicsTableID,
+		})
+		logger.Info("insights store ready")
+	} else if awClient != nil {
+		logger.Warn("insights store disabled: set APPWRITE_CREATOR_MEDIA_TABLE_ID, APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID, APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID")
+	}
+
+	var insightsSvc *insights.Service
+	if insightsStore != nil {
+		insightsSvc = insights.NewService(insights.NewGraphClient(graphClient), insightsStore, logger)
+		logger.Info("insights service ready")
+	}
+
 	// Worker pool + sweeper first so reconcile can enqueue jobs immediately.
 	var pool *worker.Pool
 	if cfg.AutomationSweeperEnabled && autoStore != nil {
@@ -291,6 +311,14 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		startTokenRefreshLoop(loopCtx, autoStore, tokenRefresher, 24*time.Hour, logger)
 	}
 
+	// First-party insights sync: boot backfill + daily sweep, gated on its own
+	// flag (independent of the automation sweeper).
+	if insightsSvc != nil && cfg.InsightsSyncEnabled {
+		insightsLoopCtx, insightsLoopCancel := context.WithCancel(context.Background())
+		cleanups = append(cleanups, insightsLoopCancel)
+		startInsightsSyncLoop(insightsLoopCtx, insightsSvc, cfg.InsightsSyncEnabled, logger)
+	}
+
 	if autoStore != nil && deps.ClerkAuth != nil {
 		deps.Automations = handlers.NewAutomationsHandler(automations.NewService(autoStore))
 		logger.Info("route enabled", "path", "/automations/*")
@@ -333,10 +361,15 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		if reconcileSvc != nil {
 			cronReconciler = cronReconcileAdapter{svc: reconcileSvc}
 		}
+		var insightsSyncer handlers.InsightsSyncer
+		if insightsSvc != nil {
+			insightsSyncer = insightsSvc
+		}
 		deps.Cron = handlers.NewCronHandler(
 			autoStore,
 			tokenRefresher,
 			cronReconciler,
+			insightsSyncer,
 		)
 		deps.Cron.Log = logger
 		logger.Info("route enabled", "path", "/cron/* (store + token refresh + reconcile wired)")
@@ -370,6 +403,15 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			// Meta Step 3: POST /{ig-user-id}/subscribed_apps after OAuth so
 			// comments/messages webhooks actually deliver for that IG account.
 			oauthHandler.Subscriber = graphClient
+			if insightsSvc != nil {
+				svc := insightsSvc
+				oauthHandler.InsightsFirstSync = func(ctx context.Context, creatorRowID, accessToken, igUserID string) {
+					res := svc.SyncCreator(ctx, creatorRowID, accessToken, igUserID)
+					if res.Error != "" {
+						logger.Warn("insights first sync failed", "creator_id", creatorRowID, "error", res.Error)
+					}
+				}
+			}
 			deps.InstagramOAuth = oauthHandler
 			logger.Info("route enabled",
 				"path", "GET /instagram/callback",

@@ -215,10 +215,11 @@ func (c *Client) CreateUserSession(ctx context.Context, clerkUserID string) (mod
 	return models.BridgeSession{UserID: appwriteUID, Secret: secret}, nil
 }
 
-// StoreCreatorProfile upserts a creators row keyed by clerk_user_id.
-func (c *Client) StoreCreatorProfile(ctx context.Context, clerkUserID string, profile map[string]any) (bool, error) {
+// StoreCreatorProfile upserts a creators row keyed by clerk_user_id and
+// returns the row's $id (known on update, decoded from the create response).
+func (c *Client) StoreCreatorProfile(ctx context.Context, clerkUserID string, profile map[string]any) (string, bool, error) {
 	if strings.TrimSpace(clerkUserID) == "" {
-		return false, errors.New("clerk user id is required")
+		return "", false, errors.New("clerk user id is required")
 	}
 	if profile == nil {
 		profile = map[string]any{}
@@ -230,25 +231,27 @@ func (c *Client) StoreCreatorProfile(ctx context.Context, clerkUserID string, pr
 		QueryLimit(1),
 	})
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	perms := UserPermissions(clerkUserID)
 	if len(result.Rows) > 0 {
 		docID, _ := result.Rows[0]["$id"].(string)
 		if docID == "" {
-			return false, errors.New("creator row missing $id")
+			return "", false, errors.New("creator row missing $id")
 		}
 		if _, err := c.UpdateRow(ctx, c.creatorsTableID, docID, profile, perms); err != nil {
-			return false, err
+			return "", false, err
 		}
-		return true, nil
+		return docID, true, nil
 	}
 
-	if _, err := c.CreateRow(ctx, c.creatorsTableID, UniqueID, profile, perms); err != nil {
-		return false, err
+	created, err := c.CreateRow(ctx, c.creatorsTableID, UniqueID, profile, perms)
+	if err != nil {
+		return "", false, err
 	}
-	return true, nil
+	docID, _ := created["$id"].(string)
+	return docID, true, nil
 }
 
 // EnsureCreatorProfile creates a minimal creators row when one does not exist.
