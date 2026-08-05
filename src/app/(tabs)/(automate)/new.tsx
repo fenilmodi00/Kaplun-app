@@ -1,31 +1,22 @@
 /**
  * Campaign builder screen — sectioned comment-automation flow.
  *
- * Modeled on the ManyChat-style mobile builder:
- * trigger → post picker → keyword filter → DM/reply actions → activate.
- * Uses the existing backend contract (CreateAutomationInput) unchanged.
+ * Styled with NativeWind v5 className via `@/tw` primitives +
+ * `src/components/ui/*` gluestack-shaped component library +
+ * `@expo/ui` native controls.
  *
- * NOTE: This screen intentionally uses raw React Native components +
- * StyleSheet instead of `@/tw` className primitives. The useCssElement
- * bridge drops layout classes (padding, alignment, fixed sizes) on
- * Android, which made cards and chips balloon to fill the screen.
- * Raw RN is the documented escape hatch for that layout bug
- * (see src/tw/AGENTS.md; precedent: AuthScreen, ClayAnimatedButton).
+ * NOTE: verify layout on Android before editing — this screen previously
+ * suffered from a `useCssElement` layout bug (ballooned cards, floating text).
+ * Raw KeyboardAvoidingView is the documented escape hatch.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dimensions,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
+  View as RNView,
+  ScrollView as RNScrollView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -34,6 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
@@ -50,35 +42,16 @@ import type {
 } from '@/lib/automations';
 import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
-
-/* ── Design tokens (mirrors src/global.css @theme — raw-RN screens can't
-   consume Tailwind classes, so the Clay hex values are referenced directly) */
-const COLORS = {
-  canvas: '#fffaf0',
-  ink: '#0a0a0a',
-  body: '#3a3a3a',
-  muted: '#6a6a6a',
-  mutedSoft: '#9a9a9a',
-  hairline: '#e5e5e5',
-  surfaceSoft: '#faf5e8',
-  surfaceStrong: '#ebe6d6',
-  lavender: '#b8a4ed',
-  lavenderTint: 'rgba(184, 164, 237, 0.10)',
-  pink: '#ff4d8b',
-  pinkTint: 'rgba(255, 77, 139, 0.12)',
-  coral: '#ff6b5a',
-  coralTint: 'rgba(255, 107, 90, 0.10)',
-  coralBorder: 'rgba(255, 107, 90, 0.30)',
-  error: '#ef4444',
-  white: '#ffffff',
-  inkOverlay: 'rgba(10, 10, 10, 0.7)',
-};
-
-const FONT = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-};
+import { View, Text, Pressable, ScrollView } from '@/tw';
+import { Image } from '@/tw/image';
+import { cn } from '@/tw/cn';
+import { Card } from '@/components/ui/card';
+import { Badge, BadgeText } from '@/components/ui/badge';
+import { RadioGroup, Radio, RadioIndicator, RadioLabel } from '@/components/ui/radio';
+import { Input, InputField, type InputFieldRef } from '@/components/ui/input';
+import { Textarea, TextareaInput, type TextareaInputRef } from '@/components/ui/textarea';
+import { ToggleCard } from '@/components/ui/toggle-card';
+import { Reveal, Pop } from '@/components/ui/reveal';
 
 const TARGET_OPTIONS: { value: TargetType; label: string; description?: string }[] = [
   { value: 'specific_posts', label: 'a specific post or reel' },
@@ -126,103 +99,18 @@ function useMediaPicker() {
   return { media, loading, error, hasLoaded, loadMedia };
 }
 
-function RadioCard({
-  selected,
-  title,
-  description,
-  onPress,
-  children,
-}: {
-  selected: boolean;
-  title: string;
-  description?: string;
-  onPress: () => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.radioCard, selected && styles.radioCardSelected]}
-    >
-      <View style={styles.radioRow}>
-        <View style={[styles.radioDot, selected && styles.radioDotSelected]}>
-          {selected && <View style={styles.radioDotInner} />}
-        </View>
-        <View style={styles.radioBody}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          {description ? <Text style={styles.cardDesc}>{description}</Text> : null}
-          {children}
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
-function ToggleCard({
-  title,
-  description,
-  value,
-  onValueChange,
-  switchAccessibilityLabel,
-}: {
-  title: string;
-  description?: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  switchAccessibilityLabel?: string;
-}) {
-  return (
-    <View style={styles.toggleCard}>
-      <View style={styles.toggleTextWrap}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        {description ? <Text style={styles.cardDesc}>{description}</Text> : null}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        accessibilityLabel={switchAccessibilityLabel ?? title}
-      />
-    </View>
-  );
-}
-
-function SegmentedControl<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((opt) => {
-        const active = opt.value === value;
-        return (
-          <Pressable
-            key={opt.value}
-            onPress={() => onChange(opt.value)}
-            style={[styles.segment, active && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function KeywordChip({ keyword, onRemove }: { keyword: string; onRemove: () => void }) {
   return (
-    <View style={styles.keywordChip}>
-      <Text style={styles.keywordChipText}>{keyword}</Text>
+    <Badge action="info" variant="solid" size="sm" className="h-[30px] px-3">
+      <BadgeText action="info" variant="solid" className="font-medium text-on-primary">
+        {keyword}
+      </BadgeText>
       <Pressable onPress={onRemove} hitSlop={8} accessibilityLabel={`Remove ${keyword}`}>
-        <Text style={styles.keywordChipRemove}>×</Text>
+        <Text className="font-semibold text-on-primary" style={{ fontSize: 15, lineHeight: 18 }}>
+          ×
+        </Text>
       </Pressable>
-    </View>
+    </Badge>
   );
 }
 
@@ -239,8 +127,8 @@ function MediaGrid({
   const displayMedia = showAll ? media : media.slice(0, 4);
 
   return (
-    <View style={styles.mediaGridWrap}>
-      <View style={styles.mediaGrid}>
+    <View className="gap-2.5">
+      <View className="flex-row flex-wrap gap-2">
         {displayMedia.map((item) => {
           const selected = selectedIds.includes(item.id);
           const uri = item.thumbnail_url ?? item.media_url ?? undefined;
@@ -250,30 +138,36 @@ function MediaGrid({
               key={item.id}
               onPress={() => onToggle(item.id)}
               accessibilityLabel={item.caption ?? 'Media thumbnail'}
-              style={[styles.mediaThumb, selected && styles.mediaThumbSelected]}
+              className={cn(
+                'relative overflow-hidden rounded-[10px] border-2 border-hairline',
+                selected && 'border-brand-lavender'
+              )}
+              style={{ width: '23%', aspectRatio: 1 }}
             >
               {uri ? (
                 <Image
                   source={{ uri }}
-                  style={styles.mediaImage}
+                  className="w-full h-full"
                   resizeMode="cover"
                   accessibilityLabel=""
                 />
               ) : (
-                <View style={styles.mediaFallback}>
-                  <Text style={styles.mediaFallbackText}>No img</Text>
+                <View className="flex-1 items-center justify-center bg-surface-soft">
+                  <Text className="text-muted" style={{ fontSize: 12 }}>No img</Text>
                 </View>
               )}
               {isReel && (
-                <View style={styles.reelsBadge}>
-                  <Text style={styles.reelsBadgeText}>REELS</Text>
+                <View className="absolute left-1 top-1 rounded bg-ink/70 px-1.5 py-0.5">
+                  <Text className="font-semibold text-on-primary" style={{ fontSize: 10 }}>REELS</Text>
                 </View>
               )}
               {selected && (
-                <View style={styles.mediaSelectedOverlay}>
-                  <View style={styles.mediaSelectedCheck}>
-                    <Ionicons name="checkmark" size={14} color={COLORS.white} />
-                  </View>
+                <View className="absolute inset-0 items-center justify-center bg-brand-lavender/25">
+                  <Pop>
+                    <View className="w-[22px] h-[22px] rounded-pill items-center justify-center bg-brand-lavender">
+                      <Ionicons name="checkmark" size={14} color="#ffffff" />
+                    </View>
+                  </Pop>
                 </View>
               )}
             </Pressable>
@@ -281,8 +175,10 @@ function MediaGrid({
         })}
       </View>
       {media.length > 4 && (
-        <Pressable onPress={() => setShowAll((s) => !s)} style={styles.showAllBtn}>
-          <Text style={styles.showAllText}>{showAll ? 'Show less' : 'Show All'}</Text>
+        <Pressable onPress={() => setShowAll((s) => !s)} className="self-start py-1">
+          <Text className="font-semibold text-ink" style={{ fontSize: 14 }}>
+            {showAll ? 'Show less' : 'Show All'}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -320,6 +216,7 @@ export default function NewAutomationScreen() {
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(1440);
   const [dmTriggerEnabled, setDmTriggerEnabled] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [isConnectingIg, setIsConnectingIg] = useState(false);
   const [savingPaused, setSavingPaused] = useState(false);
 
@@ -330,12 +227,15 @@ export default function NewAutomationScreen() {
 
   const { media, loading: mediaLoading, error: mediaError, hasLoaded: mediaHasLoaded, loadMedia } = useMediaPicker();
 
+  // ── Programmatic-write refs ─────────────────────────────────────────────
+  const nameRef = useRef<InputFieldRef>(null);
+  const keywordInputRef = useRef<InputFieldRef>(null);
+  const dmMessageRef = useRef<TextareaInputRef>(null);
+  const buttonTextRef = useRef<InputFieldRef>(null);
+  const revealMessageRef = useRef<TextareaInputRef>(null);
+
   // ── Scroll-focused-input-into-view ──────────────────────────────────────
-  // On Android 15 edge-to-edge is enforced, so adjustResize is ignored and
-  // the window never shrinks; RN's ScrollView has no auto-scroll-to-focus.
-  // We track the keyboard height in JS (the channel that works on every
-  // platform here) and scroll the focused input above the keyboard.
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<RNScrollView>(null);
   const scrollYRef = useRef(0);
   const keyboardHeightRef = useRef(0);
   const focusedInputRef = useRef<Measurable | null>(null);
@@ -372,15 +272,27 @@ export default function NewAutomationScreen() {
     };
   }, [scrollFocusedInputIntoView]);
 
-  const handleInputFocus = useCallback((input: Measurable | null) => {
-    focusedInputRef.current = input;
-    // Covers moving between inputs while the keyboard is already open.
+  const handleInputFocus = useCallback((wrapRef: React.RefObject<RNView | null>) => {
+    focusedInputRef.current = wrapRef.current as unknown as Measurable | null;
     scrollFocusedInputIntoView();
   }, [scrollFocusedInputIntoView]);
 
   const handleInputBlur = useCallback(() => {
     focusedInputRef.current = null;
   }, []);
+
+  // Measurement wrapper refs for each input
+  const nameWrapRef = useRef<RNView>(null);
+  const keywordInputWrapRef = useRef<RNView>(null);
+  const dmMessageWrapRef = useRef<RNView>(null);
+  const buttonTextWrapRef = useRef<RNView>(null);
+  const followPromptMessageWrapRef = useRef<RNView>(null);
+  const followPromptButtonLabelWrapRef = useRef<RNView>(null);
+  const revealMessageWrapRef = useRef<RNView>(null);
+  const publicReplyMessageWrapRef = useRef<RNView>(null);
+  const publicReplyMessagesWrapRef = useRef<RNView>(null);
+  const followUpMessageWrapRef = useRef<RNView>(null);
+  const followUpDelayMinutesWrapRef = useRef<RNView>(null);
 
   // Load media when target switches to specific_posts
   useEffect(() => {
@@ -415,19 +327,29 @@ export default function NewAutomationScreen() {
     setMatchAnyWord(false);
     if (slug === null) {
       setName('');
+      nameRef.current?.setText('');
       setKeywords([]);
       setKeywordInput('');
+      keywordInputRef.current?.setText('');
       setDmMessage('');
+      dmMessageRef.current?.setText('');
       setButtonText('');
+      buttonTextRef.current?.setText('');
       setRevealMessage('');
+      revealMessageRef.current?.setText('');
       return;
     }
     const tmpl = templates.find((t) => t.slug === slug);
     if (!tmpl) return;
     setName(tmpl.title);
-    setKeywords(tmpl.keywords.map((k) => k.toLowerCase()));
-    setKeywordInput(tmpl.keywords.map((k) => k.toLowerCase()).join(', '));
+    nameRef.current?.setText(tmpl.title);
+    const lowerKeywords = tmpl.keywords.map((k) => k.toLowerCase());
+    setKeywords(lowerKeywords);
+    const kwInput = lowerKeywords.join(', ');
+    setKeywordInput(kwInput);
+    keywordInputRef.current?.setText(kwInput);
     setDmMessage(tmpl.dm_message);
+    dmMessageRef.current?.setText(tmpl.dm_message);
   }, [templates]);
 
   const syncKeywordsFromInput = useCallback((text: string) => {
@@ -452,12 +374,14 @@ export default function NewAutomationScreen() {
     const next = [...current, kw].join(', ');
     setKeywordInput(next);
     syncKeywordsFromInput(next);
+    keywordInputRef.current?.setText(next);
   }, [keywordInput, syncKeywordsFromInput]);
 
   const handleRemoveKeyword = useCallback((kw: string) => {
     const next = keywords.filter((k) => k !== kw).join(', ');
     setKeywordInput(next);
     syncKeywordsFromInput(next);
+    keywordInputRef.current?.setText(next);
   }, [keywords, syncKeywordsFromInput]);
 
   const toggleMedia = useCallback((id: string) => {
@@ -496,6 +420,7 @@ export default function NewAutomationScreen() {
   const isValid = validationErrors.length === 0;
 
   const handleSubmit = useCallback(async (goLive: boolean) => {
+    setSubmitAttempted(true);
     if (!isValid || creating || savingPaused) return;
     setSubmitError(null);
 
@@ -570,29 +495,30 @@ export default function NewAutomationScreen() {
   const previewMessage = dmMessage.replace(/{username}/g, '@yourfan');
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior="padding"
-    >
-      {/* ── Fixed header (outside ScrollView — content never slides under
-             the transparent status bar) ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+      {/* ── Fixed header ── */}
+      <View
+        className="flex-row items-center justify-between px-2 pb-2.5 bg-canvas border-b border-hairline"
+        style={{ paddingTop: insets.top + 8 }}
+      >
         <Pressable
           onPress={() => router.back()}
           accessibilityLabel="Back"
-          style={styles.headerBtn}
+          className="w-10 h-10 items-center justify-center"
           hitSlop={8}
         >
-          <Ionicons name="chevron-back" size={24} color={COLORS.ink} />
+          <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
         </Pressable>
-        <Text style={styles.headerTitle}>New Automation</Text>
-        <View style={styles.headerBtn} />
+        <Text className="font-semibold text-ink" style={{ fontSize: 17, lineHeight: 22, letterSpacing: -0.2 }}>
+          New Automation
+        </Text>
+        <View className="w-10 h-10" />
       </View>
 
       <ScrollView
         ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 24 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -601,28 +527,29 @@ export default function NewAutomationScreen() {
         scrollEventThrottle={16}
       >
         {/* ── Templates ── */}
-        <View style={styles.section}>
-          <Text style={styles.caption}>Start from a template</Text>
+        <View className="gap-2.5">
+          <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+            Start from a template
+          </Text>
           {templatesLoading ? (
-            <Text style={styles.mutedText}>Loading templates…</Text>
+            <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>Loading templates…</Text>
           ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.templateScroll}
+              contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
             >
               <Pressable
                 onPress={() => applyTemplate(null)}
-                style={[
-                  styles.templateChip,
-                  selectedTemplateSlug === null && styles.templateChipActive,
-                ]}
+                className={cn(
+                  'h-9 max-w-[200px] justify-center rounded-pill border border-hairline bg-white px-3.5',
+                  selectedTemplateSlug === null && 'border-brand-lavender bg-brand-lavender'
+                )}
               >
                 <Text
-                  style={[
-                    styles.templateChipText,
-                    selectedTemplateSlug === null && styles.templateChipTextActive,
-                  ]}
+                  className={cn('font-semibold text-ink text-center', selectedTemplateSlug === null && 'text-on-primary')}
+                  style={{ fontSize: 13, lineHeight: 17 }}
+                  numberOfLines={1}
                 >
                   Blank
                 </Text>
@@ -633,11 +560,15 @@ export default function NewAutomationScreen() {
                   <Pressable
                     key={tmpl.slug}
                     onPress={() => applyTemplate(tmpl.slug)}
-                    style={[styles.templateChip, active && styles.templateChipActive]}
+                    className={cn(
+                      'h-9 max-w-[200px] justify-center rounded-pill border border-hairline bg-white px-3.5',
+                      active && 'border-brand-lavender bg-brand-lavender'
+                    )}
                   >
                     <Text
-                      style={[styles.templateChipText, active && styles.templateChipTextActive]}
-                      numberOfLines={2}
+                      className={cn('font-semibold text-ink text-center', active && 'text-on-primary')}
+                      style={{ fontSize: 13, lineHeight: 17 }}
+                      numberOfLines={1}
                     >
                       {tmpl.title}
                     </Text>
@@ -649,55 +580,75 @@ export default function NewAutomationScreen() {
         </View>
 
         {/* ── Campaign name ── */}
-        <View style={styles.section}>
-          <TextInput
-            style={styles.input}
-            placeholder="Automation name"
-            placeholderTextColor={COLORS.mutedSoft}
-            value={name}
-            onChangeText={setName}
-            onFocus={(e) => handleInputFocus(e.currentTarget)}
-            onBlur={handleInputBlur}
-            accessibilityLabel="Automation name"
-          />
+        <View className="gap-2.5">
+          <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+            Campaign name
+          </Text>
+          <RNView ref={nameWrapRef}>
+            <Input>
+              <InputField
+                ref={nameRef}
+                placeholder="Automation name"
+                onChangeText={setName}
+                onFocus={() => handleInputFocus(nameWrapRef)}
+                onBlur={handleInputBlur}
+                accessibilityLabel="Automation name"
+              />
+            </Input>
+          </RNView>
         </View>
 
         {/* ── Trigger ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>When someone comments on</Text>
-          <View style={styles.cardStack}>
+        <View className="gap-2.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+            When someone comments on
+          </Text>
+          <RadioGroup
+            value={targetType}
+            onChange={(value) => {
+              setTargetType(value as TargetType);
+              if (value !== 'specific_posts') {
+                setSelectedMediaIds([]);
+              }
+            }}
+            className="gap-2.5"
+          >
             {TARGET_OPTIONS.map((opt) => (
-              <RadioCard
+              <Card
                 key={opt.value}
-                selected={targetType === opt.value}
-                title={opt.label}
-                description={opt.description}
-                onPress={() => {
-                  setTargetType(opt.value);
-                  if (opt.value !== 'specific_posts') {
-                    setSelectedMediaIds([]);
-                  }
-                }}
+                variant="outline"
+                size="md"
+                className={cn('gap-3 bg-white', targetType === opt.value && 'border-brand-lavender bg-brand-lavender/10')}
               >
+                <Radio value={opt.value}>
+                  <RadioIndicator />
+                  <View className="flex-1 gap-1">
+                    <RadioLabel>{opt.label}</RadioLabel>
+                    {opt.description ? (
+                      <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>{opt.description}</Text>
+                    ) : null}
+                  </View>
+                </Radio>
                 {opt.value === 'specific_posts' && targetType === 'specific_posts' && (
-                  <View style={styles.mediaPickerWrap}>
+                  <Reveal>
+                    <View className="gap-2">
                     {mediaLoading && (
-                      <Text style={styles.mutedText}>Loading posts…</Text>
+                      <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>Loading posts…</Text>
                     )}
                     {mediaError && (
-                      <View style={styles.mediaErrorWrap}>
-                        <Text style={styles.errorText}>
+                      <View className="gap-2">
+                        <Text className="text-error" style={{ fontSize: 14, lineHeight: 20 }}>
                           {mediaError === 'session_expired'
                             ? 'Session expired. Please reconnect Instagram.'
                             : mediaError}
                         </Text>
-                        <Pressable onPress={loadMedia} style={styles.retryBtn}>
-                          <Text style={styles.retryBtnText}>Retry</Text>
+                        <Pressable onPress={loadMedia} className="self-start rounded-md bg-surface-soft px-3 py-2">
+                          <Text className="font-semibold text-ink" style={{ fontSize: 13 }}>Retry</Text>
                         </Pressable>
                       </View>
                     )}
                     {!mediaLoading && !mediaError && media.length === 0 && (
-                      <Text style={styles.mutedText}>No posts found</Text>
+                      <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>No posts found</Text>
                     )}
                     {media.length > 0 && (
                       <MediaGrid
@@ -706,57 +657,75 @@ export default function NewAutomationScreen() {
                         onToggle={toggleMedia}
                       />
                     )}
-                  </View>
+                    </View>
+                  </Reveal>
                 )}
-              </RadioCard>
+              </Card>
             ))}
-          </View>
+          </RadioGroup>
 
           <ToggleCard
             title="also reply to DMs containing keywords"
             description="Auto-reply to inbound DMs that match your keywords"
             value={dmTriggerEnabled}
             onValueChange={setDmTriggerEnabled}
-            switchAccessibilityLabel="Enable DM trigger"
+            accessibilityLabel="Enable DM trigger"
+            className="bg-white"
           />
         </View>
 
         {/* ── Keywords ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>And this comment has</Text>
-          <View style={styles.cardStack}>
-            <RadioCard
-              selected={!matchAnyWord}
-              title="a specific word or words"
-              onPress={() => setMatchAnyWord(false)}
+        <View className="gap-2.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+            And this comment has
+          </Text>
+          <RadioGroup
+            value={matchAnyWord ? 'any_word' : 'specific_words'}
+            onChange={(value) => setMatchAnyWord(value === 'any_word')}
+            className="gap-2.5"
+          >
+            <Card
+              variant="outline"
+              size="md"
+              className={cn('gap-3 bg-white', !matchAnyWord && 'border-brand-lavender bg-brand-lavender/10')}
             >
+              <Radio value="specific_words">
+                <RadioIndicator />
+                <View className="flex-1 gap-1">
+                  <RadioLabel>a specific word or words</RadioLabel>
+                </View>
+              </Radio>
               {!matchAnyWord && (
-                <View style={styles.keywordInner}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter a word or multiple"
-                    placeholderTextColor={COLORS.mutedSoft}
-                    value={keywordInput}
-                    onChangeText={handleKeywordInputChange}
-                    onFocus={(e) => handleInputFocus(e.currentTarget)}
-                    onBlur={handleInputBlur}
-                    accessibilityLabel="Keywords"
-                  />
-                  <Text style={styles.mutedText}>Use commas to separate words</Text>
-                  <View style={styles.exampleRow}>
-                    <Text style={styles.mutedText}>For example:</Text>
+                <View className="gap-2.5">
+                  <RNView ref={keywordInputWrapRef}>
+                    <Input>
+                      <InputField
+                        ref={keywordInputRef}
+                        placeholder="Enter a word or multiple"
+                        onChangeText={handleKeywordInputChange}
+                        onFocus={() => handleInputFocus(keywordInputWrapRef)}
+                        onBlur={handleInputBlur}
+                        accessibilityLabel="Keywords"
+                      />
+                    </Input>
+                  </RNView>
+                  <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
+                    Use commas to separate words
+                  </Text>
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>For example:</Text>
                     {EXAMPLE_KEYWORDS.map((kw) => (
                       <Pressable
                         key={kw}
                         onPress={() => addExampleKeyword(kw)}
-                        style={styles.exampleChip}
+                        className="h-[30px] justify-center rounded-pill border border-hairline bg-surface-soft px-3"
                       >
-                        <Text style={styles.exampleChipText}>{kw}</Text>
+                        <Text className="text-ink" style={{ fontSize: 13 }}>{kw}</Text>
                       </Pressable>
                     ))}
                   </View>
                   {keywords.length > 0 && (
-                    <View style={styles.keywordChipsRow}>
+                    <View className="flex-row flex-wrap gap-2">
                       {keywords.map((kw) => (
                         <KeywordChip key={kw} keyword={kw} onRemove={() => handleRemoveKeyword(kw)} />
                       ))}
@@ -764,70 +733,91 @@ export default function NewAutomationScreen() {
                   )}
                 </View>
               )}
-            </RadioCard>
-            <RadioCard
-              selected={matchAnyWord}
-              title="any word"
-              description="Every comment gets the DM — no keyword filter. Use with care."
-              onPress={() => setMatchAnyWord(true)}
-            />
-          </View>
+            </Card>
+            <Card
+              variant="outline"
+              size="md"
+              className={cn('gap-3 bg-white', matchAnyWord && 'border-brand-lavender bg-brand-lavender/10')}
+            >
+              <Radio value="any_word">
+                <RadioIndicator />
+                <View className="flex-1 gap-1">
+                  <RadioLabel>any word</RadioLabel>
+                  <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>
+                    Every comment gets the DM — no keyword filter. Use with care.
+                  </Text>
+                </View>
+              </Radio>
+            </Card>
+          </RadioGroup>
 
           {!matchAnyWord && (
-            <View style={styles.matchWrap}>
+            <View className="gap-1.5">
               <SegmentedControl
-                options={MATCH_OPTIONS}
-                value={matchMode}
-                onChange={setMatchMode}
+                values={MATCH_OPTIONS.map((o) => o.label)}
+                selectedIndex={MATCH_OPTIONS.findIndex((o) => o.value === matchMode)}
+                onChange={(event) => setMatchMode(MATCH_OPTIONS[event.nativeEvent.selectedSegmentIndex].value)}
+                appearance="light"
+                tintColor="#b8a4ed"
               />
               {matchMode === 'whole_word' && (
-                <Text style={styles.caption}>"link" won't match "linking"</Text>
+                <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+                  &quot;link&quot; won&apos;t match &quot;linking&quot;
+                </Text>
               )}
             </View>
           )}
         </View>
 
         {/* ── Opening DM ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>They will get</Text>
-          <View style={styles.dmCard}>
-            <Text style={styles.cardTitle}>an opening DM</Text>
-            <Text style={styles.caption}>
-              We'll replace {'{username}'} with the commenter's name
+        <View className="gap-2.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+            They will get
+          </Text>
+          <Card variant="outline" size="md" className="gap-2.5 bg-white">
+            <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
+              an opening DM
             </Text>
-            <TextInput
-              style={styles.inputMultiline}
-              placeholder="Hey there! I'm so happy you're here..."
-              placeholderTextColor={COLORS.mutedSoft}
-              value={dmMessage}
-              onChangeText={setDmMessage}
-              onFocus={(e) => handleInputFocus(e.currentTarget)}
-              onBlur={handleInputBlur}
-              multiline
-              maxLength={DM_MAX_LENGTH}
-              accessibilityLabel="DM message"
-            />
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              We&apos;ll replace {'{username}'} with the commenter&apos;s name
+            </Text>
+            <RNView ref={dmMessageWrapRef}>
+              <Textarea>
+                <TextareaInput
+                  ref={dmMessageRef}
+                  placeholder="Hey there! I'm so happy you're here..."
+                  onChangeText={setDmMessage}
+                  onFocus={() => handleInputFocus(dmMessageWrapRef)}
+                  onBlur={handleInputBlur}
+                  maxLength={DM_MAX_LENGTH}
+                  accessibilityLabel="DM message"
+                />
+              </Textarea>
+            </RNView>
             <Text
-              style={[
-                styles.charCounter,
-                dmMessage.length >= DM_MAX_LENGTH && styles.charCounterError,
-              ]}
+              className={cn(
+                'self-end text-muted-soft',
+                dmMessage.length >= DM_MAX_LENGTH && 'text-error'
+              )}
+              style={{ fontSize: 12, lineHeight: 16 }}
             >
               {dmMessage.length}/{DM_MAX_LENGTH}
             </Text>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Button text (e.g. Send me the link)"
-              placeholderTextColor={COLORS.mutedSoft}
-              value={buttonText}
-              onChangeText={setButtonText}
-              onFocus={(e) => handleInputFocus(e.currentTarget)}
-              onBlur={handleInputBlur}
-              maxLength={BUTTON_TEXT_MAX_LENGTH}
-              accessibilityLabel="Button text"
-            />
-          </View>
+            <RNView ref={buttonTextWrapRef}>
+              <Input>
+                <InputField
+                  ref={buttonTextRef}
+                  placeholder="Button text (e.g. Send me the link)"
+                  onChangeText={setButtonText}
+                  onFocus={() => handleInputFocus(buttonTextWrapRef)}
+                  onBlur={handleInputBlur}
+                  maxLength={BUTTON_TEXT_MAX_LENGTH}
+                  accessibilityLabel="Button text"
+                />
+              </Input>
+            </RNView>
+          </Card>
 
           {/* ── Follow gate ── */}
           <ToggleCard
@@ -835,181 +825,186 @@ export default function NewAutomationScreen() {
             description="Only send the link to people who follow your account"
             value={requireFollow}
             onValueChange={setRequireFollow}
-            switchAccessibilityLabel="Enable follow gate"
-          />
-          {requireFollow && (
-            <>
-              <Text style={styles.caption}>
-                Message shown to non-followers (we'll replace {'{username}'} with their name)
-              </Text>
-              <TextInput
-                style={styles.inputMultiline}
-                placeholder="Follow me to unlock the link!"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={followPromptMessage}
-                onChangeText={setFollowPromptMessage}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                multiline
-                accessibilityLabel="Follow prompt message"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Button label (e.g. Follow)"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={followPromptButtonLabel}
-                onChangeText={setFollowPromptButtonLabel}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                maxLength={20}
-                accessibilityLabel="Follow prompt button label"
-              />
-            </>
-          )}
+            accessibilityLabel="Enable follow gate"
+            className="bg-white"
+          >
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              Message shown to non-followers (we&apos;ll replace {'{username}'} with their name)
+            </Text>
+            <RNView ref={followPromptMessageWrapRef}>
+              <Textarea>
+                <TextareaInput
+                  placeholder="Follow me to unlock the link!"
+                  onChangeText={setFollowPromptMessage}
+                  onFocus={() => handleInputFocus(followPromptMessageWrapRef)}
+                  onBlur={handleInputBlur}
+                  accessibilityLabel="Follow prompt message"
+                />
+              </Textarea>
+            </RNView>
+            <RNView ref={followPromptButtonLabelWrapRef}>
+              <Input>
+                <InputField
+                  placeholder="Button label (e.g. Follow)"
+                  onChangeText={setFollowPromptButtonLabel}
+                  onFocus={() => handleInputFocus(followPromptButtonLabelWrapRef)}
+                  onBlur={handleInputBlur}
+                  maxLength={20}
+                  accessibilityLabel="Follow prompt button label"
+                />
+              </Input>
+            </RNView>
+          </ToggleCard>
         </View>
 
         {/* ── Then they will get (button-tap reveal DM) ── */}
         {buttonText.trim().length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>And then, they will get</Text>
-            <View style={styles.dmCard}>
-              <Text style={styles.cardTitle}>a DM with a link</Text>
-              <Text style={styles.caption}>
+          <Reveal>
+            <View className="gap-2.5">
+            <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+              And then, they will get
+            </Text>
+            <Card variant="outline" size="md" className="gap-2.5 bg-white">
+              <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
+                a DM with a link
+              </Text>
+              <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
                 Message revealed after the button is tapped
               </Text>
-              <TextInput
-                style={styles.inputMultiline}
-                placeholder="Write the message with the link..."
-                placeholderTextColor={COLORS.mutedSoft}
-                value={revealMessage}
-                onChangeText={setRevealMessage}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                multiline
-                maxLength={REVEAL_MAX_LENGTH}
-                accessibilityLabel="Link DM message"
-              />
+              <RNView ref={revealMessageWrapRef}>
+                <Textarea>
+                  <TextareaInput
+                    ref={revealMessageRef}
+                    placeholder="Write the message with the link..."
+                    onChangeText={setRevealMessage}
+                    onFocus={() => handleInputFocus(revealMessageWrapRef)}
+                    onBlur={handleInputBlur}
+                    maxLength={REVEAL_MAX_LENGTH}
+                    accessibilityLabel="Link DM message"
+                  />
+                </Textarea>
+              </RNView>
+            </Card>
             </View>
-          </View>
+          </Reveal>
         )}
 
         {/* ── Public reply ── */}
-        <View style={styles.section}>
+        <View className="gap-2.5">
           <ToggleCard
             title="reply to their comments under the post"
             value={publicReplyEnabled}
             onValueChange={setPublicReplyEnabled}
-            switchAccessibilityLabel="Enable public reply"
-          />
-          {publicReplyEnabled && (
-            <>
-              <Text style={styles.caption}>
-                We'll replace {'{username}'} with the commenter's name
+            accessibilityLabel="Enable public reply"
+            className="bg-white"
+          >
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              We&apos;ll replace {'{username}'} with the commenter&apos;s name
+            </Text>
+            <RNView ref={publicReplyMessageWrapRef}>
+              <Textarea>
+                <TextareaInput
+                  placeholder="Write your public reply…"
+                  onChangeText={setPublicReplyMessage}
+                  onFocus={() => handleInputFocus(publicReplyMessageWrapRef)}
+                  onBlur={handleInputBlur}
+                  accessibilityLabel="Public reply message"
+                />
+              </Textarea>
+            </RNView>
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              Add more replies (one per line) — one will be randomly selected each time
+            </Text>
+            <RNView ref={publicReplyMessagesWrapRef}>
+              <Textarea>
+                <TextareaInput
+                  placeholder="Thanks for commenting!&#10;Glad you liked it!&#10;Appreciate the support!"
+                  onChangeText={(text) => setPublicReplyMessages(text.split('\n'))}
+                  onFocus={() => handleInputFocus(publicReplyMessagesWrapRef)}
+                  onBlur={handleInputBlur}
+                  accessibilityLabel="Additional public reply messages"
+                />
+              </Textarea>
+            </RNView>
+            {publicReplyMessages.filter((m) => m.trim()).length > 0 && (
+              <Text className="text-brand-lavender" style={{ fontSize: 13, lineHeight: 18 }}>
+                Pool: {publicReplyMessages.filter((m) => m.trim()).length + (publicReplyMessage.trim() ? 1 : 0)} messages
               </Text>
-              <TextInput
-                style={styles.inputMultiline}
-                placeholder="Write your public reply…"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={publicReplyMessage}
-                onChangeText={setPublicReplyMessage}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                multiline
-                accessibilityLabel="Public reply message"
-              />
-              <Text style={styles.caption}>
-                Add more replies (one per line) — one will be randomly selected each time
-              </Text>
-              <TextInput
-                style={styles.inputMultiline}
-                placeholder="Thanks for commenting!&#10;Glad you liked it!&#10;Appreciate the support!"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={publicReplyMessages.join('\n')}
-                onChangeText={(text) => setPublicReplyMessages(text.split('\n'))}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                multiline
-                accessibilityLabel="Additional public reply messages"
-              />
-              {publicReplyMessages.filter((m) => m.trim()).length > 0 && (
-                <Text style={styles.poolCount}>
-                  Pool: {publicReplyMessages.filter((m) => m.trim()).length + (publicReplyMessage.trim() ? 1 : 0)} messages
-                </Text>
-              )}
-            </>
-          )}
+            )}
+          </ToggleCard>
         </View>
 
         {/* ── Follow-up DM ── */}
-        <View style={styles.section}>
+        <View className="gap-2.5">
           <ToggleCard
             title="send a follow-up message"
             description="Send an appreciation message after the link is delivered"
             value={followUpEnabled}
             onValueChange={setFollowUpEnabled}
-            switchAccessibilityLabel="Enable follow-up message"
-          />
-          {followUpEnabled && (
-            <>
-              <Text style={styles.caption}>
-                We'll replace {'{username}'} with the commenter's name
-              </Text>
-              <TextInput
-                style={styles.inputMultiline}
-                placeholder="Thanks for your interest! Let me know if you have any questions 😊"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={followUpMessage}
-                onChangeText={setFollowUpMessage}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={handleInputBlur}
-                multiline
-                accessibilityLabel="Follow-up message"
-              />
-              <Text style={styles.caption}>
-                Delay before sending (in minutes)
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1440 (24 hours)"
-                placeholderTextColor={COLORS.mutedSoft}
-                value={String(followUpDelayMinutes)}
-                onChangeText={(text) => {
-                  const num = parseInt(text, 10);
-                  if (!isNaN(num) && num > 0) {
-                    setFollowUpDelayMinutes(num);
-                  } else if (text === '') {
-                    setFollowUpDelayMinutes(0);
-                  }
-                }}
-                onFocus={(e) => handleInputFocus(e.currentTarget)}
-                onBlur={() => {
-                  handleInputBlur();
-                  const num = parseInt(String(followUpDelayMinutes), 10);
-                  if (!isNaN(num)) {
-                    setFollowUpDelayMinutes(Math.max(1, Math.min(1440, num)));
-                  }
-                }}
-                keyboardType="number-pad"
-                accessibilityLabel="Follow-up delay in minutes"
-              />
-            </>
-          )}
+            accessibilityLabel="Enable follow-up message"
+            className="bg-white"
+          >
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              We&apos;ll replace {'{username}'} with the commenter&apos;s name
+            </Text>
+            <RNView ref={followUpMessageWrapRef}>
+              <Textarea>
+                <TextareaInput
+                  placeholder="Thanks for your interest! Let me know if you have any questions 😊"
+                  onChangeText={setFollowUpMessage}
+                  onFocus={() => handleInputFocus(followUpMessageWrapRef)}
+                  onBlur={handleInputBlur}
+                  accessibilityLabel="Follow-up message"
+                />
+              </Textarea>
+            </RNView>
+            <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+              Delay before sending (in minutes)
+            </Text>
+            <RNView ref={followUpDelayMinutesWrapRef}>
+              <Input>
+                <InputField
+                  placeholder="1440 (24 hours)"
+                  onChangeText={(text) => {
+                    const num = parseInt(text, 10);
+                    if (!isNaN(num) && num > 0) {
+                      setFollowUpDelayMinutes(num);
+                    } else if (text === '') {
+                      setFollowUpDelayMinutes(0);
+                    }
+                  }}
+                  onFocus={() => handleInputFocus(followUpDelayMinutesWrapRef)}
+                  onBlur={() => {
+                    handleInputBlur();
+                    const num = parseInt(String(followUpDelayMinutes), 10);
+                    if (!isNaN(num)) {
+                      setFollowUpDelayMinutes(Math.max(1, Math.min(1440, num)));
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  accessibilityLabel="Follow-up delay in minutes"
+                />
+              </Input>
+            </RNView>
+          </ToggleCard>
         </View>
 
         {/* ── Preview (Instagram-DM-style bubble) ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preview</Text>
-          <View style={styles.previewCard}>
-            <View style={styles.previewRow}>
-              <View style={styles.previewAvatar}>
-                <Ionicons name="person" size={14} color={COLORS.white} />
+        <View className="gap-2.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+            Preview
+          </Text>
+          <Card variant="outline" size="md" className="gap-2.5 bg-white">
+            <View className="flex-row items-end gap-2">
+              <View className="w-7 h-7 rounded-pill items-center justify-center bg-brand-lavender">
+                <Ionicons name="person" size={14} color="#ffffff" />
               </View>
-              <View style={styles.previewBubble}>
+              <View
+                className="max-w-[80%] rounded-[18px] rounded-bl-md bg-surface-strong px-3.5 py-2.5"
+              >
                 <Text
-                  style={[
-                    styles.previewBubbleText,
-                    !previewMessage && styles.previewBubblePlaceholder,
-                  ]}
+                  className={cn('text-ink', !previewMessage && 'text-muted-soft')}
+                  style={{ fontSize: 14, lineHeight: 20 }}
                   selectable
                 >
                   {previewMessage || 'Your message will appear here'}
@@ -1017,43 +1012,43 @@ export default function NewAutomationScreen() {
               </View>
             </View>
             {buttonText.trim().length > 0 && (
-              <View style={styles.previewButtonWrap}>
-                <View style={styles.previewButton}>
-                  <Text style={styles.previewButtonText}>{buttonText}</Text>
+              <View className="flex-row pl-9">
+                <View className="rounded-[16px] bg-ink px-3.5 py-2">
+                  <Text className="font-semibold text-on-primary" style={{ fontSize: 13 }}>
+                    {buttonText}
+                  </Text>
                 </View>
               </View>
             )}
             {matchAnyWord && (
-              <View style={styles.previewKeywords}>
-                <View style={styles.previewAnyChip}>
-                  <Text style={styles.previewAnyChipText}>any comment</Text>
+              <View className="flex-row flex-wrap gap-1.5 pl-9">
+                <View className="rounded-xl bg-brand-lavender/10 px-2 py-[3px]">
+                  <Text className="font-medium text-ink" style={{ fontSize: 12 }}>any comment</Text>
                 </View>
               </View>
             )}
             {!matchAnyWord && keywords.length > 0 && (
-              <View style={styles.previewKeywords}>
+              <View className="flex-row flex-wrap gap-1.5 pl-9">
                 {keywords.map((kw) => (
-                  <View key={kw} style={styles.previewKeywordChip}>
-                    <Text style={styles.previewKeywordText}>{kw}</Text>
+                  <View key={kw} className="rounded-xl bg-brand-pink/10 px-2 py-[3px]">
+                    <Text className="font-medium text-brand-pink" style={{ fontSize: 12 }}>{kw}</Text>
                   </View>
                 ))}
               </View>
             )}
-          </View>
+          </Card>
         </View>
       </ScrollView>
 
       {/* ── Pinned bottom CTA ── */}
       <View
-        style={[
-          styles.bottomBar,
-          { paddingBottom: insets.bottom + 12 },
-        ]}
+        className="border-t border-hairline bg-canvas px-4 pt-2.5 gap-2"
+        style={{ paddingBottom: insets.bottom + 12 }}
       >
         {submitError === 'instagram_not_connected' && (
           <>
-            <View style={styles.igErrorCard}>
-              <Text style={styles.igErrorText}>
+            <View className="border border-brand-coral/30 rounded-md bg-brand-coral/10 px-3.5 py-3">
+              <Text className="text-brand-coral" style={{ fontSize: 14, lineHeight: 20 }}>
                 Instagram account not connected. Connect your account to enable automations.
               </Text>
             </View>
@@ -1077,10 +1072,12 @@ export default function NewAutomationScreen() {
           </>
         )}
         {submitError && submitError !== 'instagram_not_connected' && (
-          <Text style={styles.submitErrorText}>{submitError}</Text>
+          <Text className="text-center text-error" style={{ fontSize: 14 }}>{submitError}</Text>
         )}
-        {!isValid && !submitError && validationErrors.length > 0 && (
-          <Text style={styles.validationCaption}>{validationErrors[0]}</Text>
+        {!isValid && !submitError && submitAttempted && validationErrors.length > 0 && (
+          <Text className="text-center text-muted-soft" style={{ fontSize: 12, lineHeight: 16 }}>
+            {validationErrors[0]}
+          </Text>
         )}
         <ClayAnimatedButton
           onPress={() => handleSubmit(true)}
@@ -1095,13 +1092,12 @@ export default function NewAutomationScreen() {
           disabled={!isValid || creating || savingPaused}
           accessibilityLabel="Save as paused"
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.draftBtn,
-            (!isValid || creating) && styles.draftBtnDisabled,
-            pressed && styles.draftBtnPressed,
-          ]}
+          className="items-center justify-center min-h-[44px] py-2"
+          style={({ pressed }) => ({
+            opacity: !isValid || creating || savingPaused ? 0.4 : pressed ? 0.6 : 1,
+          })}
         >
-          <Text style={styles.draftBtnText}>
+          <Text className="font-semibold text-muted" style={{ fontSize: 14 }}>
             {savingPaused ? 'Saving…' : 'Save as paused'}
           </Text>
         </Pressable>
@@ -1109,598 +1105,3 @@ export default function NewAutomationScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: COLORS.canvas,
-  },
-
-  /* ── Header ── */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingBottom: 10,
-    backgroundColor: COLORS.canvas,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.hairline,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontFamily: FONT.semibold,
-    fontSize: 17,
-    lineHeight: 22,
-    letterSpacing: -0.2,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-
-  /* ── Scroll layout ── */
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 24,
-  },
-  section: {
-    gap: 10,
-  },
-  cardStack: {
-    gap: 10,
-  },
-  sectionTitle: {
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    letterSpacing: -0.2,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  caption: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.mutedSoft,
-    includeFontPadding: false,
-  },
-  mutedText: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  errorText: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.error,
-    includeFontPadding: false,
-  },
-
-  /* ── Inputs ── */
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    backgroundColor: COLORS.canvas,
-    fontFamily: FONT.regular,
-    fontSize: 16,
-    color: COLORS.ink,
-  },
-  inputMultiline: {
-    minHeight: 96,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: COLORS.canvas,
-    fontFamily: FONT.regular,
-    fontSize: 16,
-    lineHeight: 22,
-    color: COLORS.ink,
-    textAlignVertical: 'top',
-  },
-  charCounter: {
-    alignSelf: 'flex-end',
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: COLORS.mutedSoft,
-    includeFontPadding: false,
-  },
-  charCounterError: {
-    color: COLORS.error,
-  },
-  poolCount: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.lavender,
-    includeFontPadding: false,
-  },
-
-  /* ── Template chips ── */
-  templateScroll: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  templateChip: {
-    minHeight: 40,
-    maxWidth: 170,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.surfaceSoft,
-  },
-  templateChipActive: {
-    borderColor: COLORS.ink,
-    backgroundColor: COLORS.surfaceStrong,
-  },
-  templateChipText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    lineHeight: 17,
-    color: COLORS.ink,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  templateChipTextActive: {
-    color: COLORS.ink,
-  },
-
-  /* ── Radio / toggle cards ── */
-  radioCard: {
-    borderWidth: 1.5,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.canvas,
-    padding: 14,
-  },
-  radioCardSelected: {
-    borderColor: COLORS.lavender,
-    backgroundColor: COLORS.lavenderTint,
-  },
-  radioRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  radioDot: {
-    width: 20,
-    height: 20,
-    marginTop: 1,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: COLORS.hairline,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioDotSelected: {
-    borderColor: COLORS.lavender,
-  },
-  radioDotInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.lavender,
-  },
-  radioBody: {
-    flex: 1,
-    gap: 4,
-  },
-  cardTitle: {
-    fontFamily: FONT.medium,
-    fontSize: 15,
-    lineHeight: 21,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  cardDesc: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  toggleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.canvas,
-    padding: 14,
-  },
-  toggleTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-
-  /* ── Media picker ── */
-  mediaPickerWrap: {
-    marginTop: 10,
-    gap: 8,
-  },
-  mediaErrorWrap: {
-    gap: 8,
-  },
-  retryBtn: {
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  retryBtnText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  mediaGridWrap: {
-    gap: 10,
-  },
-  mediaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  mediaThumb: {
-    position: 'relative',
-    width: '23%',
-    aspectRatio: 1,
-    overflow: 'hidden',
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: COLORS.hairline,
-  },
-  mediaThumbSelected: {
-    borderColor: COLORS.lavender,
-  },
-  mediaImage: {
-    width: '100%',
-    height: '100%',
-  },
-  mediaFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surfaceSoft,
-  },
-  mediaFallbackText: {
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  reelsBadge: {
-    position: 'absolute',
-    left: 4,
-    top: 4,
-    borderRadius: 4,
-    backgroundColor: COLORS.inkOverlay,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  reelsBadgeText: {
-    fontFamily: FONT.semibold,
-    fontSize: 10,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  mediaSelectedOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(184, 164, 237, 0.25)',
-  },
-  mediaSelectedCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.lavender,
-  },
-  showAllBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 4,
-  },
-  showAllText: {
-    fontFamily: FONT.semibold,
-    fontSize: 14,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-
-  /* ── Keywords ── */
-  keywordInner: {
-    marginTop: 10,
-    gap: 10,
-  },
-  exampleRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-  },
-  exampleChip: {
-    height: 30,
-    justifyContent: 'center',
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.surfaceSoft,
-    paddingHorizontal: 12,
-  },
-  exampleChipText: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  keywordChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  keywordChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.lavender,
-    paddingHorizontal: 12,
-  },
-  keywordChipText: {
-    fontFamily: FONT.medium,
-    fontSize: 13,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  keywordChipRemove: {
-    fontFamily: FONT.semibold,
-    fontSize: 15,
-    lineHeight: 18,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  matchWrap: {
-    gap: 6,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceSoft,
-    padding: 3,
-  },
-  segment: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    paddingVertical: 8,
-  },
-  segmentActive: {
-    backgroundColor: COLORS.canvas,
-    elevation: 1,
-  },
-  segmentText: {
-    fontFamily: FONT.medium,
-    fontSize: 13,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  segmentTextActive: {
-    color: COLORS.ink,
-  },
-
-  /* ── DM card ── */
-  dmCard: {
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.surfaceSoft,
-    padding: 14,
-    gap: 10,
-  },
-
-  /* ── Pro coming-soon card ── */
-  proCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.canvas,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  proBadge: {
-    borderRadius: 6,
-    backgroundColor: COLORS.ink,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  proBadgeText: {
-    fontFamily: FONT.semibold,
-    fontSize: 11,
-    letterSpacing: 1,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  proText: {
-    flex: 1,
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-
-  /* ── Preview ── */
-  previewCard: {
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.surfaceSoft,
-    padding: 14,
-    gap: 10,
-  },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  previewAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.lavender,
-  },
-  previewBubble: {
-    maxWidth: '80%',
-    borderRadius: 18,
-    borderBottomLeftRadius: 6,
-    backgroundColor: COLORS.surfaceStrong,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  previewBubbleText: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.ink,
-  },
-  previewBubblePlaceholder: {
-    color: COLORS.mutedSoft,
-  },
-  previewButtonWrap: {
-    flexDirection: 'row',
-    paddingLeft: 36,
-  },
-  previewButton: {
-    borderRadius: 16,
-    backgroundColor: COLORS.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  previewButtonText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  previewKeywords: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    paddingLeft: 36,
-  },
-  previewKeywordChip: {
-    borderRadius: 12,
-    backgroundColor: COLORS.pinkTint,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  previewKeywordText: {
-    fontFamily: FONT.medium,
-    fontSize: 12,
-    color: COLORS.pink,
-    includeFontPadding: false,
-  },
-
-  /* ── Bottom bar ── */
-  bottomBar: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.hairline,
-    backgroundColor: COLORS.canvas,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    gap: 8,
-  },
-  igErrorCard: {
-    borderWidth: 1,
-    borderColor: COLORS.coralBorder,
-    borderRadius: 12,
-    backgroundColor: COLORS.coralTint,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  igErrorText: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.coral,
-  },
-  submitErrorText: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    color: COLORS.error,
-  },
-  validationCaption: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: COLORS.mutedSoft,
-    includeFontPadding: false,
-  },
-  draftBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingVertical: 8,
-  },
-  draftBtnDisabled: {
-    opacity: 0.4,
-  },
-  draftBtnPressed: {
-    opacity: 0.6,
-  },
-  draftBtnText: {
-    fontFamily: FONT.semibold,
-    fontSize: 14,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  previewAnyChip: {
-    borderRadius: 12,
-    backgroundColor: COLORS.lavenderTint,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  previewAnyChipText: {
-    fontFamily: FONT.medium,
-    fontSize: 12,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-});

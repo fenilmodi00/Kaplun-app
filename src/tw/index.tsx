@@ -33,16 +33,14 @@ export function Text(props: React.ComponentProps<typeof RNText> & { className?: 
 }
 Text.displayName = 'CSS(Text)';
 
-export function ScrollView(
-  props: React.ComponentProps<typeof RNScrollView> & {
-    className?: string; contentContainerClassName?: string;
-  },
-): React.ReactElement {
-  return useCssElement(RNScrollView as unknown as React.ComponentType<Record<string, unknown>>, props, {
+export const ScrollView = React.forwardRef<RNScrollView, React.ComponentProps<typeof RNScrollView> & {
+  className?: string; contentContainerClassName?: string;
+}>(function ScrollView(props, ref) {
+  return useCssElement(RNScrollView as unknown as React.ComponentType<Record<string, unknown>>, { ...props, ref }, {
     className: 'style',
     contentContainerClassName: 'contentContainerStyle',
   });
-}
+});
 ScrollView.displayName = 'CSS(ScrollView)';
 
 export function Pressable(

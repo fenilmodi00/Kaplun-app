@@ -1,17 +1,20 @@
 /**
  * Automations list screen — connection gate, stats, and campaign rows.
  *
- * NOTE: raw React Native + StyleSheet instead of `@/tw` className primitives.
- * The useCssElement bridge drops layout classes on Android (ballooned cards,
- * floating text) — same failure this screen had before. See src/tw/AGENTS.md
- * for the documented raw-RN escape hatch.
+ * Styled with NativeWind v5 className via `@/tw` primitives.
+ * The per-row toggle is an `@expo/ui` Host island (SwiftUI/Material You Switch).
+ *
+ * NOTE: verify layout on Android before editing — this screen previously
+ * suffered from a `useCssElement` layout bug (ballooned cards, floating text).
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Host, Switch as ExpoUISwitch } from '@expo/ui';
+import { View, Text, Pressable, ScrollView } from '@/tw';
 import { useAutomations, useOverviewStats } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
@@ -19,26 +22,6 @@ import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 import type { Automation } from '@/lib/automations';
-
-const COLORS = {
-  canvas: '#fffaf0',
-  ink: '#0a0a0a',
-  muted: '#6a6a6a',
-  mutedSoft: '#9a9a9a',
-  hairline: '#e5e5e5',
-  surfaceSoft: '#faf5e8',
-  surfaceCard: '#f5f0e0',
-  lavender: '#b8a4ed',
-  error: '#ef4444',
-  white: '#ffffff',
-  success: '#22c55e',
-};
-
-const FONT = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-};
 
 function getTargetSummary(automation: Automation): string {
   switch (automation.target_type) {
@@ -70,10 +53,12 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
   }, [shake]);
 
   return (
-    <View style={styles.stateWrap}>
+    <View className="flex-1 items-center justify-center gap-3.5 p-4">
       <AnimatedView style={animatedStyle}>
-        <View style={styles.stateInner}>
-          <Text style={styles.stateError}>{error}</Text>
+        <View className="max-w-[320px] items-center gap-3.5">
+          <Text className="text-center text-error" style={{ fontSize: 14, lineHeight: 20 }}>
+            {error}
+          </Text>
           <ClayAnimatedButton variant="secondary" onPress={onRetry}>
             Retry
           </ClayAnimatedButton>
@@ -87,18 +72,26 @@ function StatsCard() {
   const { stats, loading } = useOverviewStats();
 
   return (
-    <View style={[styles.card, styles.statsCard]}>
-      <View style={styles.statsRow}>
-        <View style={styles.statCell}>
-          <Text style={styles.statValue}>{loading ? '--' : stats?.sent_7d ?? 0}</Text>
-          <Text style={styles.statLabel}>DMs sent (7d)</Text>
+    <View className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-1">
+      <View className="flex-row justify-around">
+        <View className="items-center gap-0.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 24, lineHeight: 30 }}>
+            {loading ? '--' : stats?.sent_7d ?? 0}
+          </Text>
+          <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>
+            DMs sent (7d)
+          </Text>
         </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statValue}>{loading ? '--' : stats?.top_keyword_7d || '—'}</Text>
-          <Text style={styles.statLabel}>Top keyword</Text>
+        <View className="items-center gap-0.5">
+          <Text className="font-semibold text-ink" style={{ fontSize: 24, lineHeight: 30 }}>
+            {loading ? '--' : stats?.top_keyword_7d || '—'}
+          </Text>
+          <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>
+            Top keyword
+          </Text>
         </View>
       </View>
-      <Text style={styles.statsFooter}>
+      <Text className="mt-1.5 text-center text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
         {loading
           ? 'Loading stats...'
           : `${stats?.active_automations ?? 0} active automation${(stats?.active_automations ?? 0) !== 1 ? 's' : ''}`}
@@ -115,10 +108,12 @@ function ConnectionGate({
   isConnecting: boolean;
 }) {
   return (
-    <View style={[styles.card, styles.gateCard]}>
-      <View style={styles.gateHeader}>
-        <Ionicons name="logo-instagram" size={32} color={COLORS.ink} />
-        <Text style={styles.gateTitle}>Connect Instagram to enable automations</Text>
+    <View className="border border-brand-lavender rounded-[14px] bg-brand-lavender p-3.5 gap-3.5">
+      <View className="items-center gap-2 py-3">
+        <Ionicons name="logo-instagram" size={32} color="#0a0a0a" />
+        <Text className="text-center font-medium text-ink" style={{ fontSize: 16, lineHeight: 22 }}>
+          Connect Instagram to enable automations
+        </Text>
       </View>
       <ClayAnimatedButton
         variant="primary"
@@ -135,8 +130,10 @@ function ConnectionGate({
 function EmptyState() {
   const router = useRouter();
   return (
-    <View style={styles.stateWrap}>
-      <Text style={styles.stateMuted}>No automations yet</Text>
+    <View className="flex-1 items-center justify-center gap-3.5 p-4">
+      <Text className="text-center text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
+        No automations yet
+      </Text>
       <ClayAnimatedButton
         variant="primary"
         onPress={() => router.push('./new' as never)}
@@ -151,44 +148,56 @@ function AutomationRow({
   automation,
   onPress,
   onToggle,
+  disabled,
 }: {
   automation: Automation;
   onPress: () => void;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   const isError = automation.status === 'error';
 
   return (
-    <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
+    <Pressable onPress={onPress} className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-2">
+      <View className="flex-row items-center justify-between gap-2">
+        <Text className="flex-1 font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22 }} numberOfLines={1}>
           {automation.name}
         </Text>
         {isError && (
-          <View style={styles.errorBadge}>
-            <Text style={styles.errorBadgeText}>Reconnect needed</Text>
+          <View className="rounded-pill bg-error px-2.5 py-1">
+            <Text className="font-semibold text-on-primary" style={{ fontSize: 13 }}>
+              Reconnect needed
+            </Text>
           </View>
         )}
       </View>
 
-      <View style={styles.rowMeta}>
-        <Text style={styles.metaText}>{getTargetSummary(automation)}</Text>
-        <Text style={styles.metaDot}>•</Text>
-        <Text style={[styles.metaText, styles.metaKeywords]} numberOfLines={1}>
+      <View className="flex-row items-center gap-2">
+        <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
+          {getTargetSummary(automation)}
+        </Text>
+        <Text className="text-muted-soft" style={{ fontSize: 14 }}>
+          •
+        </Text>
+        <Text className="flex-1 text-muted" style={{ fontSize: 14, lineHeight: 20 }} numberOfLines={1}>
           {getKeywordsPreview(automation)}
         </Text>
       </View>
 
-      <View style={[styles.rowBetween, styles.rowBottom]}>
-        <View style={styles.sentPill}>
-          <Text style={styles.sentPillText}>-- sent</Text>
+      <View className="flex-row items-center justify-between gap-2 mt-1">
+        <View className="rounded-pill bg-surface-card px-2.5 py-1">
+          <Text className="font-semibold text-muted" style={{ fontSize: 13 }}>
+            -- sent
+          </Text>
         </View>
-        <Switch
-          testID="automation-switch"
-          value={automation.status === 'active'}
-          onValueChange={onToggle}
-          trackColor={{ false: COLORS.hairline, true: COLORS.success }}
-        />
+        <Host matchContents colorScheme="light" seedColor="#22c55e">
+          <ExpoUISwitch
+            testID="automation-switch"
+            value={automation.status === 'active'}
+            onValueChange={onToggle}
+            disabled={disabled}
+          />
+        </Host>
       </View>
     </Pressable>
   );
@@ -197,25 +206,30 @@ function AutomationRow({
 function Header({ onAdd }: { onAdd: () => void }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-      <View style={styles.headerTextWrap}>
-        <Text style={styles.headerTitle}>Automations</Text>
-        <Text style={styles.headerSubtitle}>Auto-DM when followers comment keywords</Text>
+    <View className="flex-row items-start justify-between pb-2" style={{ paddingTop: insets.top + 12 }}>
+      <View className="flex-1 gap-0.5">
+        <Text className="font-semibold text-ink" style={{ fontSize: 21, lineHeight: 27, letterSpacing: -0.4 }}>
+          Automations
+        </Text>
+        <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
+          Auto-DM when followers comment keywords
+        </Text>
       </View>
       <Pressable
         onPress={onAdd}
         accessibilityLabel="Create automation"
         hitSlop={8}
-        style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+        className="h-11 w-11 rounded-md items-center justify-center bg-ink/[0.06]"
+        style={({ pressed }) => ({ backgroundColor: pressed ? 'rgba(10,10,10,0.14)' : undefined })}
       >
-        <Ionicons name="add" size={22} color={COLORS.ink} />
+        <Ionicons name="add" size={22} color="#0a0a0a" />
       </Pressable>
     </View>
   );
 }
 
 function SkeletonRow() {
-  return <View style={styles.skeleton} />;
+  return <View className="h-[88px] rounded-[14px] border border-hairline bg-white" />;
 }
 
 export default function AutomateScreen() {
@@ -230,6 +244,7 @@ export default function AutomateScreen() {
     error: automationsError,
     refresh,
     toggleStatus,
+    togglingId,
   } = useAutomations();
 
   const handleConnect = useCallback(async () => {
@@ -267,23 +282,27 @@ export default function AutomateScreen() {
         automation={item}
         onPress={() => handlePress(item)}
         onToggle={() => handleToggle(item)}
+        disabled={togglingId === item.$id}
       />
     ),
-    [handlePress, handleToggle]
+    [handlePress, handleToggle, togglingId]
   );
 
   const keyExtractor = useCallback((item: Automation) => item.$id, []);
 
   const listBottomPadding = insets.bottom + TAB_BAR_CLEARANCE;
 
+  const scrollContentStyle = { paddingHorizontal: 16, paddingTop: 4, gap: 12, paddingBottom: listBottomPadding };
+  const scrollContentCenterStyle = { paddingHorizontal: 16, paddingTop: 4, gap: 12, flexGrow: 1, justifyContent: 'center' as const, paddingBottom: listBottomPadding };
+
   // Connection-check loading state
   if (gateLoading) {
     return (
-      <View style={styles.screen}>
+      <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: listBottomPadding }]}>
+        <ScrollView contentContainerStyle={scrollContentStyle}>
           <StatsCard />
-          <View style={styles.skeletonStack}>
+          <View className="gap-2.5 py-2">
             <SkeletonRow />
             <SkeletonRow />
             <SkeletonRow />
@@ -296,9 +315,9 @@ export default function AutomateScreen() {
   // Not connected
   if (!connected) {
     return (
-      <View style={styles.screen}>
+      <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: listBottomPadding }]}>
+        <ScrollView contentContainerStyle={scrollContentStyle}>
           <ConnectionGate onConnect={handleConnect} isConnecting={isConnecting} />
         </ScrollView>
       </View>
@@ -308,11 +327,11 @@ export default function AutomateScreen() {
   // Connected — loading
   if (automationsLoading) {
     return (
-      <View style={styles.screen}>
+      <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: listBottomPadding }]}>
+        <ScrollView contentContainerStyle={scrollContentStyle}>
           <StatsCard />
-          <View style={styles.skeletonStack}>
+          <View className="gap-2.5 py-2">
             <SkeletonRow />
             <SkeletonRow />
             <SkeletonRow />
@@ -324,11 +343,9 @@ export default function AutomateScreen() {
 
   if (automationsError) {
     return (
-      <View style={styles.screen}>
+      <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, styles.centerContent, { paddingBottom: listBottomPadding }]}
-        >
+        <ScrollView contentContainerStyle={scrollContentCenterStyle}>
           <StatsCard />
           <ErrorState error={automationsError} onRetry={refresh} />
         </ScrollView>
@@ -338,11 +355,9 @@ export default function AutomateScreen() {
 
   if (automations.length === 0) {
     return (
-      <View style={styles.screen}>
+      <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, styles.centerContent, { paddingBottom: listBottomPadding }]}
-        >
+        <ScrollView contentContainerStyle={scrollContentCenterStyle}>
           <StatsCard />
           <EmptyState />
         </ScrollView>
@@ -352,7 +367,7 @@ export default function AutomateScreen() {
 
   // List state
   return (
-    <View style={styles.screen}>
+    <View className="flex-1 bg-canvas">
       <FlatList
         data={automations}
         renderItem={renderItem}
@@ -363,228 +378,9 @@ export default function AutomateScreen() {
             <StatsCard />
           </>
         }
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: listBottomPadding }]}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: listBottomPadding, gap: 12 }}
         showsVerticalScrollIndicator={false}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: COLORS.canvas,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    gap: 12,
-  },
-  centerContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  skeletonStack: {
-    gap: 10,
-    paddingVertical: 8,
-  },
-  skeleton: {
-    height: 88,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.white,
-  },
-
-  /* Header */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingBottom: 8,
-  },
-  headerTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  headerTitle: {
-    fontFamily: FONT.semibold,
-    fontSize: 21,
-    lineHeight: 27,
-    letterSpacing: -0.4,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  headerSubtitle: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(10,10,10,0.06)',
-  },
-  addBtnPressed: {
-    backgroundColor: 'rgba(10,10,10,0.14)',
-  },
-
-  /* Cards */
-  card: {
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-    borderRadius: 14,
-    backgroundColor: COLORS.canvas,
-    padding: 14,
-    gap: 8,
-  },
-  statsCard: {
-    gap: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statCell: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  statValue: {
-    fontFamily: FONT.semibold,
-    fontSize: 24,
-    lineHeight: 30,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  statLabel: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  statsFooter: {
-    marginTop: 6,
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: COLORS.mutedSoft,
-    includeFontPadding: false,
-  },
-
-  /* Connection gate */
-  gateCard: {
-    backgroundColor: COLORS.lavender,
-    borderColor: COLORS.lavender,
-    gap: 14,
-  },
-  gateHeader: {
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-  },
-  gateTitle: {
-    textAlign: 'center',
-    fontFamily: FONT.medium,
-    fontSize: 16,
-    lineHeight: 22,
-    color: COLORS.ink,
-  },
-
-  /* Rows */
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  rowTitle: {
-    flex: 1,
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: COLORS.ink,
-    includeFontPadding: false,
-  },
-  errorBadge: {
-    borderRadius: 999,
-    backgroundColor: COLORS.error,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  errorBadgeText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    color: COLORS.white,
-    includeFontPadding: false,
-  },
-  rowMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  metaText: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-  metaDot: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    color: COLORS.mutedSoft,
-  },
-  metaKeywords: {
-    flex: 1,
-  },
-  rowBottom: {
-    marginTop: 4,
-  },
-  sentPill: {
-    borderRadius: 999,
-    backgroundColor: COLORS.surfaceCard,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  sentPillText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    color: COLORS.muted,
-    includeFontPadding: false,
-  },
-
-  /* States */
-  stateWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 14,
-    padding: 16,
-  },
-  stateInner: {
-    maxWidth: 320,
-    alignItems: 'center',
-    gap: 14,
-  },
-  stateError: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.error,
-  },
-  stateMuted: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.muted,
-  },
-});
