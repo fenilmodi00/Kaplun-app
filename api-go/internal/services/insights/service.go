@@ -129,10 +129,6 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 	if err != nil {
 		return s.finish(ctx, res, start, err)
 	}
-	if igUserID != "" && profile.ID != "" && profile.ID != igUserID {
-		s.logger.Warn("insights profile id mismatch",
-			"creator_id", creatorRowID, "expected_ig_user_id", igUserID, "got", profile.ID)
-	}
 	if err := s.store.UpdateCreatorProfile(ctx, creatorRowID, profile); err != nil {
 		s.logger.Warn("insights profile persist failed", "creator_id", creatorRowID, "error", err)
 	}
