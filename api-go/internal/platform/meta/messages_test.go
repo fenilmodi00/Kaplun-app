@@ -41,7 +41,7 @@ func TestSendPrivateReplyShape(t *testing.T) {
 	if out["message_id"] != "m1" {
 		t.Fatalf("out: %#v", out)
 	}
-	if seenURL != "https://graph.instagram.com/v25.0/ig123/messages" {
+	if seenURL != "https://graph.instagram.com/v26.0/ig123/messages" {
 		t.Fatalf("url: %s", seenURL)
 	}
 	if seenAuth != "Bearer tok" {
@@ -58,7 +58,7 @@ func TestSendCommentReplyShape(t *testing.T) {
 	t.Parallel()
 
 	client := meta.NewClient(roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.String() != "https://graph.instagram.com/v25.0/cmt9/replies" {
+		if req.URL.String() != "https://graph.instagram.com/v26.0/cmt9/replies" {
 			t.Fatalf("url: %s", req.URL)
 		}
 		var body map[string]any

@@ -9,12 +9,13 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"kaplun/api-go/internal/platform/meta"
 )
 
 const (
-	DefaultGraphAPIVersion = "v25.0"
-	OAuthTokenURL          = "https://api.instagram.com/oauth/access_token"
-	DefaultExpiresInSecs   = 5184000 // 60 days
+	OAuthTokenURL        = "https://api.instagram.com/oauth/access_token"
+	DefaultExpiresInSecs = 5184000 // 60 days
 )
 
 // HTTPClient is injectable for unit tests (no real Meta calls).
@@ -61,7 +62,7 @@ func NewService(client HTTPClient, cfg Config) *Service {
 		client = http.DefaultClient
 	}
 	if cfg.GraphVersion == "" {
-		cfg.GraphVersion = DefaultGraphAPIVersion
+		cfg.GraphVersion = meta.GraphAPIVersion
 	}
 	return &Service{client: client, cfg: cfg}
 }

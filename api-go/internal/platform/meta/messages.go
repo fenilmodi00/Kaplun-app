@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	GraphAPIVersion = "v25.0"
+	GraphAPIVersion = "v26.0"
 	GraphBaseURL    = "https://graph.instagram.com/" + GraphAPIVersion
 )
 
@@ -353,3 +353,4 @@ func IsGraphRateLimit(err error) bool {
 	var e *GraphRateLimitError
 	return errors.As(err, &e)
 }
+
