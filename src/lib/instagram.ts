@@ -30,11 +30,10 @@ import {
 } from './repository';
 import { addLog } from './logger';
 
-// v22.0 is the FIRST version with account insights for the Instagram API with
-// Instagram Login (Business Login for Instagram) — shipped March 2025, see
-// developers.facebook.com/docs/graph-api/changelog/version22.0. On v21.0 every
-// /me/insights call fails regardless of Meta app configuration.
-const GRAPH_API_BASE = 'https://graph.instagram.com/v22.0';
+// Pinned v26.0 (latest Graph API, released 2026-07-29). Instagram-Login account
+// insights require v22.0+ (satisfied). Bump deliberately as older versions
+// approach EOL (v22.0 EOL 2027-05-20).
+const GRAPH_API_BASE = 'https://graph.instagram.com/v26.0';
 const FETCH_TIMEOUT_MS = 15_000;
 
 /** Media fields per Meta docs / openreply — thumbnail_url covers VIDEO+REELS. */
@@ -421,7 +420,7 @@ function isInsightsPermissionError(err: unknown): boolean {
  * Fetches account insights for a rolling window (`GET /me/insights`).
  * Two calls share one token scope: a time-series call (daily `reach` +
  * `follower_count`) and a totals call (`views` + `accounts_engaged`,
- * `metric_type=total_value`). Requires Graph API v22.0+ and the
+  * `metric_type=total_value`). Requires Graph API v22.0+ (pinned v26.0) and the
  * `instagram_business_manage_insights` scope on the token.
  *
  * @throws Error("session_expired") when the stored token is unusable.
