@@ -105,7 +105,7 @@ Auth bridge (once per sign-in):
 | `src/lib/resilient.ts` | `executeWithRetry`, `executeWithTimeout`, `executeWithRetryAndTimeout`. Retries network errors, HTTP 429/5xx, Appwrite code ≥ 500. Never 4xx auth/validation. |
 | `src/lib/auth-bridge.ts` | `createAppwriteSession` + `ensureAppwriteSession(getToken)`. 24h TTL fast path; throws `bridge_failed` on failure. |
 | `src/lib/bridge-context.tsx` | `BridgeProvider` / `useBridge`. AuthGate mounts shell instantly; hooks gate on `isReady`. |
-| `src/lib/instagram.ts` | Direct Instagram Graph API client (v22.0). Reads per-user token from `creators` row; refresh on Meta error 190. Throws `session_expired` / `insights_permission`. |
+| `src/lib/instagram.ts` | Direct Instagram Graph API client (v26.0). Reads per-user token from `creators` row; refresh on Meta error 190. Throws `session_expired` / `insights_permission`. |
 | `src/lib/automations.ts` | Comment-automation engine client. Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL`. |
 | `src/lib/with-fresh-session.ts` | **Dead code** — legacy recovery for the old ig-api-proxy; no app module imports it. Do not reintroduce the proxy. |
 | `src/lib/realtime.ts` | `useRealtimeSubscription(channels, callback)`: 2s debounce coalescing, exponential backoff reconnect (1s→30s), AppState foreground refetch. |
