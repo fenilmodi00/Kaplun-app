@@ -61,28 +61,12 @@ type MediaItemWithInsights struct {
 }
 
 // InsightDay is one day of account-level day-series metrics (Date is
-// YYYY-MM-DD) plus optional slots for the sync-window totals. Reach and
-// FollowerCount are pointers because Meta may return a series for one
-// metric and not the other on a given day.
+// YYYY-MM-DD). Reach and FollowerCount are pointers because Meta may return
+// a series for one metric and not the other on a given day.
 type InsightDay struct {
 	Date          string
 	Reach         *int64
 	FollowerCount *int64
-
-	// Window totals (metric_type=total_value over the sync window). Nil on
-	// plain day-series rows; available for attaching a totals snapshot.
-	Views               *int64
-	AccountsEngaged     *int64
-	ProfileViews        *int64
-	TotalInteractions   *int64
-	Likes               *int64
-	Comments            *int64
-	Saves               *int64
-	Shares              *int64
-	Reposts             *int64
-	Replies             *int64
-	FollowsAndUnfollows *int64
-	ProfileLinksTaps    *int64
 }
 
 // DemographicBreakdown is one (metric, breakdown, dimension) cell from the
@@ -107,9 +91,7 @@ type CreatorRow struct {
 // or the underlying error text.
 type SyncResult struct {
 	CreatorRowID         string
-	ProfileUpdated       bool
 	MediaUpserted        int
-	MediaPruned          int
 	InsightDaysUpserted  int
 	DemographicsUpserted int
 	DurationMs           int64

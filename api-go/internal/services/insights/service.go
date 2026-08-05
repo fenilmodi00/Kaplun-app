@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -72,9 +74,12 @@ func NewService(client GraphClient, store Store, logger *slog.Logger) *Service {
 	}
 }
 
-// SyncAll fans SyncCreator over every creator with a stored access token.
-// Per-creator failures are isolated — one bad token never stops the sweep.
-func (s *Service) SyncAll(ctx context.Context) []*SyncResult {
+// SyncAll fans SyncCreator over every creator with a stored access token,
+// sleeping spacing between creators when positive (the boot backfill path
+// spaces sweeps so an existing install base doesn't burst Meta Graph all at
+// once). Per-creator failures are isolated — one bad token never stops the
+// sweep.
+func (s *Service) SyncAll(ctx context.Context, spacing time.Duration) []*SyncResult {
 	creators, err := s.store.ListCreatorsWithToken(ctx)
 	if err != nil {
 		s.logger.Warn("insights creator list failed", "error", err)
@@ -86,27 +91,23 @@ func (s *Service) SyncAll(ctx context.Context) []*SyncResult {
 			continue
 		}
 		results = append(results, s.SyncCreator(ctx, c.ID, c.AccessToken, c.IGUserID))
+		if spacing > 0 {
+			time.Sleep(spacing)
+		}
 	}
 	return results
 }
 
-// Backfill is SyncAll with 1s spacing between creators — the boot path, so an
-// existing install base doesn't burst Meta Graph all at once.
-func (s *Service) Backfill(ctx context.Context) []*SyncResult {
-	creators, err := s.store.ListCreatorsWithToken(ctx)
-	if err != nil {
-		s.logger.Warn("insights backfill creator list failed", "error", err)
-		return nil
-	}
-	results := make([]*SyncResult, 0, len(creators))
-	for _, c := range creators {
-		if c.AccessToken == "" || c.IGUserID == "" {
-			continue
+// CountSyncResults splits a fan-out into synced/failed tallies.
+func CountSyncResults(results []*SyncResult) (synced, failed int) {
+	for _, r := range results {
+		if r.Error != "" {
+			failed++
+		} else {
+			synced++
 		}
-		results = append(results, s.SyncCreator(ctx, c.ID, c.AccessToken, c.IGUserID))
-		time.Sleep(time.Second)
 	}
-	return results
+	return synced, failed
 }
 
 // SyncCreator collects every available Instagram insight for one creator and
@@ -134,8 +135,6 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 	}
 	if err := s.store.UpdateCreatorProfile(ctx, creatorRowID, profile); err != nil {
 		s.logger.Warn("insights profile persist failed", "creator_id", creatorRowID, "error", err)
-	} else {
-		res.ProfileUpdated = true
 	}
 
 	media, err := s.client.GetUserMedia(ctx, accessToken, MediaSyncLimit)
@@ -152,7 +151,7 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 
 		var ins *MediaInsights
 		var ierr error
-		ins, ierr = s.client.GetMediaInsights(ctx, m.ID, accessToken, isReel, mapKeys(excludedMetrics)...)
+		ins, ierr = s.client.GetMediaInsights(ctx, m.ID, accessToken, isReel, slices.Collect(maps.Keys(excludedMetrics))...)
 		if ierr != nil {
 			if meta.IsTokenExpired(ierr) {
 				return s.finish(ctx, res, start, ierr)
@@ -178,8 +177,8 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 				}
 				s.logger.Warn("unsupported metrics detected; retrying media without them",
 					"creator_id", creatorRowID, "media_id", m.ID,
-					"excluded_metrics", mapKeys(excludedMetrics))
-				ins, ierr = s.client.GetMediaInsights(ctx, m.ID, accessToken, isReel, mapKeys(excludedMetrics)...)
+					"excluded_metrics", slices.Collect(maps.Keys(excludedMetrics)))
+				ins, ierr = s.client.GetMediaInsights(ctx, m.ID, accessToken, isReel, slices.Collect(maps.Keys(excludedMetrics))...)
 				if ierr == nil {
 					break
 				}
@@ -224,9 +223,7 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 	}
 
 	var demos []DemographicBreakdown
-	demographicsSkipped := false
 	if profile.FollowersCount < MinFollowersForDemographics {
-		demographicsSkipped = true
 		s.logger.Info("demographics skipped",
 			"creator_id", creatorRowID,
 			"followers_count", profile.FollowersCount,
@@ -253,13 +250,6 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 	}
 
 	derived := computeDerived(items, totals, s.now())
-	derived["followers_count"] = profile.FollowersCount
-	derived["media_upserted"] = res.MediaUpserted
-	derived["insight_days_upserted"] = res.InsightDaysUpserted
-	derived["demographics_upserted"] = res.DemographicsUpserted
-	if demographicsSkipped {
-		derived["demographics_skip_reason"] = ErrBelow100Followers.Error()
-	}
 
 	res.DurationMs = s.now().Sub(start).Milliseconds()
 	syncTime := s.now().Format(time.RFC3339Nano)
@@ -312,9 +302,6 @@ func insightsWindow(now time.Time) (since, until string) {
 // accruing and would be persisted as if final. Dates compare lexically
 // because they are YYYY-MM-DD.
 func trailingCompleteDays(days []InsightDay, now time.Time, window int) []InsightDay {
-	if window <= 0 {
-		window = InsightDayUpsertWindow
-	}
 	utc := now.UTC()
 	today := utc.Format("2006-01-02")
 	cutoff := utc.AddDate(0, 0, -window).Format("2006-01-02")
@@ -472,16 +459,6 @@ func parseUnsupportedMetrics(err error) []string {
 		}
 	}
 	return result
-}
-
-// mapKeys returns the string keys of m as a slice. The order is
-// non-deterministic (Go map iteration order).
-func mapKeys(m map[string]bool) []string {
-	s := make([]string, 0, len(m))
-	for k := range m {
-		s = append(s, k)
-	}
-	return s
 }
 
 // parseMediaTimestamp parses Meta's media timestamp. RFC3339 first, with a

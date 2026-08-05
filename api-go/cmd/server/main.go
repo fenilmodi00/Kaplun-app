@@ -316,7 +316,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	if insightsSvc != nil && cfg.InsightsSyncEnabled {
 		insightsLoopCtx, insightsLoopCancel := context.WithCancel(context.Background())
 		cleanups = append(cleanups, insightsLoopCancel)
-		startInsightsSyncLoop(insightsLoopCtx, insightsSvc, cfg.InsightsSyncEnabled, logger)
+		startInsightsSyncLoop(insightsLoopCtx, insightsSvc, logger)
 	}
 
 	if autoStore != nil && deps.ClerkAuth != nil {
@@ -404,9 +404,8 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			// comments/messages webhooks actually deliver for that IG account.
 			oauthHandler.Subscriber = graphClient
 			if insightsSvc != nil {
-				svc := insightsSvc
 				oauthHandler.InsightsFirstSync = func(ctx context.Context, creatorRowID, accessToken, igUserID string) {
-					res := svc.SyncCreator(ctx, creatorRowID, accessToken, igUserID)
+					res := insightsSvc.SyncCreator(ctx, creatorRowID, accessToken, igUserID)
 					if res.Error != "" {
 						logger.Warn("insights first sync failed", "creator_id", creatorRowID, "error", res.Error)
 					}

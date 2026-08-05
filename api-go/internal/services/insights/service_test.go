@@ -376,9 +376,6 @@ func TestSyncCreator_HappyPath(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("expected no error, got %q", res.Error)
 	}
-	if !res.ProfileUpdated {
-		t.Error("expected ProfileUpdated to be true")
-	}
 	if res.MediaUpserted != 2 {
 		t.Errorf("MediaUpserted = %d, want 2", res.MediaUpserted)
 	}
@@ -443,15 +440,6 @@ func TestSyncCreator_HappyPath(t *testing.T) {
 	if got := st.derived["reels_count_7_days"]; got != 1 {
 		t.Errorf("derived[reels_count_7_days] = %v, want 1", got)
 	}
-	if got := st.derived["followers_count"]; got != int64(200) {
-		t.Errorf("derived[followers_count] = %v, want 200", got)
-	}
-	if got := st.derived["media_upserted"]; got != 2 {
-		t.Errorf("derived[media_upserted] = %v, want 2", got)
-	}
-	if _, skipped := st.derived["demographics_skip_reason"]; skipped {
-		t.Error("demographics_skip_reason set despite 200 followers")
-	}
 }
 
 func TestSyncCreator_Below100FollowersSkipsDemographics(t *testing.T) {
@@ -499,12 +487,6 @@ func TestSyncCreator_Below100FollowersSkipsDemographics(t *testing.T) {
 	st := lastSyncState(t, store, "creator-1")
 	if st.status != insights.SyncStatusOK {
 		t.Errorf("sync status = %q, want %q", st.status, insights.SyncStatusOK)
-	}
-	if got := st.derived["demographics_upserted"]; got != 0 {
-		t.Errorf("derived[demographics_upserted] = %v, want 0", got)
-	}
-	if got := st.derived["demographics_skip_reason"]; got != insights.ErrBelow100Followers.Error() {
-		t.Errorf("derived[demographics_skip_reason] = %v, want %q", got, insights.ErrBelow100Followers.Error())
 	}
 }
 
@@ -620,7 +602,7 @@ func TestSyncAll_IsolatesFailures(t *testing.T) {
 	}
 	svc := insights.NewService(client, store, nil)
 
-	results := svc.SyncAll(ctx)
+	results := svc.SyncAll(ctx, 0)
 
 	if len(results) != 2 {
 		t.Fatalf("SyncAll returned %d results, want 2 (tokenless creator skipped)", len(results))

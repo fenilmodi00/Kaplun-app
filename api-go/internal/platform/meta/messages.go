@@ -294,6 +294,12 @@ func (c *Client) request(ctx context.Context, method, rawURL, accessToken string
 	return Handle(data, resp.StatusCode)
 }
 
+// Get performs an authenticated GET request, funnelling the response
+// through Handle.
+func (c *Client) Get(ctx context.Context, rawURL, accessToken string) (map[string]any, error) {
+	return c.request(ctx, http.MethodGet, rawURL, accessToken, nil)
+}
+
 func truncateRunes(s string, max int) string {
 	if max <= 0 || s == "" {
 		return s

@@ -53,7 +53,7 @@ type ReconcileService interface {
 // InsightsSyncer is the first-party insights sweep surface; *insights.Service
 // satisfies it directly.
 type InsightsSyncer interface {
-	SyncAll(ctx context.Context) []*insights.SyncResult
+	SyncAll(ctx context.Context, spacing time.Duration) []*insights.SyncResult
 }
 
 type CronHandler struct {
@@ -152,13 +152,7 @@ func (h *CronHandler) Reconcile(c *gin.Context) {
 func (h *CronHandler) SyncInsights(c *gin.Context) {
 	synced, failed := 0, 0
 	if h.InsightsSync != nil {
-		for _, r := range h.InsightsSync.SyncAll(c.Request.Context()) {
-			if r.Error != "" {
-				failed++
-			} else {
-				synced++
-			}
-		}
+		synced, failed = insights.CountSyncResults(h.InsightsSync.SyncAll(c.Request.Context(), 0))
 	}
 	c.JSON(http.StatusOK, gin.H{"synced": synced, "failed": failed})
 }

@@ -128,8 +128,6 @@ func (s *InsightsStore) PruneCreatorMedia(ctx context.Context, creatorRowID stri
 	for offset := 0; ; offset += insightsPageSize {
 		result, err := s.client.ListRows(ctx, s.tables.CreatorMedia, []string{
 			appwrite.QueryEqual("creator_row_id", creatorRowID),
-			appwrite.QueryOrderDesc("posted_at"),
-			appwrite.QueryOrderDesc("ig_media_id"),
 			appwrite.QueryLimit(insightsPageSize),
 			appwrite.QueryOffset(offset),
 		})
@@ -169,23 +167,11 @@ func (s *InsightsStore) UpsertInsightDays(ctx context.Context, creatorRowID stri
 			return err
 		}
 		data := map[string]any{
-			"creator_row_id":        creatorRowID,
-			"date":                  day.Date,
-			"reach":                 optInt64(day.Reach),
-			"follower_count":        optInt64(day.FollowerCount),
-			"views":                 optInt64(day.Views),
-			"profile_views":         optInt64(day.ProfileViews),
-			"total_interactions":    optInt64(day.TotalInteractions),
-			"likes":                 optInt64(day.Likes),
-			"comments":              optInt64(day.Comments),
-			"saves":                 optInt64(day.Saves),
-			"shares":                optInt64(day.Shares),
-			"reposts":               optInt64(day.Reposts),
-			"replies":               optInt64(day.Replies),
-			"accounts_engaged":      optInt64(day.AccountsEngaged),
-			"follows_and_unfollows": optInt64(day.FollowsAndUnfollows),
-			"profile_links_taps":    optInt64(day.ProfileLinksTaps),
-			"synced_at":             nowISO,
+			"creator_row_id": creatorRowID,
+			"date":           day.Date,
+			"reach":          optInt64(day.Reach),
+			"follower_count": optInt64(day.FollowerCount),
+			"synced_at":      nowISO,
 		}
 		if rowID != "" {
 			if _, err := s.client.UpdateRow(ctx, s.tables.CreatorInsightDays, rowID, data, nil); err != nil {

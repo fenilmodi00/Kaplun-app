@@ -128,26 +128,25 @@ func TestGetMediaInsights_NonReelNoRetry(t *testing.T) {
 	}
 }
 
-// TestGetMediaInsights_DropsRepostsViaExclude verifies that when reposts is
-// excluded via the excludeMetrics parameter, the client builds the metrics
-// string without reposts and the call succeeds.
-func TestGetMediaInsights_DropsRepostsViaExclude(t *testing.T) {
+// TestGetMediaInsights_DropsUnsupportedMetricViaExclude verifies that the
+// excludeMetrics parameter drops a metric from the request and the call
+// succeeds. "saved" stands in for an arbitrary unsupported metric.
+func TestGetMediaInsights_DropsUnsupportedMetricViaExclude(t *testing.T) {
 	t.Parallel()
 	var metricsSeen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		metric := r.URL.Query().Get("metric")
 		metricsSeen = append(metricsSeen, metric)
 		w.Header().Set("Content-Type", "application/json")
-		// Reject any call that still includes reposts.
-		if strings.Contains(metric, "reposts") {
+		// Reject any call that still includes saved.
+		if strings.Contains(metric, "saved") {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, `{"error":{"code":100,"message":"Instagram Insights Media API endpoint does not support the metrics: reposts."}}`)
+			_, _ = io.WriteString(w, `{"error":{"code":100,"message":"Instagram Insights Media API endpoint does not support the metrics: saved."}}`)
 			return
 		}
 		_, _ = io.WriteString(w, `{"data":[
 			{"name":"views","period":"lifetime","values":[{"value":100}]},
 			{"name":"reach","period":"lifetime","values":[{"value":90}]},
-			{"name":"saved","period":"lifetime","values":[{"value":5}]},
 			{"name":"shares","period":"lifetime","values":[{"value":2}]},
 			{"name":"total_interactions","period":"lifetime","values":[{"value":15}]},
 			{"name":"follows","period":"lifetime","values":[{"value":1}]},
@@ -160,33 +159,33 @@ func TestGetMediaInsights_DropsRepostsViaExclude(t *testing.T) {
 	mc.BaseURL = srv.URL
 	client := insights.NewGraphClient(mc)
 
-	// First call without exclude — should fail because reposts is included.
+	// First call without exclude — should fail because saved is included.
 	_, err := client.GetMediaInsights(context.Background(), "m-1", "token", false)
 	if err == nil {
-		t.Fatal("expected error when reposts is included")
+		t.Fatal("expected error when saved is included")
 	}
-	if !strings.Contains(err.Error(), "reposts") {
-		t.Errorf("error should mention reposts, got %v", err)
+	if !strings.Contains(err.Error(), "saved") {
+		t.Errorf("error should mention saved, got %v", err)
 	}
 
-	// Second call with reposts excluded — should succeed.
-	got, err := client.GetMediaInsights(context.Background(), "m-2", "token", false, "reposts")
+	// Second call with saved excluded — should succeed.
+	got, err := client.GetMediaInsights(context.Background(), "m-2", "token", false, "saved")
 	if err != nil {
-		t.Fatalf("expected success after excluding reposts, got %v", err)
+		t.Fatalf("expected success after excluding saved, got %v", err)
 	}
 	if got.Views != 100 || got.Reach != 90 {
 		t.Errorf("Views/Reach = %d/%d, want 100/90", got.Views, got.Reach)
 	}
-	if got.Reposts != 0 {
-		t.Errorf("Reposts = %d, want 0 (metric excluded)", got.Reposts)
+	if got.Saved != 0 {
+		t.Errorf("Saved = %d, want 0 (metric excluded)", got.Saved)
 	}
 
-	// Verify the second call's metrics string does not contain reposts.
+	// Verify the second call's metrics string does not contain saved.
 	if len(metricsSeen) < 2 {
 		t.Fatalf("expected at least 2 calls, got %d", len(metricsSeen))
 	}
-	if strings.Contains(metricsSeen[1], "reposts") {
-		t.Errorf("second call should exclude reposts, got metric=%q", metricsSeen[1])
+	if strings.Contains(metricsSeen[1], "saved") {
+		t.Errorf("second call should exclude saved, got metric=%q", metricsSeen[1])
 	}
 }
 
@@ -217,28 +216,28 @@ func TestGetMediaInsights_ReelsRetryPreservedWithExclude(t *testing.T) {
 	mc.BaseURL = srv.URL
 	client := insights.NewGraphClient(mc)
 
-	// Reel with reposts excluded — should first try without reposts but with
+	// Reel with saved excluded — should first try without saved but with
 	// facebook_views, then retry without facebook_views/crossposted_views.
-	got, err := client.GetMediaInsights(context.Background(), "m-1", "token", true, "reposts")
+	got, err := client.GetMediaInsights(context.Background(), "m-1", "token", true, "saved")
 	if err != nil {
 		t.Fatalf("expected retry to recover, got error: %v", err)
 	}
 	if len(metricsSeen) != 2 {
 		t.Fatalf("expected 2 calls, got %d", len(metricsSeen))
 	}
-	// First call: base without reposts + reels metrics (including facebook_views).
-	if strings.Contains(metricsSeen[0], "reposts") {
-		t.Errorf("first call should exclude reposts, got metric=%q", metricsSeen[0])
+	// First call: base without saved + reels metrics (including facebook_views).
+	if strings.Contains(metricsSeen[0], "saved") {
+		t.Errorf("first call should exclude saved, got metric=%q", metricsSeen[0])
 	}
 	if !strings.Contains(metricsSeen[0], "facebook_views") {
 		t.Errorf("first call should include facebook_views, got metric=%q", metricsSeen[0])
 	}
-	// Second call: base without reposts + reels core only (no facebook/crossposted).
+	// Second call: base without saved + reels core only (no facebook/crossposted).
 	if strings.Contains(metricsSeen[1], "facebook_views") || strings.Contains(metricsSeen[1], "crossposted_views") {
 		t.Errorf("retry must drop facebook_views/crossposted_views, got metric=%q", metricsSeen[1])
 	}
-	if strings.Contains(metricsSeen[1], "reposts") {
-		t.Errorf("retry must also exclude reposts, got metric=%q", metricsSeen[1])
+	if strings.Contains(metricsSeen[1], "saved") {
+		t.Errorf("retry must also exclude saved, got metric=%q", metricsSeen[1])
 	}
 	if got.Views != 500 || got.Reach != 450 {
 		t.Errorf("Views/Reach = %d/%d, want 500/450", got.Views, got.Reach)

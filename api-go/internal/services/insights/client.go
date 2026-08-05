@@ -2,10 +2,7 @@ package insights
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +17,9 @@ const (
 	// Shared metrics available on both FEED and REELS per Meta's media
 	// insights product-type matrix
 	// (developers.facebook.com/.../instagram-media/insights/).
-	mediaMetricsShared = "views,reach,saved,shares,reposts,total_interactions"
+	// reposts is deliberately absent: Meta gates media-level reposts behind
+	// Facebook Login — Instagram Login tokens always get a code-100 rejection.
+	mediaMetricsShared = "views,reach,saved,shares,total_interactions"
 	// follows + profile_visits are FEED/STORY only — requesting them on
 	// REELS fails the entire comma-separated list.
 	mediaMetricsFeedOnly = "follows,profile_visits"
@@ -51,62 +50,23 @@ type GraphClient interface {
 }
 
 // metaClient implements GraphClient on top of the shared platform meta.Client
-// (its HTTP transport and base-URL config). meta.Client.request is
-// unexported, so this wrapper runs the same round-trip itself for the
-// GET-only surface this service needs — funnelling every response through
+// (its HTTP transport and base-URL config), funnelling every response through
 // meta.Handle so typed Meta errors propagate unchanged.
 type metaClient struct {
 	client *meta.Client
 }
 
 // NewGraphClient wraps a platform meta.Client as an insights GraphClient.
-// A nil client yields a default one (15s HTTP timeout, GraphBaseURL).
 func NewGraphClient(client *meta.Client) GraphClient {
-	if client == nil {
-		client = meta.NewClient(nil)
-	}
 	return &metaClient{client: client}
 }
 
-func (c *metaClient) base() string {
-	if c.client != nil && c.client.BaseURL != "" {
-		return strings.TrimRight(c.client.BaseURL, "/")
-	}
-	return meta.GraphBaseURL
+func (c *metaClient) get(ctx context.Context, rawURL, accessToken string) (map[string]any, error) {
+	return c.client.Get(ctx, rawURL, accessToken)
 }
 
-// get performs an authenticated GET and funnels the response through
-// meta.Handle. Mirrors meta.Client.request for GETs.
-func (c *metaClient) get(ctx context.Context, rawURL, accessToken string) (map[string]any, error) {
-	if c == nil || c.client == nil || c.client.HTTP == nil {
-		return nil, fmt.Errorf("meta client not configured")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, meta.WrapRequestError(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
-	resp, err := c.client.HTTP.Do(req)
-	if err != nil {
-		return nil, meta.WrapRequestError(err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, meta.WrapRequestError(err)
-	}
-	var data map[string]any
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &data); err != nil {
-			return nil, meta.WrapRequestError(fmt.Errorf("decode meta response: %w", err))
-		}
-	}
-	if data == nil {
-		data = map[string]any{}
-	}
-	return meta.Handle(data, resp.StatusCode)
+func (c *metaClient) base() string {
+	return strings.TrimRight(c.client.BaseURL, "/")
 }
 
 // GetUserProfile fetches GET /me with the full profile field set.
@@ -441,9 +401,6 @@ func num(v any) int64 {
 		return int64(n)
 	case float64:
 		return int64(n)
-	case json.Number:
-		i, _ := n.Int64()
-		return i
 	case string:
 		i, _ := strconv.ParseInt(n, 10, 64)
 		return i
