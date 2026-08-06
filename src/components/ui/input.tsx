@@ -1,7 +1,6 @@
 import React, { useRef, useState, useImperativeHandle, forwardRef, createContext, useContext } from 'react';
-import { Host, TextInput as ExpoTextInput, useNativeState } from '@expo/ui';
+import { TextInput as RNTextInput, StyleSheet } from 'react-native';
 import { View } from '@/tw';
-import { cn } from '@/tw/cn';
 
 export type InputVariant = 'outline' | 'rounded' | 'underlined';
 export type InputSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -43,7 +42,7 @@ export function Input({
 }: InputProps) {
   return (
     <InputContext.Provider value={{ variant, size, isDisabled, isInvalid, isReadOnly }}>
-      <View className={cn('w-full', className)} {...rest}>
+      <View className={className} {...rest}>
         {children}
       </View>
     </InputContext.Provider>
@@ -63,16 +62,29 @@ export interface InputFieldProps {
   onChangeText?: (text: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
-  keyboardType?: React.ComponentProps<typeof ExpoTextInput>['keyboardType'];
+  keyboardType?: React.ComponentProps<typeof RNTextInput>['keyboardType'];
   maxLength?: number;
   secureTextEntry?: boolean;
-  autoCapitalize?: React.ComponentProps<typeof ExpoTextInput>['autoCapitalize'];
-  autoComplete?: React.ComponentProps<typeof ExpoTextInput>['autoComplete'];
+  autoCapitalize?: React.ComponentProps<typeof RNTextInput>['autoCapitalize'];
+  autoComplete?: React.ComponentProps<typeof RNTextInput>['autoComplete'];
   autoCorrect?: boolean;
   editable?: boolean;
   autoFocus?: boolean;
   testID?: string;
   accessibilityLabel?: string;
+}
+
+const SIZE_HEIGHT: Record<InputSize, number> = {
+  sm: 36,
+  md: 48,
+  lg: 52,
+  xl: 56,
+};
+
+function borderRadiusFor(variant: InputVariant): number {
+  if (variant === 'rounded') return 24;
+  if (variant === 'underlined') return 0;
+  return 12;
 }
 
 export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function InputField(
@@ -96,22 +108,16 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
   ref
 ) {
   const ctx = useContext(InputContext);
-  const textState = useNativeState<string>(defaultValue);
+  const [value, setValue] = useState(defaultValue);
   const [focused, setFocused] = useState(false);
-  const inputRef = useRef<{
-    focus: () => void;
-    blur: () => void;
-    clear: () => void;
-    isFocused: () => boolean;
-    setSelection: (start: number, end?: number) => Promise<void>;
-  } | null>(null);
+  const inputRef = useRef<RNTextInput>(null);
 
   useImperativeHandle(ref, () => ({
     setText: (t: string) => {
-      textState.value = t;
+      setValue(t);
     },
     clear: () => {
-      textState.value = '';
+      setValue('');
       inputRef.current?.clear();
     },
     focus: () => {
@@ -122,82 +128,65 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
     },
   }));
 
-  const handleChangeText = (text: string) => {
-    textState.value = text;
-    onChangeText?.(text);
-  };
-
-  const sizeHeight: Record<InputSize, number> = {
-    sm: 36,
-    md: 48,
-    lg: 52,
-    xl: 56,
-  };
-
-  let borderRadius: number;
-  if (ctx.variant === 'rounded') {
-    borderRadius = 24;
-  } else if (ctx.variant === 'underlined') {
-    borderRadius = 0;
-  } else {
-    borderRadius = 12;
-  }
-
+  const editable = editableProp !== undefined ? editableProp : !ctx.isDisabled && !ctx.isReadOnly;
   const isUnderlined = ctx.variant === 'underlined';
 
-  const style: React.ComponentProps<typeof ExpoTextInput>['style'] = {
-    backgroundColor: isUnderlined ? 'transparent' : focused ? '#efe9da' : '#faf5e8',
-    borderColor: ctx.isInvalid ? '#ef4444' : 'transparent',
-    borderWidth: isUnderlined ? 0 : ctx.isInvalid ? 1 : 0,
-    borderRadius,
-    paddingHorizontal: 16,
-    height: sizeHeight[ctx.size],
-    opacity: ctx.isDisabled ? 0.5 : 1,
-  };
-
-  const textStyle: React.ComponentProps<typeof ExpoTextInput>['textStyle'] = {
-    color: '#0a0a0a',
-    fontSize: 16,
-    fontFamily: 'Inter_400Regular',
-  };
-
-  const editable = editableProp !== undefined ? editableProp : !ctx.isDisabled;
-
-  const a11y: { accessibilityLabel?: string } = { accessibilityLabel };
+  const inputStyle = [
+    styles.base,
+    {
+      height: SIZE_HEIGHT[ctx.size],
+      borderRadius: borderRadiusFor(ctx.variant),
+      backgroundColor: isUnderlined ? 'transparent' : focused ? '#ffffff' : '#faf5e8',
+      borderColor: ctx.isInvalid ? '#ef4444' : focused ? '#b8a4ed' : '#e5e5e5',
+      borderWidth: isUnderlined ? 0 : 2,
+      borderBottomWidth: isUnderlined ? 2 : undefined,
+      opacity: ctx.isDisabled ? 0.5 : 1,
+    },
+  ];
 
   return (
-    <Host matchContents colorScheme="light">
-      <ExpoTextInput
-        ref={inputRef}
-        value={textState}
-        defaultValue={defaultValue}
-        onChangeText={handleChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#9a9a9a"
-        cursorColor="#0a0a0a"
-        selectionColor="#0a0a0a"
-        keyboardType={keyboardType}
-        maxLength={maxLength}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize={autoCapitalize}
-        autoComplete={autoComplete}
-        autoCorrect={autoCorrect}
-        editable={editable}
-        readOnly={ctx.isReadOnly}
-        autoFocus={autoFocus}
-        testID={testID}
-        style={style}
-        textStyle={textStyle}
-        onFocus={() => {
-          setFocused(true);
-          onFocus?.();
-        }}
-        onBlur={() => {
-          setFocused(false);
-          onBlur?.();
-        }}
-        {...a11y}
-      />
-    </Host>
+    <RNTextInput
+      ref={inputRef}
+      value={value}
+      onChangeText={(text) => {
+        setValue(text);
+        onChangeText?.(text);
+      }}
+      placeholder={placeholder}
+      placeholderTextColor="#9a9a9a"
+      keyboardType={keyboardType}
+      maxLength={maxLength}
+      secureTextEntry={secureTextEntry}
+      autoCapitalize={autoCapitalize}
+      autoComplete={autoComplete}
+      autoCorrect={autoCorrect}
+      editable={editable}
+      autoFocus={autoFocus}
+      testID={testID}
+      accessibilityLabel={accessibilityLabel}
+      cursorColor="#0a0a0a"
+      selectionColor="#b8a4ed"
+      returnKeyType="done"
+      blurOnSubmit
+      onFocus={() => {
+        setFocused(true);
+        onFocus?.();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onBlur?.();
+      }}
+      style={inputStyle}
+    />
   );
+});
+
+const styles = StyleSheet.create({
+  base: {
+    width: '100%',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: '#0a0a0a',
+  },
 });

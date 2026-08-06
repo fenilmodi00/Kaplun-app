@@ -1,8 +1,8 @@
 # PROJECT KNOWLEDGE BASE — Kaplun app
 
-**Generated:** 2026-08-03  
-**Commit:** f78689a  
-**Branch:** automate-dm-screen
+**Generated:** 2026-08-06
+**Commit:** 59c2219
+**Branch:** chore/graph-api-v26-migration
 
 > Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any Expo-specific code.
 
@@ -10,9 +10,7 @@
 
 Expo SDK 57 mobile app for Instagram creators. React Query + Appwrite TablesDB + Gin/Go backend (`api-go/`). Clay design system via Tailwind v4 + `react-native-css`. File-based routing with expo-router. Package manager is Bun.
 
-The old FastAPI `api/` has been removed; `api-go/` is the current backend. Historical contracts live in `docs/fastapi-to-gin-inventory.md` and `docs/plans/2026-07-30-fastapi-to-gin-cutover.md`.
-
-## STACK
+The old FastAPI `api/` has been removed; `api-go/` is the current backend. Historical contracts live in `docs/fastapi-to-gin-inventory.md`.
 
 - **Framework**: Expo SDK 57, React Native 0.86, React 19.2
 - **Routing**: expo-router file-based (`src/app/`)
@@ -21,18 +19,6 @@ The old FastAPI `api/` has been removed; `api-go/` is the current backend. Histo
 - **Instagram**: App calls `graph.instagram.com` directly using the per-user long-lived token from the `creators` row. Token refresh on Meta error 190.
 - **Styling**: NativeWind v5 + Tailwind CSS v4 + `react-native-css` (`useCssElement` bridge, not `styled()`)
 - **Reanimated**: React Native Reanimated 4.5.0, imported only via `@/lib/reanimated-platform`. Web uses Metro aliases to no-op stubs (#8285).
-
-## STRUCTURE
-
-- `src/app/` — 5 tab groups in tab-bar order `(home)`, `(automate)`, `(messages)`, `(insights)`, `(profile)`, plus root `_layout.tsx` and `(tabs)/_layout.tsx` (Tabs + `ClayTabBar` + top `EdgeBlur` scrim)
-- `src/components/` — `auth/AuthScreen.tsx`, `clay/` design system, plus shared `screen-shell.tsx` (tab-bar clearance constants), `symbol-icon.tsx` (Ionicons/SF-symbol wrapper), `edge-blur.tsx` (gradient scrim)
-- `src/hooks/` — 9 React Query hooks
-- `src/lib/` — 21 infra files (appwrite, repository, query-client, auth-bridge, instagram, automations, realtime, resilience, etc.)
-- `src/tw/` — 5 styling primitives (`className`-enabled RN wrappers)
-- `src/__tests__/` — 19 jest-expo test files + `test-utils.ts`
-- `src/global.css` — Tailwind v4 `@theme` tokens and Clay design tokens
-- `api-go/` — Gin/Go backend
-- `docs/` — migration and design plans
 
 ## COMMANDS
 
@@ -49,35 +35,12 @@ bun run lint             # tsc --noEmit (no ESLint/Prettier/Biome)
 
 No CI workflows, no EAS config, no root README. Backend README is `api-go/README.md`.
 
-## TOOLCHAIN CONFIG
+## ARCHITECTURE
 
-- `metro.config.js` — NativeWind v5 wrapper; aliases `react-native-reanimated` and `react-native-worklets` to `src/lib/*-web-stub.js` on web; keeps `inlineRequires: true`
-- `babel.config.js` — `babel-preset-expo` + `react-native-reanimated/plugin`
-- `postcss.config.mjs` — `@tailwindcss/postcss`
-- `tsconfig.json` — strict mode; `@/*` → `./src/*`; includes `jest.setup.ts` and `nativewind-env.d.ts`
-- `jest.config.js` — preset `jest-expo`; `setupFilesAfterEnv: ['<rootDir>/jest.setup.ts']`; ignores `/e2e/`; mocks `@clerk/expo` via `__mocks__/@clerk/expo.ts`
-- `app.json` — scheme `kaplun`; 8 plugins, first is `expo-secure-store`
-- `.gitignore` — excludes `.env`, `.env*.local`, `dist/`, `web-build/`, `ios/`, `android/`, `.omo/`, `.worktrees/`, Go build artifacts
-
-## WHERE TO LOOK
-
-| Task | Location | Notes |
-|------|----------|-------|
-| Add a screen | `src/app/(tabs)/<group>/` | Each group has `_layout.tsx` (Stack) + `index.tsx` |
-| Add an Appwrite query | `src/lib/repository.ts` | Wrap in `executeWithRetryAndTimeout`; use `DATABASE_ID` + `TABLES` |
-| Add an Appwrite table ID | `src/lib/constants.ts` + `src/lib/types.ts` | Constants are hardcoded Appwrite IDs |
-| Add a data hook | `src/hooks/` | Follow existing React Query + repository pattern |
-| Add realtime subscription | `src/lib/realtime.ts` | `useRealtimeSubscription(channel, () => queryClient.invalidateQueries(...))` |
-| Add a backend API call | `src/lib/automations.ts` or `src/lib/auth-bridge.ts` | Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` |
-| Add an Instagram call | `src/lib/instagram.ts` | Direct Graph API; never add a proxy |
-| Add a Clay component | `src/components/clay/` | Choose `@/tw` vs raw RN; add `.web.tsx` if using Reanimated |
-| Add a styled primitive | `src/tw/` | Wrap with `useCssElement(Comp, props, { className: 'style' })` |
-| Change a Clay color/token | `src/global.css` `@theme` | Update hardcoded hex in raw-RN components too |
-| Fix Reanimated web crash | `metro.config.js` + `src/lib/reanimated-web-stub.js` + `worklets-web-stub.js` | Issue #8285 |
-| Debug startup crash | `src/lib/logger.tsx` → `SplashLogger` | In-memory ring buffer; renders on-screen |
-| Run backend locally | `api-go/` | `cp .env.example .env && go run ./cmd/server` (defaults to `:8000`) |
-
-## DATA FLOW
+**3-system design**:
+- App → **Appwrite TablesDB** (CRUD + Realtime) via `@/lib/repository`
+- App → **`graph.instagram.com`** directly (per-user token from creators row, refresh on Meta 190) via `@/lib/instagram`
+- App → **Gin `api-go`** (auth bridge + automations engine) via Clerk Bearer at `EXPO_PUBLIC_IG_API_BASE_URL`
 
 ```
 Screen → Hook (useQuery/useMutation)
@@ -95,42 +58,35 @@ Auth bridge (once per sign-in):
   → ensureAppwriteSession() with 24h TTL fast path + exponential backoff retry
 ```
 
-## KEY FILES
+## WHERE TO LOOK
 
-| File | Role |
-|------|------|
-| `src/app/_layout.tsx` | Root layout: SafeAreaProvider → ClerkProvider → PersistQueryClientProvider → BridgeProvider → AuthGate → Slot |
-| `src/lib/repository.ts` | Typed access layer over Appwrite TablesDB. All calls wrapped in `executeWithRetryAndTimeout` (15s timeout, 3 retries, backoff + jitter). |
-| `src/lib/query-client.ts` | QueryClient singleton + AsyncStorage persister. Global defaults: `staleTime: 30_000`, `gcTime: 24h`, `retry: false`. Persisted cache: 24h maxAge, `buster: '1'` (bump to invalidate all), only success-state queries dehydrate. |
-| `src/lib/resilient.ts` | `executeWithRetry`, `executeWithTimeout`, `executeWithRetryAndTimeout`. Retries network errors, HTTP 429/5xx, Appwrite code ≥ 500. Never 4xx auth/validation. |
-| `src/lib/auth-bridge.ts` | `createAppwriteSession` + `ensureAppwriteSession(getToken)`. 24h TTL fast path; throws `bridge_failed` on failure. |
-| `src/lib/bridge-context.tsx` | `BridgeProvider` / `useBridge`. AuthGate mounts shell instantly; hooks gate on `isReady`. |
-| `src/lib/instagram.ts` | Direct Instagram Graph API client (v26.0). Reads per-user token from `creators` row; refresh on Meta error 190. Throws `session_expired` / `insights_permission`. |
-| `src/lib/automations.ts` | Comment-automation engine client. Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL`. |
-| `src/lib/with-fresh-session.ts` | **Dead code** — legacy recovery for the old ig-api-proxy; no app module imports it. Do not reintroduce the proxy. |
-| `src/lib/realtime.ts` | `useRealtimeSubscription(channels, callback)`: 2s debounce coalescing, exponential backoff reconnect (1s→30s), AppState foreground refetch. |
-| `src/lib/reanimated-platform.ts` | Platform-safe Reanimated exports. Always import this, NOT `react-native-reanimated` directly. |
-| `src/lib/appwrite.ts` | SDK singleton: `Client`, `Account`, `TablesDB`, `Storage`, `Realtime`. Uses `EXPO_PUBLIC_APPWRITE_ENDPOINT` + `EXPO_PUBLIC_APPWRITE_PROJECT_ID`. |
-| `src/lib/constants.ts` | `DATABASE_ID = 'vernacular_saas'`, `TABLES` enum, `BUCKET_ID = 'attachments'`. |
-| `src/lib/instagram-oauth.ts` | Instagram OAuth flow helpers. |
-| `src/lib/fonts.ts` | `useClayFonts()` — loads Inter 400/500/600. Gates render in `AuthGate`. |
+| Task | Location | Notes |
+|------|----------|-------|
+| Add a screen | `src/app/(tabs)/<group>/` | Each group has `_layout.tsx` (Stack) + `index.tsx` |
+| Add an Appwrite query | `src/lib/repository.ts` | Wrap in `executeWithRetryAndTimeout`; use `DATABASE_ID` + `TABLES` |
+| Add an Appwrite table ID | `src/lib/constants.ts` + `src/lib/types.ts` | Constants are hardcoded Appwrite IDs |
+| Add a data hook | `src/hooks/` | Follow existing React Query + repository pattern |
+| Add a backend API call | `src/lib/automations.ts` or `src/lib/auth-bridge.ts` | Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` |
+| Add an Instagram call | `src/lib/instagram.ts` | Direct Graph API; never add a proxy |
+| Fix Reanimated web crash | `metro.config.js` + `src/lib/*-web-stub.js` | Issue #8285; web aliases reanimated/worklets |
+| Debug startup crash | `src/lib/logger.tsx` → `SplashLogger` | In-memory ring buffer; renders on-screen |
+| Run backend locally | `api-go/` | `cp .env.example .env && go run ./cmd/server` (defaults `:8000`) |
 
 ## CONVENTIONS
 
-- **React Query** for all data: `useQuery` reads, `useMutation` writes, `queryClient.invalidateQueries()` / `setQueryData()` for cache updates. Global defaults live in `src/lib/query-client.ts` (`staleTime: 30_000`, `gcTime: 24h`, `retry: false`); hooks override `gcTime` to 5 min.
-- **Query persistence**: `PersistQueryClientProvider` dehydrates success-state queries to AsyncStorage for 24h (`PERSIST_BUSTER = '1'` — bump it to invalidate every persisted cache). Anything a user must never see stale must refetch on restore, not rely on the persisted snapshot.
+- **React Query** for all data: `useQuery` reads, `useMutation` writes, `invalidateQueries`/`setQueryData` for cache updates. Global defaults: `staleTime: 30_000`, `gcTime: 24h`, `retry: false`. Hooks override `gcTime` to 5 min.
+- **Query persistence**: `PersistQueryClientProvider` dehydrates success-state queries to AsyncStorage for 24h (`PERSIST_BUSTER = '1'`). Stale-sensitive data must refetch on restore.
 - **TablesDB, not Databases** — all Appwrite access is document-based via `TablesDB`.
 - **Repository pattern** — all Appwrite queries go through typed functions in `@/lib/repository.ts`. Hooks never import `tablesDB` directly.
-- **Instagram direct only** — every Instagram call goes through `@/lib/instagram.ts` → `graph.instagram.com` directly. No proxy, no instagrapi.
-- **Auth bridge seam** — `EXPO_PUBLIC_IG_API_BASE_URL` is used only by `auth-bridge.ts` (`/auth/appwrite-session`) and `automations.ts` (`/automations/*`), both with Clerk Bearer. After bridging, the app talks to Appwrite directly.
-- **Error conventions**: Instagram token missing/unusable → `throw new Error('session_expired')`. Auth bridge failure → `throw new Error('bridge_failed')`. These are unrelated.
+- **Instagram direct only** — every Instagram call goes through `@/lib/instagram.ts` → `graph.instagram.com`. No proxy, no instagrapi.
+- **Auth bridge seam** — `EXPO_PUBLIC_IG_API_BASE_URL` used only by `auth-bridge.ts` and `automations.ts`, both with Clerk Bearer. After bridging, app talks to Appwrite directly.
+- **Error conventions**: Instagram token missing → `throw new Error('session_expired')`. Auth bridge failure → `throw new Error('bridge_failed')`.
 - **Reanimated imports** — always from `@/lib/reanimated-platform` or `@/tw/animated`. Never directly from `react-native-reanimated`.
 - **`.web.tsx` variants** — components with Reanimated get a `.web.tsx` variant using plain RN; Metro resolves it on web.
-- **Styling split** — most screens/components use `@/tw` primitives with Tailwind `className`. Raw-RN `StyleSheet.create()` is reserved for ClayAnimatedButton, ClaySpinner, and AuthScreen to avoid Android layout bugs.
+- **Styling split** — most screens use `@/tw` primitives with Tailwind `className`. Raw-RN `StyleSheet.create()` reserved for ClayAnimatedButton, ClaySpinner, AuthScreen (Android layout bugs).
 - **Path alias**: `@/*` → `./src/*`.
-- **Token cache**: use Clerk's built-in `tokenCache` from `@clerk/expo/token-cache`.
-- **Logging**: use `addLog()` from `@/lib/logger` instead of `console.log`/`console.warn`.
-- **Package manager**: Bun. `expo install` excludes TypeScript (managed as devDependency only).
+- **Logging**: use `addLog()` from `@/lib/logger` instead of `console.log`.
+- **Package manager**: Bun. `expo install` excludes TypeScript (devDependency only).
 - **`lightningcss` pinned to 1.30.1** in `package.json` `resolutions`.
 
 ## ANTI-PATTERNS
@@ -160,20 +116,13 @@ Required in app `.env` (see `.env.example`):
 | `EXPO_PUBLIC_IG_APP_ID` | Instagram OAuth |
 | `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` | Instagram OAuth |
 
-`EXPO_PUBLIC_IG_API_PROXY_URL` in `.env.example` is **legacy/dead**. The old Appwrite ig-api-proxy is broken (Appwrite strips the reserved `x-appwrite-user-jwt` header), so the app calls Instagram directly. Do not wire new code to it.
+`EXPO_PUBLIC_IG_API_PROXY_URL` in `.env.example` is **legacy/dead** — the old Appwrite ig-api-proxy is broken (Appwrite strips the reserved `x-appwrite-user-jwt` header). Do not wire new code to it.
 
 ## NOTES
 
-- **3-system architecture**: App → Appwrite TablesDB (CRUD + Realtime); App → `graph.instagram.com` directly (per-user token, refresh on 190); App → Gin `api-go` (auth bridge + automations engine).
-- **SDK version**: Expo SDK **57** (`package.json`: `"expo": "^57.0.0"`). Read https://docs.expo.dev/versions/v57.0.0/.
-- **React Query mutation pattern**: `useMutation` with `onSuccess: (result) => queryClient.setQueryData(...)`. See `useMessages`.
-- **Realtime invalidation pattern**: `useRealtimeSubscription(channel, () => queryClient.invalidateQueries({ queryKey: [...] }))`. See `useThreads` / `useMessages`.
-- **Auth bridge**: AuthGate runs `ensureAppwriteSession` with exponential backoff (max 3 retries), mounts `<Slot />` immediately, and shows a soft Retry banner only on failure.
-- **Web export**: `dist/` is gitignored and not committed.
-- **No root README**: use this file and `api-go/README.md` for orientation.
-- **Large-file hotspots**: `src/app/(tabs)/(automate)/new.tsx` (~1.5k lines), `AuthScreen.tsx` (~800), home/insights/profile screens (~625-655), `(automate)/[automationId].tsx` (~625), `(automate)/index.tsx` (~555), `api-go/internal/worker/comment_runner.go` (~580). Prefer targeted edits over rewrites there.
-- **`jest.setup.ts` is 312 lines of global mocks** — check it before adding per-file mocks; `@clerk/expo` is already mocked via `__mocks__/@clerk/expo.ts`.
-- **`EdgeBlur` is not a blur** — it renders a plain `LinearGradient` canvas scrim; the real expo-blur layer crashed Android on screen transitions. The `blurTarget`/`intensity` props are kept only for call-site compatibility.
+- **Large-file hotspots** (prefer targeted edits over rewrites): `src/app/(tabs)/(automate)/new.tsx` (~1055), `AuthScreen.tsx` (~800), home/insights/profile screens (~625-650), `api-go/internal/worker/comment_runner.go` (~1247).
+- **`jest.setup.ts` is 320 lines of global mocks** — check it before adding per-file mocks; `@clerk/expo` is already mocked via `__mocks__/@clerk/expo.ts`.
+- **`EdgeBlur` is not a blur** — renders a plain `LinearGradient` canvas scrim; the real expo-blur layer crashed Android on screen transitions. The `blurTarget`/`intensity` props are kept only for call-site compatibility.
 - **api-go in-process loops** — the sweeper (retries pending automation jobs) and the reconcile poller (catches comments webhooks miss) run inside the server process, both gated on `AUTOMATION_SWEEPER_ENABLED`; no external scheduler required.
 
 <!-- BEGIN opencode-rag -->

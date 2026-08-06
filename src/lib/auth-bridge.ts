@@ -6,6 +6,7 @@ import type { Models } from 'appwrite';
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
 const BRIDGE_TIMEOUT_MS = 10_000;
 const BRIDGE_TTL_MS = 24 * 60 * 60 * 1_000; // 24h — fast path for re-opens
+const BRIDGE_PATH = '/auth/appwrite-session';
 
 // Tracks when we last successfully bridged. Used to skip the full bridge
 // on quick app re-opens — just verify the session with account.get() (~500ms).
@@ -19,6 +20,12 @@ if (!API_BASE_URL) {
   );
 }
 
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (!(err instanceof Error)) return false;
+  return /aborted|canceled|cancelled/i.test(err.message);
+}
+
 /**
  * Fetch Appwrite session credentials from the backend.
  *
@@ -26,19 +33,31 @@ if (!API_BASE_URL) {
  * Appwrite session after ensuring the old session is cleared.
  */
 export async function createAppwriteSession(clerkToken: string) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
+  const bridgeUrl = `${API_BASE_URL}${BRIDGE_PATH}`;
 
+  // Per-attempt AbortController — never share one across executeWithRetry
+  // retries (a timed-out signal stays aborted forever).
   const fetchSession = async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
+
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/auth/appwrite-session`, {
+      response = await fetch(bridgeUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${clerkToken}`,
         },
         signal: controller.signal,
       });
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        throw new Error(
+          `Bridge timed out after ${BRIDGE_TIMEOUT_MS}ms — check EXPO_PUBLIC_IG_API_BASE_URL (${API_BASE_URL}) matches api-go IG_API_PORT / PUBLIC_BASE_URL`
+        );
+      }
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Bridge fetch failed to ${bridgeUrl}: ${detail}`);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -89,7 +108,7 @@ export async function ensureAppwriteSession(
     }
 
     // ── Full bridge ─────────────────────────────────────────────────────────
-    addLog('bridge: full exchange start');
+    addLog(`bridge: full exchange start → ${API_BASE_URL}`);
 
     try {
       const token = await getToken();

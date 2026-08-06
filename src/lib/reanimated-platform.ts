@@ -46,7 +46,7 @@ const fallbacks = {
     }
   },
   useAnimatedScrollHandler: () => ({}),
-  withTiming: <T,>(v: T) => v,
+  withTiming: <T,>(v: T, _config?: Record<string, unknown>) => v,
   withSpring: <T,>(v: T, _config?: Record<string, unknown>) => v,
   withSequence: <T,>(...args: T[]) => args[0],
   withRepeat: <T,>(v: T) => v,
