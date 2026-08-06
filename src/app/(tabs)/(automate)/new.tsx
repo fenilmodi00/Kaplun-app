@@ -15,13 +15,23 @@ import {
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
+  UIManager,
   View as RNView,
   ScrollView as RNScrollView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type LayoutChangeEvent,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function animateFormLayout() {
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
@@ -294,8 +304,26 @@ export default function NewAutomationScreen() {
 
   // ── Stepper state ────────────────────────────────────────────────────────
   const [currentStep, setCurrentStep] = useState('trigger');
-  const currentStepRef = useRef('trigger');
+  const currentStepRef = useRef<(typeof STEPS)[number]['id']>('trigger');
   const sectionPositions = useRef<Record<string, number>>({});
+  const scrollContentRef = useRef<RNView>(null);
+  const sectionRefs = useRef<Partial<Record<string, RNView | null>>>({});
+
+  const remeasureSections = useCallback(() => {
+    const container = scrollContentRef.current;
+    if (!container) return;
+    for (const step of STEPS) {
+      const node = sectionRefs.current[step.id];
+      if (!node) continue;
+      node.measureLayout(
+        container,
+        (_x, y) => {
+          sectionPositions.current[step.id] = y;
+        },
+        () => {}
+      );
+    }
+  }, []);
 
   // ── Template picker state ────────────────────────────────────────────────
   const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
@@ -338,17 +366,13 @@ export default function NewAutomationScreen() {
     const y = e.nativeEvent.contentOffset.y;
     scrollYRef.current = y;
 
-    const sections = [
-      { id: 'trigger', pos: sectionPositions.current['trigger'] ?? 0 },
-      { id: 'keywords', pos: sectionPositions.current['keywords'] ?? Infinity },
-      { id: 'message', pos: sectionPositions.current['message'] ?? Infinity },
-      { id: 'extras', pos: sectionPositions.current['extras'] ?? Infinity },
-    ];
+    const viewportAnchor = y + 160;
 
-    let active = 'trigger';
-    for (let i = sections.length - 1; i >= 0; i--) {
-      if (y + 180 >= sections[i].pos) {
-        active = sections[i].id;
+    let active: (typeof STEPS)[number]['id'] = STEPS[0].id;
+    for (let i = STEPS.length - 1; i >= 0; i--) {
+      const pos = sectionPositions.current[STEPS[i].id];
+      if (pos !== undefined && viewportAnchor >= pos) {
+        active = STEPS[i].id;
         break;
       }
     }
@@ -358,9 +382,16 @@ export default function NewAutomationScreen() {
     }
   }, []);
 
-  const handleSectionLayout = (id: string) => (e: LayoutChangeEvent) => {
+  const handleSectionLayout = useCallback((id: string) => (e: LayoutChangeEvent) => {
     sectionPositions.current[id] = e.nativeEvent.layout.y;
-  };
+  }, []);
+
+  const bindSectionRef = useCallback(
+    (id: string) => (node: RNView | null) => {
+      sectionRefs.current[id] = node;
+    },
+    []
+  );
 
   const scrollToSection = useCallback((id: string) => {
     const y = sectionPositions.current[id];
@@ -420,9 +451,16 @@ export default function NewAutomationScreen() {
   }, [targetType, media.length, mediaLoading, mediaHasLoaded, loadMedia]);
 
   // Derive opening DM mode from button text presence
+  const hadButtonTextRef = useRef(false);
   useEffect(() => {
     setOpeningDmMode(buttonText.trim() ? 'button' : 'direct');
-  }, [buttonText]);
+    const hasButton = buttonText.trim().length > 0;
+    if (hasButton !== hadButtonTextRef.current) {
+      hadButtonTextRef.current = hasButton;
+      animateFormLayout();
+      setTimeout(remeasureSections, 250);
+    }
+  }, [buttonText, remeasureSections]);
 
   // Fetch templates on mount
   useEffect(() => {
@@ -439,6 +477,11 @@ export default function NewAutomationScreen() {
     })();
     return () => { cancelled = true; };
   }, [getToken]);
+
+  useEffect(() => {
+    const timer = setTimeout(remeasureSections, 350);
+    return () => clearTimeout(timer);
+  }, [remeasureSections, templatesLoading, media.length, targetType, matchAnyWord, buttonText, publicReplyEnabled, followUpEnabled]);
 
   const applyTemplate = useCallback((slug: string | null) => {
     setSelectedTemplateSlug(slug);
@@ -686,7 +729,7 @@ export default function NewAutomationScreen() {
       <ScrollView
         ref={scrollRef}
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 24 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
@@ -694,7 +737,10 @@ export default function NewAutomationScreen() {
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        {/* ── Templates ── */}
+        <RNView ref={scrollContentRef} collapsable={false} style={{ gap: 24 }}>
+        {/* ── Step: Trigger ── */}
+        <RNView ref={bindSectionRef('trigger')} onLayout={handleSectionLayout('trigger')}>
+        {/* Templates */}
         <Reveal delay={0}>
           <View className="gap-3">
             <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
@@ -750,9 +796,8 @@ export default function NewAutomationScreen() {
           </View>
         </Reveal>
 
-        {/* ── Campaign name ── */}
+        {/* Campaign name */}
         <Reveal delay={60}>
-          <RNView onLayout={handleSectionLayout('trigger')}>
             <View className="gap-2.5">
               <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
                 Campaign name
@@ -770,12 +815,10 @@ export default function NewAutomationScreen() {
                 </Input>
               </RNView>
             </View>
-          </RNView>
         </Reveal>
 
-        {/* ── Trigger ── */}
+        {/* Trigger radios */}
         <Reveal delay={120}>
-          <RNView onLayout={handleSectionLayout('trigger')}>
             <View className="gap-2.5">
               <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 When someone comments on
@@ -783,10 +826,12 @@ export default function NewAutomationScreen() {
               <RadioGroup
                 value={targetType}
                 onChange={(value) => {
+                  animateFormLayout();
                   setTargetType(value as TargetType);
                   if (value !== 'specific_posts') {
                     setSelectedMediaIds([]);
                   }
+                  setTimeout(remeasureSections, 250);
                 }}
                 className="gap-2.5"
               >
@@ -809,37 +854,35 @@ export default function NewAutomationScreen() {
                         ) : null}
                       </View>
                     </Radio>
-                    {opt.value === 'specific_posts' && targetType === 'specific_posts' && (
-                      <Reveal>
-                        <View className="gap-2">
-                          {mediaLoading && (
-                            <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>Loading posts…</Text>
-                          )}
-                          {mediaError && (
-                            <View className="gap-2">
-                              <Text className="text-error" style={{ fontSize: 14, lineHeight: 20 }}>
-                                {mediaError === 'session_expired'
-                                  ? 'Session expired. Please reconnect Instagram.'
-                                  : mediaError}
-                              </Text>
-                              <PressableScale onPress={loadMedia} className="self-start rounded-md bg-surface-soft px-3 py-2">
-                                <Text className="font-semibold text-ink" style={{ fontSize: 13 }}>Retry</Text>
-                              </PressableScale>
-                            </View>
-                          )}
-                          {!mediaLoading && !mediaError && media.length === 0 && (
-                            <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>No posts found</Text>
-                          )}
-                          {media.length > 0 && (
-                            <MediaCarousel
-                              media={media}
-                              selectedIds={selectedMediaIds}
-                              onToggle={toggleMedia}
-                            />
-                          )}
-                        </View>
-                      </Reveal>
-                    )}
+                    {opt.value === 'specific_posts' && targetType === 'specific_posts' ? (
+                      <View className="gap-2">
+                        {mediaLoading && (
+                          <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>Loading posts…</Text>
+                        )}
+                        {mediaError && (
+                          <View className="gap-2">
+                            <Text className="text-error" style={{ fontSize: 14, lineHeight: 20 }}>
+                              {mediaError === 'session_expired'
+                                ? 'Session expired. Please reconnect Instagram.'
+                                : mediaError}
+                            </Text>
+                            <PressableScale onPress={loadMedia} className="self-start rounded-md bg-surface-soft px-3 py-2">
+                              <Text className="font-semibold text-ink" style={{ fontSize: 13 }}>Retry</Text>
+                            </PressableScale>
+                          </View>
+                        )}
+                        {!mediaLoading && !mediaError && media.length === 0 && (
+                          <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>No posts found</Text>
+                        )}
+                        {media.length > 0 && (
+                          <MediaCarousel
+                            media={media}
+                            selectedIds={selectedMediaIds}
+                            onToggle={toggleMedia}
+                          />
+                        )}
+                      </View>
+                    ) : null}
                   </Card>
                 ))}
               </RadioGroup>
@@ -853,19 +896,23 @@ export default function NewAutomationScreen() {
                 className={cn('bg-white border-2', dmTriggerEnabled ? 'border-brand-lavender' : 'border-hairline')}
               />
             </View>
-          </RNView>
         </Reveal>
+        </RNView>
 
-        {/* ── Keywords ── */}
+        {/* ── Step: Keywords ── */}
+        <RNView ref={bindSectionRef('keywords')} onLayout={handleSectionLayout('keywords')}>
         <Reveal delay={180}>
-          <RNView onLayout={handleSectionLayout('keywords')}>
             <View className="gap-2.5">
               <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 And this comment has
               </Text>
               <RadioGroup
                 value={matchAnyWord ? 'any_word' : 'specific_words'}
-                onChange={(value) => setMatchAnyWord(value === 'any_word')}
+                onChange={(value) => {
+                  animateFormLayout();
+                  setMatchAnyWord(value === 'any_word');
+                  setTimeout(remeasureSections, 250);
+                }}
                 className="gap-2.5"
               >
                 <Card
@@ -882,7 +929,7 @@ export default function NewAutomationScreen() {
                       <RadioLabel>a specific word or words</RadioLabel>
                     </View>
                   </Radio>
-                  {!matchAnyWord && (
+                  {!matchAnyWord ? (
                     <View className="gap-2.5">
                       <RNView ref={keywordInputWrapRef}>
                         <Input>
@@ -919,7 +966,7 @@ export default function NewAutomationScreen() {
                         </View>
                       )}
                     </View>
-                  )}
+                  ) : null}
                 </Card>
                 <Card
                   variant="outline"
@@ -941,7 +988,7 @@ export default function NewAutomationScreen() {
                 </Card>
               </RadioGroup>
 
-              {!matchAnyWord && (
+              {!matchAnyWord ? (
                 <View className="gap-1.5">
                   <SegmentedControl
                     values={MATCH_OPTIONS.map((o) => o.label)}
@@ -956,14 +1003,14 @@ export default function NewAutomationScreen() {
                     </Text>
                   )}
                 </View>
-              )}
+              ) : null}
             </View>
-          </RNView>
         </Reveal>
+        </RNView>
 
-        {/* ── Opening DM ── */}
+        {/* ── Step: Message ── */}
+        <RNView ref={bindSectionRef('message')} onLayout={handleSectionLayout('message')}>
         <Reveal delay={240}>
-          <RNView onLayout={handleSectionLayout('message')}>
             <View className="gap-2.5">
               <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 They will get
@@ -1049,45 +1096,42 @@ export default function NewAutomationScreen() {
                   </Input>
                 </RNView>
               </ToggleCard>
+
+              {buttonText.trim().length > 0 ? (
+                <View className="gap-2.5">
+                  <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
+                    And then, they will get
+                  </Text>
+                  <Card variant="outline" size="md" className="gap-2.5 bg-white border-2 border-hairline">
+                    <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
+                      a DM with a link
+                    </Text>
+                    <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
+                      Message revealed after the button is tapped
+                    </Text>
+                    <RNView ref={revealMessageWrapRef}>
+                      <Textarea>
+                        <TextareaInput
+                          ref={revealMessageRef}
+                          placeholder="Write the message with the link..."
+                          onChangeText={setRevealMessage}
+                          onFocus={() => handleInputFocus(revealMessageWrapRef)}
+                          onBlur={handleInputBlur}
+                          maxLength={REVEAL_MAX_LENGTH}
+                          accessibilityLabel="Link DM message"
+                        />
+                      </Textarea>
+                    </RNView>
+                  </Card>
+                </View>
+              ) : null}
             </View>
-          </RNView>
         </Reveal>
+        </RNView>
 
-        {/* ── Then they will get (button-tap reveal DM) ── */}
-        {buttonText.trim().length > 0 && (
-          <Reveal delay={300}>
-            <View className="gap-2.5">
-              <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
-                And then, they will get
-              </Text>
-              <Card variant="outline" size="md" className="gap-2.5 bg-white border-2 border-hairline">
-                <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
-                  a DM with a link
-                </Text>
-                <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
-                  Message revealed after the button is tapped
-                </Text>
-                <RNView ref={revealMessageWrapRef}>
-                  <Textarea>
-                    <TextareaInput
-                      ref={revealMessageRef}
-                      placeholder="Write the message with the link..."
-                      onChangeText={setRevealMessage}
-                      onFocus={() => handleInputFocus(revealMessageWrapRef)}
-                      onBlur={handleInputBlur}
-                      maxLength={REVEAL_MAX_LENGTH}
-                      accessibilityLabel="Link DM message"
-                    />
-                  </Textarea>
-                </RNView>
-              </Card>
-            </View>
-          </Reveal>
-        )}
-
-        {/* ── Public reply ── */}
+        {/* ── Step: Extras ── */}
+        <RNView ref={bindSectionRef('extras')} onLayout={handleSectionLayout('extras')}>
         <Reveal delay={360}>
-          <RNView onLayout={handleSectionLayout('extras')}>
             <View className="gap-2.5">
               <ToggleCard
                 title="reply to their comments under the post"
@@ -1131,12 +1175,9 @@ export default function NewAutomationScreen() {
                 )}
               </ToggleCard>
             </View>
-          </RNView>
         </Reveal>
 
-        {/* ── Follow-up DM ── */}
         <Reveal delay={420}>
-          <RNView onLayout={handleSectionLayout('extras')}>
             <View className="gap-2.5">
               <ToggleCard
                 title="send a follow-up message"
@@ -1190,10 +1231,9 @@ export default function NewAutomationScreen() {
                 </RNView>
               </ToggleCard>
             </View>
-          </RNView>
         </Reveal>
 
-        {/* ── Preview (Instagram DM screen) ── */}
+        {/* Preview */}
         <Reveal delay={480}>
           <View className="gap-2.5">
             <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
@@ -1231,6 +1271,8 @@ export default function NewAutomationScreen() {
             )}
           </View>
         </Reveal>
+        </RNView>
+        </RNView>
       </ScrollView>
 
       {/* ── Pinned bottom CTA ── */}

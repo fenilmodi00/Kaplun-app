@@ -24,7 +24,7 @@ const FallbackEasing = {
   elastic: () => (t: number) => t,
   back: () => (t: number) => t,
   bounce: (t: number) => t,
-  bezier: () => (t: number) => t,
+  bezier: (..._args: number[]) => (t: number) => t,
   in: (fn: (t: number) => number) => fn,
   out: (fn: (t: number) => number) => fn,
   inOut: (fn: (t: number) => number) => fn,
@@ -46,13 +46,17 @@ const fallbacks = {
     }
   },
   useAnimatedScrollHandler: () => ({}),
-  withTiming: <T,>(v: T, _config?: Record<string, unknown>) => v,
+  withTiming: <T,>(v: T, _config?: Record<string, unknown>, _cb?: (finished?: boolean) => void) => {
+    _cb?.(true);
+    return v;
+  },
   withSpring: <T,>(v: T, _config?: Record<string, unknown>) => v,
   withSequence: <T,>(...args: T[]) => args[0],
   withRepeat: <T,>(v: T) => v,
   withDelay: <T,>(_d: number, v: T) => v,
   Easing: FallbackEasing,
   SlideInUp: {},
+  runOnJS: <T extends (...args: never[]) => unknown>(fn: T) => fn,
 };
 
 const NativeReanimated = IS_REANIMATED_AVAILABLE
@@ -73,4 +77,5 @@ export const withSequence = NativeReanimated.withSequence as typeof fallbacks.wi
 export const withRepeat = NativeReanimated.withRepeat as typeof fallbacks.withRepeat;
 export const withDelay = NativeReanimated.withDelay as typeof fallbacks.withDelay;
 export const Easing = NativeReanimated.Easing as typeof FallbackEasing;
+export const runOnJS = NativeReanimated.runOnJS as typeof fallbacks.runOnJS;
 export const createAnimatedComponent = NativeReanimated.createAnimatedComponent as typeof fallbacks.createAnimatedComponent;

@@ -3,7 +3,6 @@ import { View, Text } from '@/tw';
 import { cn } from '@/tw/cn';
 import { Card } from './card';
 import { Switch } from './switch';
-import { Reveal } from './reveal';
 
 export interface ToggleCardProps extends React.ComponentProps<typeof View> {
   title: string;
@@ -45,11 +44,9 @@ export function ToggleCard({
         />
       </View>
       {value && children ? (
-        <Reveal>
-          <View className="mt-1 gap-3 border-t border-hairline pt-3">
-            {children}
-          </View>
-        </Reveal>
+        <View className="mt-1 gap-3 border-t border-hairline pt-3">
+          {children}
+        </View>
       ) : null}
     </Card>
   );
