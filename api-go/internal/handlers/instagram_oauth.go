@@ -261,7 +261,7 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 			c.Request.Context(),
 			subscribeID,
 			longToken.AccessToken,
-			[]string{"comments", "messages", "messaging_postbacks"},
+			[]string{"comments", "messages", "messaging_postbacks", "mentions"},
 		); subErr != nil {
 			h.logger.Warn("instagram oauth webhook subscribe failed",
 				"clerk_user_id", clerkID,

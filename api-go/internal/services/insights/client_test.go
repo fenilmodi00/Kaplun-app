@@ -336,3 +336,116 @@ func TestGetMediaInsights_FeedStillRequestsFollowsAndProfileVisits(t *testing.T)
 		t.Errorf("Follows/ProfileVisits = %d/%d, want 3/9", got.Follows, got.ProfileVisits)
 	}
 }
+
+// TestGetAccountInsightsDay_IncludesViews verifies the day-series request
+// includes the views metric and that the returned Views pointer is parsed.
+func TestGetAccountInsightsDay_IncludesViews(t *testing.T) {
+	t.Parallel()
+	var metricSeen string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metricSeen = r.URL.Query().Get("metric")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[
+			{"name":"reach","period":"day","values":[{"end_time":"2026-08-05T07:00:00+0000","value":500}]},
+			{"name":"follower_count","period":"day","values":[{"end_time":"2026-08-05T07:00:00+0000","value":1000}]},
+			{"name":"views","period":"day","values":[{"end_time":"2026-08-05T07:00:00+0000","value":1234}]}
+		]}`)
+	}))
+	defer srv.Close()
+
+	mc := meta.NewClient(nil)
+	mc.BaseURL = srv.URL
+	client := insights.NewGraphClient(mc)
+
+	days, err := client.GetAccountInsightsDay(context.Background(), "token", "1722816000", "1722902400")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if !strings.Contains(metricSeen, "views") {
+		t.Errorf("metric param should include views, got %q", metricSeen)
+	}
+	if len(days) != 1 {
+		t.Fatalf("expected 1 day, got %d", len(days))
+	}
+	if days[0].Views == nil || *days[0].Views != 1234 {
+		t.Errorf("Views = %v, want 1234", days[0].Views)
+	}
+	if days[0].Reach == nil || *days[0].Reach != 500 {
+		t.Errorf("Reach = %v, want 500", days[0].Reach)
+	}
+	if days[0].FollowerCount == nil || *days[0].FollowerCount != 1000 {
+		t.Errorf("FollowerCount = %v, want 1000", days[0].FollowerCount)
+	}
+}
+
+// TestGetOnlineFollowers_ParsesBreakdowns verifies the hour-distribution
+// response shape is parsed and buckets are sorted 0-23.
+func TestGetOnlineFollowers_ParsesBreakdowns(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"name":"online_followers","period":"lifetime","metric_type":"total_value","total_value":{"breakdowns":[{"name":"hour","results":[{"dimension_values":["23"],"value":10},{"dimension_values":["07"],"value":70},{"dimension_values":["14"],"value":140}]}]}}]}`)
+	}))
+	defer srv.Close()
+
+	mc := meta.NewClient(nil)
+	mc.BaseURL = srv.URL
+	client := insights.NewGraphClient(mc)
+
+	got, err := client.GetOnlineFollowers(context.Background(), "token")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	want := []insights.OnlineFollowers{
+		{Hour: 7, Value: 70},
+		{Hour: 14, Value: 140},
+		{Hour: 23, Value: 10},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestGetMentionedMedia_ParsesFields verifies the nested
+// mentioned_media.media_id({id}) shape is parsed into all expected fields.
+func TestGetMentionedMedia_ParsesFields(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"mentioned_media":{"media_id":"media-1","caption":"hello","media_type":"IMAGE","like_count":42,"comments_count":7,"owner":{"id":"owner-1","username":"ownername"},"permalink":"https://instagr.am/p/abc","timestamp":"2026-08-05T12:00:00+0000","username":"mentioner"}}`)
+	}))
+	defer srv.Close()
+
+	mc := meta.NewClient(nil)
+	mc.BaseURL = srv.URL
+	client := insights.NewGraphClient(mc)
+
+	got, err := client.GetMentionedMedia(context.Background(), "token", "ig-1", "media-1")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil MentionedMedia")
+	}
+	want := &insights.MentionedMedia{
+		MediaID:             "media-1",
+		Caption:             "hello",
+		MediaType:           "IMAGE",
+		LikeCount:           42,
+		CommentsCount:       7,
+		OwnerID:             "owner-1",
+		OwnerUsername:       "ownername",
+		Permalink:           "https://instagr.am/p/abc",
+		Timestamp:           "2026-08-05T12:00:00+0000",
+		MentionedByUserID:   "mentioner",
+		MentionedByUsername: "mentioner",
+	}
+	if *got != *want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}

@@ -225,10 +225,12 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			CreatorMedia:                cfg.AppwriteCreatorMediaTableID,
 			CreatorInsightDays:          cfg.AppwriteCreatorInsightDaysTableID,
 			CreatorAudienceDemographics: cfg.AppwriteCreatorAudienceDemographicsTableID,
+			CreatorOnlineFollowers:      cfg.AppwriteCreatorOnlineFollowersTableID,
+			MentionedMedia:              cfg.AppwriteMentionedMediaTableID,
 		})
 		logger.Info("insights store ready")
 	} else if awClient != nil {
-		logger.Warn("insights store disabled: set APPWRITE_CREATOR_MEDIA_TABLE_ID, APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID, APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID")
+		logger.Warn("insights store disabled: set APPWRITE_CREATOR_MEDIA_TABLE_ID, APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID, APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID, APPWRITE_CREATOR_ONLINE_FOLLOWERS_TABLE_ID, APPWRITE_MENTIONED_MEDIA_TABLE_ID")
 	}
 
 	var insightsSvc *insights.Service
@@ -313,6 +315,9 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			webhookStore = autoStore.AsWorker()
 		}
 		deps.Webhooks = handlers.NewWebhooksHandler(cfg.WebhookVerifyToken, secrets, webhookStore, enqueuer)
+		if insightsSvc != nil {
+			deps.Webhooks.MentionedMediaSyncer = insightsSvc
+		}
 		deps.Webhooks.Log = logger
 		if os.Getenv("WEBHOOK_INSECURE_SKIP_SIGNATURE") == "1" || os.Getenv("WEBHOOK_INSECURE_SKIP_SIGNATURE") == "true" {
 			deps.Webhooks.AllowUnsigned = true

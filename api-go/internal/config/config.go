@@ -47,6 +47,8 @@ type Config struct {
 	AppwriteCreatorMediaTableID                string
 	AppwriteCreatorInsightDaysTableID          string
 	AppwriteCreatorAudienceDemographicsTableID string
+	AppwriteCreatorOnlineFollowersTableID      string
+	AppwriteMentionedMediaTableID              string
 	InsightsSyncEnabled                        bool
 
 	// Cloudflare Tunnel (preferred for Meta webhooks — no free-ngrok interstitial)
@@ -88,6 +90,8 @@ func FromMap(values map[string]string) (Config, error) {
 		AppwriteCreatorMediaTableID:                strings.TrimSpace(values["APPWRITE_CREATOR_MEDIA_TABLE_ID"]),
 		AppwriteCreatorInsightDaysTableID:          strings.TrimSpace(values["APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID"]),
 		AppwriteCreatorAudienceDemographicsTableID: strings.TrimSpace(values["APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID"]),
+		AppwriteCreatorOnlineFollowersTableID:      strings.TrimSpace(values["APPWRITE_CREATOR_ONLINE_FOLLOWERS_TABLE_ID"]),
+		AppwriteMentionedMediaTableID:              strings.TrimSpace(values["APPWRITE_MENTIONED_MEDIA_TABLE_ID"]),
 
 		WebhookVerifyToken: strings.TrimSpace(values["WEBHOOK_VERIFY_TOKEN"]),
 		FacebookAppSecret:  strings.TrimSpace(values["FACEBOOK_APP_SECRET"]),
@@ -162,7 +166,9 @@ func (c Config) HasAutomationTables() bool {
 func (c Config) HasInsightsTables() bool {
 	return c.AppwriteCreatorMediaTableID != "" &&
 		c.AppwriteCreatorInsightDaysTableID != "" &&
-		c.AppwriteCreatorAudienceDemographicsTableID != ""
+		c.AppwriteCreatorAudienceDemographicsTableID != "" &&
+		c.AppwriteCreatorOnlineFollowersTableID != "" &&
+		c.AppwriteMentionedMediaTableID != ""
 }
 
 func envMap() map[string]string {
@@ -186,6 +192,8 @@ func envMap() map[string]string {
 		"APPWRITE_CREATOR_MEDIA_TABLE_ID",
 		"APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID",
 		"APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID",
+		"APPWRITE_CREATOR_ONLINE_FOLLOWERS_TABLE_ID",
+		"APPWRITE_MENTIONED_MEDIA_TABLE_ID",
 		"INSIGHTS_SYNC_ENABLED",
 		"WEBHOOK_VERIFY_TOKEN",
 		"FACEBOOK_APP_SECRET",

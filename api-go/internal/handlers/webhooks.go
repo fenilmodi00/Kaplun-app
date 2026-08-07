@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"kaplun/api-go/internal/platform/webhooks"
+	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/worker"
 )
 
@@ -34,7 +35,9 @@ type WebhooksHandler struct {
 	AllowUnsigned bool // local/dev only — Meta posts still arrive when App Secret is wrong
 	Store         WebhookStore
 	Enqueuer      JobEnqueuer
-	Log           *slog.Logger
+	// MentionedMediaSyncer is nil when insights sync is disabled.
+	MentionedMediaSyncer *insights.Service
+	Log                  *slog.Logger
 }
 
 func NewWebhooksHandler(verifyToken string, secrets []string, store WebhookStore, enqueuer JobEnqueuer) *WebhooksHandler {
@@ -104,6 +107,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 	postbacks := webhooks.ParsePostbackEvents(payload)
 	messages := webhooks.ParseMessageEvents(payload)
 	reads := webhooks.ParseReadEvents(payload)
+	mentions := webhooks.ParseMentionEvents(payload)
 	if h.Log != nil {
 		h.Log.Info("instagram webhook received",
 			"object", payload["object"],
@@ -111,6 +115,7 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			"postbacks", len(postbacks),
 			"messages", len(messages),
 			"reads", len(reads),
+			"mentions", len(mentions),
 		)
 	}
 
@@ -195,6 +200,14 @@ func (h *WebhooksHandler) Events(c *gin.Context) {
 			h.warn("create read_fallback send_reveal job failed", err)
 			enqueueErrs = append(enqueueErrs, fmt.Sprintf("read_fallback %s: %v", event.UserID, err))
 			continue
+		}
+	}
+
+	if h.MentionedMediaSyncer != nil {
+		for _, event := range mentions {
+			if err := h.MentionedMediaSyncer.SyncMentionedMedia(c.Request.Context(), event.InstagramAccountID, event.MediaID); err != nil {
+				h.warn("sync mentioned media failed", err)
+			}
 		}
 	}
 

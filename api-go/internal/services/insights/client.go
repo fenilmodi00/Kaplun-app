@@ -22,14 +22,14 @@ const (
 	mediaMetricsShared = "views,reach,saved,shares,total_interactions"
 	// follows + profile_visits are FEED/STORY only — requesting them on
 	// REELS fails the entire comma-separated list.
-	mediaMetricsFeedOnly = "follows,profile_visits"
+	mediaMetricsFeedOnly  = "follows,profile_visits"
 	mediaMetricsReelsCore = "ig_reels_avg_watch_time,ig_reels_video_view_total_time,reels_skip_rate"
 	// mediaMetricsReels adds facebook/crossposted views. One invalid metric
 	// fails the whole comma-separated list, so reels retry once without
 	// those two (Meta rejects them on reels never crossposted to Facebook).
 	mediaMetricsReels = mediaMetricsReelsCore + ",facebook_views,crossposted_views"
 
-	accountDayMetrics   = "reach,follower_count"
+	accountDayMetrics   = "reach,follower_count,views"
 	accountTotalMetrics = "views,accounts_engaged,profile_views,total_interactions,likes,comments,saves,shares,reposts,replies,follows_and_unfollows,profile_links_taps"
 
 	// demographicBreakdowns is comma-separated in ONE call per metric — one
@@ -47,6 +47,8 @@ type GraphClient interface {
 	GetAccountInsightsDay(ctx context.Context, accessToken string, since, until string) ([]InsightDay, error)
 	GetAccountInsightsTotals(ctx context.Context, accessToken string, since, until string) (map[string]int64, error)
 	GetDemographics(ctx context.Context, accessToken, metric, timeframe string) ([]DemographicBreakdown, error)
+	GetOnlineFollowers(ctx context.Context, accessToken string) ([]OnlineFollowers, error)
+	GetMentionedMedia(ctx context.Context, accessToken, igUserID, mediaID string) (*MentionedMedia, error)
 }
 
 // metaClient implements GraphClient on top of the shared platform meta.Client
@@ -252,6 +254,8 @@ func (c *metaClient) GetAccountInsightsDay(ctx context.Context, accessToken, sin
 				day.Reach = &v
 			case "follower_count":
 				day.FollowerCount = &v
+			case "views":
+				day.Views = &v
 			}
 		}
 	}
@@ -343,6 +347,94 @@ func (c *metaClient) GetDemographics(ctx context.Context, accessToken, metric, t
 		}
 	}
 	return out, nil
+}
+
+// GetOnlineFollowers fetches the lifetime online-followers hour distribution:
+// GET /me/insights?metric=online_followers&period=lifetime&metric_type=total_value.
+// Returns hour buckets sorted 0-23.
+func (c *metaClient) GetOnlineFollowers(ctx context.Context, accessToken string) ([]OnlineFollowers, error) {
+	rawURL := fmt.Sprintf("%s/me/insights?metric=online_followers&period=lifetime&metric_type=total_value", c.base())
+	data, err := c.get(ctx, rawURL, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	out := []OnlineFollowers{}
+	items, _ := data["data"].([]any)
+	for _, raw := range items {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		tv, ok := m["total_value"].(map[string]any)
+		if !ok {
+			continue
+		}
+		breakdowns, _ := tv["breakdowns"].([]any)
+		for _, braw := range breakdowns {
+			bm, ok := braw.(map[string]any)
+			if !ok {
+				continue
+			}
+			results, _ := bm["results"].([]any)
+			for _, rraw := range results {
+				rm, ok := rraw.(map[string]any)
+				if !ok {
+					continue
+				}
+				dims, _ := rm["dimension_values"].([]any)
+				if len(dims) == 0 {
+					continue
+				}
+				hourStr := str(dims[0])
+				hour, err := strconv.Atoi(hourStr)
+				if err != nil || hour < 0 || hour > 23 {
+					continue
+				}
+				out = append(out, OnlineFollowers{
+					Hour:  hour,
+					Value: num(rm["value"]),
+				})
+			}
+		}
+	}
+
+	slices.SortFunc(out, func(a, b OnlineFollowers) int {
+		return a.Hour - b.Hour
+	})
+	return out, nil
+}
+
+// GetMentionedMedia fetches a single media object where the creator was
+// mentioned: GET /{igUserID}?fields=mentioned_media.media_id({mediaID}){...}.
+// Owner fields come from the nested owner object; the mentioner's identity
+// comes from the inner username field.
+func (c *metaClient) GetMentionedMedia(ctx context.Context, accessToken, igUserID, mediaID string) (*MentionedMedia, error) {
+	fields := fmt.Sprintf("mentioned_media.media_id(%s){caption,media_type,like_count,comments_count,owner,permalink,timestamp,username}", mediaID)
+	rawURL := fmt.Sprintf("%s/%s?fields=%s", c.base(), igUserID, fields)
+	data, err := c.get(ctx, rawURL, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	mm, ok := data["mentioned_media"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	owner, _ := mm["owner"].(map[string]any)
+	return &MentionedMedia{
+		MediaID:             str(mm["media_id"]),
+		Caption:             str(mm["caption"]),
+		MediaType:           str(mm["media_type"]),
+		LikeCount:           num(mm["like_count"]),
+		CommentsCount:       num(mm["comments_count"]),
+		OwnerID:             str(owner["id"]),
+		OwnerUsername:       str(owner["username"]),
+		Permalink:           str(mm["permalink"]),
+		Timestamp:           str(mm["timestamp"]),
+		MentionedByUserID:   str(mm["username"]),
+		MentionedByUsername: str(mm["username"]),
+	}, nil
 }
 
 // metricValueMap flattens a Graph insights response's data array into

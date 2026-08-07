@@ -37,12 +37,16 @@ type fakeGraphClient struct {
 	// first stage that still has any non-excluded metric.
 	mediaUnsupportedStages map[string][][]string
 
-	daySeries    []insights.InsightDay
-	dayErr       error
-	totals       map[string]int64
-	totalsErr    error
-	demographics map[string][]insights.DemographicBreakdown
-	demoErrs     map[string]error // keyed by metric
+	daySeries           []insights.InsightDay
+	dayErr              error
+	totals              map[string]int64
+	totalsErr           error
+	demographics        map[string][]insights.DemographicBreakdown
+	demoErrs            map[string]error // keyed by metric
+	onlineFollowers     []insights.OnlineFollowers
+	onlineFollowersErr  error
+	mentionedMedia      *insights.MentionedMedia
+	mentionedMediaErr   error
 
 	calls []string
 }
@@ -167,6 +171,22 @@ func (f *fakeGraphClient) GetDemographics(_ context.Context, _, metric, _ string
 	return f.demographics[metric], nil
 }
 
+func (f *fakeGraphClient) GetOnlineFollowers(_ context.Context, _ string) ([]insights.OnlineFollowers, error) {
+	f.calls = append(f.calls, "GetOnlineFollowers")
+	if f.onlineFollowersErr != nil {
+		return nil, f.onlineFollowersErr
+	}
+	return f.onlineFollowers, nil
+}
+
+func (f *fakeGraphClient) GetMentionedMedia(_ context.Context, _, _, mediaID string) (*insights.MentionedMedia, error) {
+	f.calls = append(f.calls, "GetMentionedMedia:"+mediaID)
+	if f.mentionedMediaErr != nil {
+		return nil, f.mentionedMediaErr
+	}
+	return f.mentionedMedia, nil
+}
+
 type syncStateCall struct {
 	creatorRowID string
 	status       string
@@ -178,18 +198,23 @@ type fakeStore struct {
 	creators []insights.CreatorRow
 	listErr  error
 
-	mediaItems     []insights.MediaItemWithInsights
-	upsertMediaErr error
-	prunedKeep     []string
-	pruneErr       error
-	insightDays    []insights.InsightDay
-	upsertDaysErr  error
-	demographics   []insights.DemographicBreakdown
-	upsertDemoErr  error
-	profiles       map[string]*insights.CreatorProfile
-	profileErr     error
-	syncStates     []syncStateCall
-	syncStateErr   error
+	mediaItems          []insights.MediaItemWithInsights
+	upsertMediaErr      error
+	prunedKeep          []string
+	pruneErr            error
+	insightDays         []insights.InsightDay
+	upsertDaysErr       error
+	demographics        []insights.DemographicBreakdown
+	upsertDemoErr       error
+	profiles            map[string]*insights.CreatorProfile
+	profileErr          error
+	syncStates          []syncStateCall
+	syncStateErr        error
+	onlineFollowers     []insights.OnlineFollowers
+	upsertOnlineErr     error
+	mentionedMedia      []insights.MentionedMedia
+	upsertMentionedErr  error
+	creatorsByIGUserID  map[string]*insights.CreatorRow
 
 	calls []string
 }
@@ -261,6 +286,32 @@ func (f *fakeStore) UpdateCreatorSyncState(_ context.Context, creatorRowID strin
 		derived:      derived,
 	})
 	return nil
+}
+
+func (f *fakeStore) UpsertOnlineFollowers(_ context.Context, _ string, rows []insights.OnlineFollowers) error {
+	f.calls = append(f.calls, "UpsertOnlineFollowers")
+	if f.upsertOnlineErr != nil {
+		return f.upsertOnlineErr
+	}
+	f.onlineFollowers = append(f.onlineFollowers, rows...)
+	return nil
+}
+
+func (f *fakeStore) UpsertMentionedMedia(_ context.Context, _ string, row insights.MentionedMedia) error {
+	f.calls = append(f.calls, "UpsertMentionedMedia")
+	if f.upsertMentionedErr != nil {
+		return f.upsertMentionedErr
+	}
+	f.mentionedMedia = append(f.mentionedMedia, row)
+	return nil
+}
+
+func (f *fakeStore) GetCreatorByIGUserID(_ context.Context, igUserID string) (*insights.CreatorRow, error) {
+	f.calls = append(f.calls, "GetCreatorByIGUserID")
+	if f.creatorsByIGUserID == nil {
+		return nil, nil
+	}
+	return f.creatorsByIGUserID[igUserID], nil
 }
 
 // ---------------------------------------------------------------------------
@@ -734,6 +785,111 @@ func TestSyncCreator_StoreFailureMarksError(t *testing.T) {
 	st := lastSyncState(t, store, "creator-1")
 	if st.status != insights.SyncStatusError {
 		t.Errorf("sync status = %q, want %q", st.status, insights.SyncStatusError)
+	}
+}
+
+func TestSyncCreator_DerivesTopCitiesAgeGender(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, store := happyFixture()
+	client.demographics = map[string][]insights.DemographicBreakdown{
+		"follower_demographics": {
+			{Metric: "follower_demographics", Breakdown: "city", DimensionValue: "New York", Value: 200, Timeframe: insights.DemographicsTimeframe},
+			{Metric: "follower_demographics", Breakdown: "city", DimensionValue: "Los Angeles", Value: 150, Timeframe: insights.DemographicsTimeframe},
+			{Metric: "follower_demographics", Breakdown: "age", DimensionValue: "25-34", Value: 120, Timeframe: insights.DemographicsTimeframe},
+			{Metric: "follower_demographics", Breakdown: "age", DimensionValue: "18-24", Value: 90, Timeframe: insights.DemographicsTimeframe},
+			{Metric: "follower_demographics", Breakdown: "age,gender", DimensionValue: "25-34:F", Value: 80, Timeframe: insights.DemographicsTimeframe},
+			{Metric: "follower_demographics", Breakdown: "age,gender", DimensionValue: "18-24:M", Value: 60, Timeframe: insights.DemographicsTimeframe},
+		},
+	}
+	svc := insights.NewService(client, store, nil)
+
+	res := svc.SyncCreator(ctx, "creator-1", "token-1", "ig-1")
+
+	if res.Error != "" {
+		t.Fatalf("expected no error, got %q", res.Error)
+	}
+	st := lastSyncState(t, store, "creator-1")
+	if got := st.derived["top_cities"]; got != "New York,Los Angeles" {
+		t.Errorf("top_cities = %v, want New York,Los Angeles", got)
+	}
+	if got := st.derived["top_age_groups"]; got != "25-34,18-24" {
+		t.Errorf("top_age_groups = %v, want 25-34,18-24", got)
+	}
+	if got := st.derived["top_gender_age_pairs"]; got != "25-34:F,18-24:M" {
+		t.Errorf("top_gender_age_pairs = %v, want 25-34:F,18-24:M", got)
+	}
+}
+
+func TestSyncCreator_OnlineFollowersSkippedBelow100(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := time.Now().UTC().AddDate(0, 0, -1).Format(time.RFC3339)
+	client := &fakeGraphClient{
+		profile: &insights.CreatorProfile{ID: "ig-1", Username: "small", FollowersCount: 50},
+		media: []insights.MediaItem{
+			{ID: "m-1", MediaType: "IMAGE", MediaProductType: "FEED", Timestamp: ts, LikeCount: 3},
+		},
+		mediaInsights: map[string]*insights.MediaInsights{
+			"m-1": {Views: 100, Reach: 90},
+		},
+		daySeries: insightDaysFor(-1),
+		totals:    map[string]int64{"reach": 100, "total_interactions": 10},
+		onlineFollowers: []insights.OnlineFollowers{
+			{Hour: 12, Value: 50},
+		},
+	}
+	store := &fakeStore{}
+	svc := insights.NewService(client, store, nil)
+
+	res := svc.SyncCreator(ctx, "creator-1", "token-1", "ig-1")
+
+	if res.Error != "" {
+		t.Fatalf("expected no error, got %q", res.Error)
+	}
+	if countCalls(client.calls, "GetOnlineFollowers") != 0 {
+		t.Errorf("GetOnlineFollowers called %d times below 100 followers, want 0", countCalls(client.calls, "GetOnlineFollowers"))
+	}
+	if countCalls(store.calls, "UpsertOnlineFollowers") != 0 {
+		t.Errorf("UpsertOnlineFollowers called %d times below 100 followers, want 0", countCalls(store.calls, "UpsertOnlineFollowers"))
+	}
+	st := lastSyncState(t, store, "creator-1")
+	if _, ok := st.derived["top_cities"]; ok {
+		t.Errorf("top_cities should not be derived below 100 followers")
+	}
+}
+
+func TestSyncCreator_ViewsDaySeriesUpserts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := time.Now().UTC().AddDate(0, 0, -1).Format(time.RFC3339)
+	v := int64(777)
+	client := &fakeGraphClient{
+		profile: &insights.CreatorProfile{ID: "ig-1", Username: "viewed", FollowersCount: 200},
+		media: []insights.MediaItem{
+			{ID: "m-1", MediaType: "IMAGE", MediaProductType: "FEED", Timestamp: ts, LikeCount: 5},
+		},
+		mediaInsights: map[string]*insights.MediaInsights{
+			"m-1": {Views: 100, Reach: 90},
+		},
+		daySeries: []insights.InsightDay{
+			{Date: time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02"), Reach: nil, Views: &v},
+		},
+		totals: map[string]int64{"reach": 1000, "total_interactions": 100},
+	}
+	store := &fakeStore{}
+	svc := insights.NewService(client, store, nil)
+
+	res := svc.SyncCreator(ctx, "creator-1", "token-1", "ig-1")
+
+	if res.Error != "" {
+		t.Fatalf("expected no error, got %q", res.Error)
+	}
+	if len(store.insightDays) != 1 {
+		t.Fatalf("expected 1 upserted day, got %d", len(store.insightDays))
+	}
+	if store.insightDays[0].Views == nil || *store.insightDays[0].Views != 777 {
+		t.Errorf("Views = %v, want 777", store.insightDays[0].Views)
 	}
 }
 

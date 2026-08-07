@@ -29,6 +29,11 @@ type ReadEvent struct {
 	Watermark          int64
 }
 
+type MentionEvent struct {
+	InstagramAccountID string
+	MediaID            string
+}
+
 func VerifySignature(rawBody []byte, signatureHeader string, secrets []string) bool {
 	if signatureHeader == "" || len(secrets) == 0 {
 		return false
@@ -220,6 +225,39 @@ func ParseReadEvents(payload map[string]any) []ReadEvent {
 				InstagramAccountID: accountID,
 				UserID:             userID,
 				Watermark:          int64(watermark),
+			})
+		}
+	}
+
+	return events
+}
+
+// ParseMentionEvents extracts mention webhook events from entry[].changes[]
+// where field == "mentions". Each change value carries media_id (required)
+// and optionally comment_id for comment mentions.
+func ParseMentionEvents(payload map[string]any) []MentionEvent {
+	events := make([]MentionEvent, 0)
+	if payload["object"] != "instagram" {
+		return events
+	}
+
+	for _, entryValue := range asSlice(payload["entry"]) {
+		entry := asMap(entryValue)
+		entryID := asString(entry["id"])
+		for _, changeValue := range asSlice(entry["changes"]) {
+			change := asMap(changeValue)
+			if asString(change["field"]) != "mentions" {
+				continue
+			}
+			value := asMap(change["value"])
+			mediaID := asString(value["media_id"])
+			if entryID == "" || mediaID == "" {
+				continue
+			}
+
+			events = append(events, MentionEvent{
+				InstagramAccountID: entryID,
+				MediaID:            mediaID,
 			})
 		}
 	}

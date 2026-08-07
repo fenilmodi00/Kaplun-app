@@ -97,6 +97,43 @@ func (s *Service) SyncAll(ctx context.Context, spacing time.Duration) []*SyncRes
 	return results
 }
 
+// SyncMentionedMedia fetches and persists a single media item where the
+// creator account was mentioned by another account. Errors are returned so
+// the webhook caller can log them without failing the response.
+func (s *Service) SyncMentionedMedia(ctx context.Context, igUserID, mediaID string) error {
+	creator, err := s.store.GetCreatorByIGUserID(ctx, igUserID)
+	if err != nil {
+		return fmt.Errorf("lookup creator by ig_user_id: %w", err)
+	}
+	if creator == nil {
+		// Mention webhooks may arrive before the creator connects; skip
+		// silently so the webhook response stays healthy.
+		s.logger.Info("mentioned media skipped: creator not connected", "ig_user_id", igUserID, "media_id", mediaID)
+		return nil
+	}
+	if creator.AccessToken == "" {
+		return fmt.Errorf("creator %s has no access token", creator.ID)
+	}
+
+	row, err := s.client.GetMentionedMedia(ctx, creator.AccessToken, igUserID, mediaID)
+	if err != nil {
+		return fmt.Errorf("fetch mentioned media %s: %w", mediaID, err)
+	}
+	if row == nil {
+		return nil
+	}
+
+	if err := s.store.UpsertMentionedMedia(ctx, creator.ID, *row); err != nil {
+		return fmt.Errorf("persist mentioned media %s: %w", mediaID, err)
+	}
+	s.logger.Info("mentioned media synced",
+		"creator_id", creator.ID,
+		"ig_user_id", igUserID,
+		"media_id", mediaID,
+	)
+	return nil
+}
+
 // CountSyncResults splits a fan-out into synced/failed tallies.
 func CountSyncResults(results []*SyncResult) (synced, failed int) {
 	for _, r := range results {
@@ -246,6 +283,27 @@ func (s *Service) SyncCreator(ctx context.Context, creatorRowID, accessToken, ig
 
 	derived := computeDerived(items, totals, s.now())
 
+	if profile.FollowersCount >= MinFollowersForDemographics {
+		if len(demos) > 0 {
+			derived["top_cities"] = deriveTopCities(demos, 3)
+			derived["top_age_groups"] = deriveTopAgeGroups(demos, 3)
+			derived["top_gender_age_pairs"] = deriveTopGenderAgePairs(demos, 3)
+		}
+
+		online, ofErr := s.client.GetOnlineFollowers(ctx, accessToken)
+		if ofErr != nil {
+			if meta.IsTokenExpired(ofErr) {
+				return s.finish(ctx, res, start, ofErr)
+			}
+			s.logger.Warn("online followers fetch failed",
+				"creator_id", creatorRowID, "error", ofErr)
+		} else if err := s.store.UpsertOnlineFollowers(ctx, creatorRowID, online); err != nil {
+			return s.finish(ctx, res, start, err)
+		} else {
+			res.OnlineFollowersUpserted = len(online)
+		}
+	}
+
 	res.DurationMs = s.now().Sub(start).Milliseconds()
 	syncTime := s.now().Format(time.RFC3339Nano)
 	if err := s.store.UpdateCreatorSyncState(ctx, creatorRowID, SyncStatusOK, syncTime, derived); err != nil {
@@ -281,6 +339,7 @@ func (s *Service) logResult(res *SyncResult) {
 		"media_upserted", res.MediaUpserted,
 		"insight_days_upserted", res.InsightDaysUpserted,
 		"demographics_upserted", res.DemographicsUpserted,
+		"online_followers_upserted", res.OnlineFollowersUpserted,
 		"duration_ms", res.DurationMs,
 		"error", res.Error)
 }
@@ -410,6 +469,77 @@ func computeDerived(items []MediaItemWithInsights, totals map[string]int64, now 
 	derived["engagement_rate"] = engagementRate
 
 	return derived
+}
+
+// Demographic derivation helpers
+// -----------------------------------------------------------------------------
+
+// deriveTopCities returns the top N cities across all city breakdown rows.
+func deriveTopCities(demos []DemographicBreakdown, n int) string {
+	return topNByValue(demos, func(d DemographicBreakdown) (string, bool) {
+		if !strings.EqualFold(d.Breakdown, "city") {
+			return "", false
+		}
+		return d.DimensionValue, true
+	}, n)
+}
+
+// deriveTopAgeGroups returns the top N age groups across all age breakdown rows.
+func deriveTopAgeGroups(demos []DemographicBreakdown, n int) string {
+	return topNByValue(demos, func(d DemographicBreakdown) (string, bool) {
+		if !strings.EqualFold(d.Breakdown, "age") {
+			return "", false
+		}
+		return d.DimensionValue, true
+	}, n)
+}
+
+// deriveTopGenderAgePairs returns the top N gender:age or age:gender pairs.
+func deriveTopGenderAgePairs(demos []DemographicBreakdown, n int) string {
+	return topNByValue(demos, func(d DemographicBreakdown) (string, bool) {
+		breakdown := strings.ToLower(d.Breakdown)
+		if breakdown != "age,gender" && breakdown != "gender,age" {
+			return "", false
+		}
+		parts := strings.Split(d.DimensionValue, ":")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return "", false
+		}
+		return fmt.Sprintf("%s:%s", parts[0], parts[1]), true
+	}, n)
+}
+
+// topNByValue aggregates demographic rows by a key extractor, then returns the
+// top N keys sorted by value desc, then key asc, joined by commas.
+func topNByValue(demos []DemographicBreakdown, key func(DemographicBreakdown) (string, bool), n int) string {
+	totals := make(map[string]int64)
+	for _, d := range demos {
+		if k, ok := key(d); ok {
+			totals[k] += d.Value
+		}
+	}
+	type entry struct {
+		key   string
+		value int64
+	}
+	rows := make([]entry, 0, len(totals))
+	for k, v := range totals {
+		rows = append(rows, entry{key: k, value: v})
+	}
+	slices.SortFunc(rows, func(a, b entry) int {
+		if a.value != b.value {
+			return int(b.value - a.value)
+		}
+		return strings.Compare(a.key, b.key)
+	})
+	if n > len(rows) {
+		n = len(rows)
+	}
+	parts := make([]string, n)
+	for i, r := range rows[:n] {
+		parts[i] = r.key
+	}
+	return strings.Join(parts, ",")
 }
 
 // parseUnsupportedMetrics extracts metric names from a Meta API error

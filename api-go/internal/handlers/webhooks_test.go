@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -14,6 +15,7 @@ import (
 
 	"kaplun/api-go/internal/handlers"
 	"kaplun/api-go/internal/platform/webhooks"
+	"kaplun/api-go/internal/services/insights"
 )
 
 type fakeWebhookStore struct {
@@ -52,6 +54,7 @@ func (f *fakeEnqueuer) Enqueue(jobID string) error {
 	f.ids = append(f.ids, jobID)
 	return nil
 }
+
 
 func TestWebhookVerifyOK(t *testing.T) {
 	t.Parallel()
@@ -340,4 +343,134 @@ func TestWebhookDedupKeys(t *testing.T) {
 			t.Fatalf("%s dedup key: got %q want %q", job.Type, job.DedupKey, wantKey)
 		}
 	}
+}
+
+func TestWebhookMentions(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	store := &fakeWebhookStore{}
+	syncer := &fakeMentionSyncer{}
+	istore := &fakeMentionStore{}
+	h := handlers.NewWebhooksHandler("", []string{"test-ig-secret"}, store, &fakeEnqueuer{})
+	h.MentionedMediaSyncer = insights.NewService(syncer, istore, nil)
+	h.AllowUnsigned = false
+	engine := gin.New()
+	engine.POST("/webhooks/instagram", h.Events)
+
+	body := []byte(`{"object":"instagram","entry":[{"id":"ig1","changes":[{"field":"mentions","value":{"media_id":"m-mentioned"}}]}]}`)
+	sig := webhooks.ComputeTestSignature("test-ig-secret", body)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/instagram", bytes.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", sig)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || resp["status"] != "ok" {
+		t.Fatalf("body: %s", rec.Body.String())
+	}
+	syncer.mu.Lock()
+	defer syncer.mu.Unlock()
+	if len(syncer.calls) != 1 {
+		t.Fatalf("expected 1 mention sync call, got %d", len(syncer.calls))
+	}
+	if syncer.calls[0].MediaID != "m-mentioned" {
+		t.Errorf("syncer call media = %q, want m-mentioned", syncer.calls[0].MediaID)
+	}
+	istore.mu.Lock()
+	defer istore.mu.Unlock()
+	if istore.lastIGUID != "ig1" {
+		t.Errorf("creator lookup ig_user_id = %q, want ig1", istore.lastIGUID)
+	}
+}
+
+// fakeMentionSyncer is a minimal insights.GraphClient that records
+// SyncMentionedMedia calls.
+type fakeMentionSyncer struct {
+	mu      sync.Mutex
+	calls   []mentionCall
+	failFor map[string]error
+}
+
+type mentionCall struct {
+	IGUserID string
+	MediaID  string
+}
+
+func (f *fakeMentionSyncer) GetUserProfile(context.Context, string) (*insights.CreatorProfile, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetUserMedia(context.Context, string, int) ([]insights.MediaItem, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetMediaInsights(context.Context, string, string, bool, ...string) (*insights.MediaInsights, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetAccountInsightsDay(context.Context, string, string, string) ([]insights.InsightDay, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetAccountInsightsTotals(context.Context, string, string, string) (map[string]int64, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetDemographics(context.Context, string, string, string) ([]insights.DemographicBreakdown, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetOnlineFollowers(context.Context, string) ([]insights.OnlineFollowers, error) {
+	return nil, errors.New("unimplemented")
+}
+func (f *fakeMentionSyncer) GetMentionedMedia(_ context.Context, _, _, mediaID string) (*insights.MentionedMedia, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failFor != nil {
+		if err, ok := f.failFor[mediaID]; ok {
+			return nil, err
+		}
+	}
+	f.calls = append(f.calls, mentionCall{MediaID: mediaID})
+	return &insights.MentionedMedia{MediaID: mediaID}, nil
+}
+
+// fakeMentionStore is a minimal insights.Store that records the IG user ID
+// looked up during SyncMentionedMedia.
+type fakeMentionStore struct {
+	mu        sync.Mutex
+	lastIGUID string
+}
+
+func (f *fakeMentionStore) ListCreatorsWithToken(context.Context) ([]insights.CreatorRow, error) {
+	return nil, nil
+}
+func (f *fakeMentionStore) GetCreatorByIGUserID(_ context.Context, igUserID string) (*insights.CreatorRow, error) {
+	f.mu.Lock()
+	f.lastIGUID = igUserID
+	f.mu.Unlock()
+	return &insights.CreatorRow{ID: "creator-1", AccessToken: "token", IGUserID: igUserID}, nil
+}
+func (f *fakeMentionStore) UpsertMentionedMedia(context.Context, string, insights.MentionedMedia) error {
+	return nil
+}
+func (f *fakeMentionStore) UpdateCreatorSyncState(context.Context, string, string, string, map[string]any) error {
+	return nil
+}
+func (f *fakeMentionStore) UpdateCreatorProfile(context.Context, string, *insights.CreatorProfile) error {
+	return nil
+}
+func (f *fakeMentionStore) UpsertCreatorMedia(context.Context, string, []insights.MediaItemWithInsights) error {
+	return nil
+}
+func (f *fakeMentionStore) PruneCreatorMedia(context.Context, string, []string) error {
+	return nil
+}
+func (f *fakeMentionStore) UpsertInsightDays(context.Context, string, []insights.InsightDay) error {
+	return nil
+}
+func (f *fakeMentionStore) UpsertDemographics(context.Context, string, []insights.DemographicBreakdown) error {
+	return nil
+}
+func (f *fakeMentionStore) UpsertOnlineFollowers(context.Context, string, []insights.OnlineFollowers) error {
+	return nil
 }

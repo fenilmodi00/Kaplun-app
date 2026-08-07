@@ -15,6 +15,8 @@ type InsightsTables struct {
 	CreatorMedia                string
 	CreatorInsightDays          string
 	CreatorAudienceDemographics string
+	CreatorOnlineFollowers      string
+	MentionedMedia              string
 }
 
 // InsightsStore implements insights.Store over Appwrite TablesDB. Standalone
@@ -55,6 +57,9 @@ var derivedCreatorColumns = []string{
 	"max_likes",
 	"engagement_rate",
 	"last_post_at",
+	"top_cities",
+	"top_age_groups",
+	"top_gender_age_pairs",
 }
 
 const insightsPageSize = 100
@@ -96,19 +101,15 @@ func (s *InsightsStore) ListCreatorsWithToken(ctx context.Context) ([]insights.C
 func (s *InsightsStore) UpsertCreatorMedia(ctx context.Context, creatorRowID string, items []insights.MediaItemWithInsights) error {
 	nowISO := s.nowISO()
 	for _, item := range items {
-		rowID, err := s.findRowID(ctx, s.tables.CreatorMedia, []string{
+		firstSeenAtISO := ""
+		if _, err := s.upsertRow(ctx, s.tables.CreatorMedia, []string{
 			appwrite.QueryEqual("ig_media_id", item.Media.ID),
-		})
-		if err != nil {
-			return err
-		}
-		if rowID != "" {
-			if _, err := s.client.UpdateRow(ctx, s.tables.CreatorMedia, rowID, mediaData(creatorRowID, item, nowISO, ""), nil); err != nil {
-				return err
+		}, func(existingID string) map[string]any {
+			if existingID == "" {
+				firstSeenAtISO = nowISO
 			}
-			continue
-		}
-		if _, err := s.client.CreateRow(ctx, s.tables.CreatorMedia, appwrite.UniqueID, mediaData(creatorRowID, item, nowISO, nowISO), nil); err != nil {
+			return mediaData(creatorRowID, item, nowISO, firstSeenAtISO)
+		}); err != nil {
 			return err
 		}
 	}
@@ -159,31 +160,44 @@ func (s *InsightsStore) PruneCreatorMedia(ctx context.Context, creatorRowID stri
 func (s *InsightsStore) UpsertInsightDays(ctx context.Context, creatorRowID string, days []insights.InsightDay) error {
 	nowISO := s.nowISO()
 	for _, day := range days {
-		rowID, err := s.findRowID(ctx, s.tables.CreatorInsightDays, []string{
+		if _, err := s.upsertRow(ctx, s.tables.CreatorInsightDays, []string{
 			appwrite.QueryEqual("creator_row_id", creatorRowID),
 			appwrite.QueryEqual("date", day.Date),
-		})
-		if err != nil {
-			return err
-		}
-		data := map[string]any{
-			"creator_row_id": creatorRowID,
-			"date":           day.Date,
-			"reach":          optInt64(day.Reach),
-			"follower_count": optInt64(day.FollowerCount),
-			"synced_at":      nowISO,
-		}
-		if rowID != "" {
-			if _, err := s.client.UpdateRow(ctx, s.tables.CreatorInsightDays, rowID, data, nil); err != nil {
-				return err
+		}, func(string) map[string]any {
+			return map[string]any{
+				"creator_row_id": creatorRowID,
+				"date":           day.Date,
+				"reach":          optInt64(day.Reach),
+				"follower_count": optInt64(day.FollowerCount),
+				"views":          optInt64(day.Views),
+				"synced_at":      nowISO,
 			}
-			continue
-		}
-		if _, err := s.client.CreateRow(ctx, s.tables.CreatorInsightDays, appwrite.UniqueID, data, nil); err != nil {
+		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// GetCreatorByIGUserID returns the creator row with the matching Instagram
+// professional user id. Returns nil when no row exists.
+func (s *InsightsStore) GetCreatorByIGUserID(ctx context.Context, igUserID string) (*insights.CreatorRow, error) {
+	result, err := s.client.ListRows(ctx, s.tables.Creators, []string{
+		appwrite.QueryEqual("ig_user_id", igUserID),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Rows) == 0 {
+		return nil, nil
+	}
+	row := result.Rows[0]
+	return &insights.CreatorRow{
+		ID:          stringField(row, "$id"),
+		AccessToken: stringField(row, "access_token"),
+		IGUserID:    stringField(row, "ig_user_id"),
+	}, nil
 }
 
 // UpsertDemographics upserts each breakdown cell by
@@ -191,31 +205,22 @@ func (s *InsightsStore) UpsertInsightDays(ctx context.Context, creatorRowID stri
 func (s *InsightsStore) UpsertDemographics(ctx context.Context, creatorRowID string, demos []insights.DemographicBreakdown) error {
 	nowISO := s.nowISO()
 	for _, demo := range demos {
-		rowID, err := s.findRowID(ctx, s.tables.CreatorAudienceDemographics, []string{
+		if _, err := s.upsertRow(ctx, s.tables.CreatorAudienceDemographics, []string{
 			appwrite.QueryEqual("creator_row_id", creatorRowID),
 			appwrite.QueryEqual("metric", demo.Metric),
 			appwrite.QueryEqual("breakdown", demo.Breakdown),
 			appwrite.QueryEqual("dimension_value", demo.DimensionValue),
-		})
-		if err != nil {
-			return err
-		}
-		data := map[string]any{
-			"creator_row_id":  creatorRowID,
-			"metric":          demo.Metric,
-			"breakdown":       demo.Breakdown,
-			"dimension_value": demo.DimensionValue,
-			"value":           demo.Value,
-			"timeframe":       demo.Timeframe,
-			"synced_at":       nowISO,
-		}
-		if rowID != "" {
-			if _, err := s.client.UpdateRow(ctx, s.tables.CreatorAudienceDemographics, rowID, data, nil); err != nil {
-				return err
+		}, func(string) map[string]any {
+			return map[string]any{
+				"creator_row_id":  creatorRowID,
+				"metric":          demo.Metric,
+				"breakdown":       demo.Breakdown,
+				"dimension_value": demo.DimensionValue,
+				"value":           demo.Value,
+				"timeframe":       demo.Timeframe,
+				"synced_at":       nowISO,
 			}
-			continue
-		}
-		if _, err := s.client.CreateRow(ctx, s.tables.CreatorAudienceDemographics, appwrite.UniqueID, data, nil); err != nil {
+		}); err != nil {
 			return err
 		}
 	}
@@ -257,6 +262,55 @@ func (s *InsightsStore) UpdateCreatorSyncState(ctx context.Context, creatorRowID
 	return err
 }
 
+// UpsertOnlineFollowers upserts each hour bucket by (creator_row_id,
+// hour_bucket).
+func (s *InsightsStore) UpsertOnlineFollowers(ctx context.Context, creatorRowID string, rows []insights.OnlineFollowers) error {
+	nowISO := s.nowISO()
+	for _, row := range rows {
+		if _, err := s.upsertRow(ctx, s.tables.CreatorOnlineFollowers, []string{
+			appwrite.QueryEqual("creator_row_id", creatorRowID),
+			appwrite.QueryEqual("hour_bucket", row.Hour),
+		}, func(string) map[string]any {
+			return map[string]any{
+				"creator_row_id": creatorRowID,
+				"hour_bucket":    row.Hour,
+				"value":          row.Value,
+				"synced_at":      nowISO,
+			}
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UpsertMentionedMedia upserts one mentioned-media item by
+// (creator_row_id, ig_media_id).
+func (s *InsightsStore) UpsertMentionedMedia(ctx context.Context, creatorRowID string, row insights.MentionedMedia) error {
+	nowISO := s.nowISO()
+	_, err := s.upsertRow(ctx, s.tables.MentionedMedia, []string{
+		appwrite.QueryEqual("creator_row_id", creatorRowID),
+		appwrite.QueryEqual("ig_media_id", row.MediaID),
+	}, func(string) map[string]any {
+		return map[string]any{
+			"creator_row_id":        creatorRowID,
+			"ig_media_id":           row.MediaID,
+			"caption":               row.Caption,
+			"media_type":            row.MediaType,
+			"like_count":            row.LikeCount,
+			"comments_count":        row.CommentsCount,
+			"owner_id":              row.OwnerID,
+			"owner_username":        row.OwnerUsername,
+			"permalink":             row.Permalink,
+			"posted_at":             row.Timestamp,
+			"mentioned_by_user_id":  row.MentionedByUserID,
+			"mentioned_by_username": row.MentionedByUsername,
+			"synced_at":             nowISO,
+		}
+	})
+	return err
+}
+
 // findRowID returns the $id of the first row matching queries, or "" when no
 // row matches.
 func (s *InsightsStore) findRowID(ctx context.Context, tableID string, queries []string) (string, error) {
@@ -268,6 +322,26 @@ func (s *InsightsStore) findRowID(ctx context.Context, tableID string, queries [
 		return "", nil
 	}
 	return stringField(result.Rows[0], "$id"), nil
+}
+
+// upsertRow finds a row by queries and either updates it or creates a new one.
+// buildData receives the existing row id (empty when creating) so callers can
+// vary insert-only fields such as first_seen_at.
+func (s *InsightsStore) upsertRow(ctx context.Context, tableID string, queries []string, buildData func(existingID string) map[string]any) (rowID string, err error) {
+	rowID, err = s.findRowID(ctx, tableID, queries)
+	if err != nil {
+		return "", err
+	}
+	data := buildData(rowID)
+	if rowID != "" {
+		_, err = s.client.UpdateRow(ctx, tableID, rowID, data, nil)
+		return rowID, err
+	}
+	created, err := s.client.CreateRow(ctx, tableID, appwrite.UniqueID, data, nil)
+	if err != nil {
+		return "", err
+	}
+	return stringField(created, "$id"), nil
 }
 
 func (s *InsightsStore) nowISO() string {

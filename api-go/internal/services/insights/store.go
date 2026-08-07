@@ -32,4 +32,16 @@ type Store interface {
 	// derived counters onto the creator row. status is one of SyncStatusOK,
 	// SyncStatusError, SyncStatusTokenError. derived may be nil.
 	UpdateCreatorSyncState(ctx context.Context, creatorRowID string, status string, syncTime string, derived map[string]any) error
+
+	// UpsertOnlineFollowers persists the lifetime online-followers hour
+	// distribution for a creator.
+	UpsertOnlineFollowers(ctx context.Context, creatorRowID string, rows []OnlineFollowers) error
+
+	// UpsertMentionedMedia persists a media object where the creator was
+	// mentioned by another account.
+	UpsertMentionedMedia(ctx context.Context, creatorRowID string, row MentionedMedia) error
+
+	// GetCreatorByIGUserID returns the creator row matching the given
+	// Instagram professional user id, or an empty CreatorRow when none exists.
+	GetCreatorByIGUserID(ctx context.Context, igUserID string) (*CreatorRow, error)
 }

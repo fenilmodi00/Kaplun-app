@@ -60,13 +60,37 @@ type MediaItemWithInsights struct {
 	Insights *MediaInsights
 }
 
+// OnlineFollowers is one hour bucket of the online followers metric.
+type OnlineFollowers struct {
+	Hour  int
+	Value int64
+}
+
+// MentionedMedia is one media item in which the creator account was tagged or
+// mentioned by another account.
+type MentionedMedia struct {
+	MediaID             string
+	Caption             string
+	MediaType           string
+	LikeCount           int64
+	CommentsCount       int64
+	OwnerID             string
+	OwnerUsername       string
+	Permalink           string
+	Timestamp           string
+	MentionedByUserID   string
+	MentionedByUsername string
+}
+
 // InsightDay is one day of account-level day-series metrics (Date is
 // YYYY-MM-DD). Reach and FollowerCount are pointers because Meta may return
-// a series for one metric and not the other on a given day.
+// a series for one metric and not the other on a given day. Views is a
+// pointer for the same reason.
 type InsightDay struct {
 	Date          string
 	Reach         *int64
 	FollowerCount *int64
+	Views         *int64
 }
 
 // DemographicBreakdown is one (metric, breakdown, dimension) cell from the
@@ -90,10 +114,11 @@ type CreatorRow struct {
 // success; on failure it carries the sentinel identity (ErrTokenExpired)
 // or the underlying error text.
 type SyncResult struct {
-	CreatorRowID         string
-	MediaUpserted        int
-	InsightDaysUpserted  int
-	DemographicsUpserted int
-	DurationMs           int64
-	Error                string
+	CreatorRowID            string
+	MediaUpserted           int
+	InsightDaysUpserted     int
+	DemographicsUpserted    int
+	OnlineFollowersUpserted int
+	DurationMs              int64
+	Error                   string
 }
