@@ -22,11 +22,13 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from '@/lib/reanimated-platform';
-import { useClerk } from '@clerk/expo';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { useDashboard } from '@/hooks/useDashboard';
 import { disconnectInstagram } from '@/lib/instagram';
+import { clearStoredSession } from '@/lib/auth-session';
 import { addLog } from '@/lib/logger';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
@@ -100,7 +102,8 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { signOut } = useClerk();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     creator,
     dealThreads,
@@ -111,6 +114,12 @@ export default function ProfileScreen() {
     refresh,
   } = useCreatorProfile();
   const { loading: dashboardLoading } = useDashboard();
+
+  async function handleSignOut() {
+    await clearStoredSession();
+    queryClient.clear();
+    router.replace('/');
+  }
 
   // Avatar scale-in entrance (reanimated-platform is web/native safe)
   const avatarScale = useSharedValue(0);
@@ -337,7 +346,7 @@ export default function ProfileScreen() {
         <ClayAnimatedButton variant="secondary" onPress={handleDisconnect} fullWidth>
           Disconnect Instagram
         </ClayAnimatedButton>
-        <ClayAnimatedButton variant="primary" onPress={() => signOut()} fullWidth>
+        <ClayAnimatedButton variant="primary" onPress={handleSignOut} fullWidth>
           Sign Out
         </ClayAnimatedButton>
       </View>

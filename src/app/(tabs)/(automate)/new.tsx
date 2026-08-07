@@ -34,7 +34,6 @@ function animateFormLayout() {
 }
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SegmentedControl } from '@expo/ui/community/segmented-control';
@@ -272,7 +271,6 @@ export default function NewAutomationScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { createAutomation, creating } = useAutomations();
-  const { getToken } = useAuth();
   const { connect: connectInstagram } = useAutomationGate();
 
   // ── Form state ───────────────────────────────────────────────────────────
@@ -467,7 +465,7 @@ export default function NewAutomationScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await listCampaignTemplates(getToken);
+        const data = await listCampaignTemplates();
         if (!cancelled) setTemplates(data);
       } catch (err) {
         addLog(`Failed to load templates: ${err instanceof Error ? err.message : String(err)}`);
@@ -476,7 +474,7 @@ export default function NewAutomationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(remeasureSections, 350);

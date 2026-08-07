@@ -1,5 +1,6 @@
-/** Gin/Go client for the comment-automation engine. Uses Clerk Bearer auth. */
+/** Gin/Go client for the comment-automation engine. Uses Appwrite JWT auth. */
 import { executeWithRetry } from './resilient';
+import { getAppwriteJWT } from './auth-session';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -80,7 +81,6 @@ export interface CreateAutomationInput {
 }
 
 export type PatchAutomationInput = Partial<CreateAutomationInput>;
-export type GetToken = () => Promise<string | null>;
 
 export interface CampaignTemplate {
   slug: string;
@@ -99,14 +99,12 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
-async function authHeaders(getToken: GetToken): Promise<HeadersInit> {
-  const token = await getToken();
-  if (!token) throw new Error('session_expired');
+async function authHeaders(): Promise<HeadersInit> {
+  const token = await getAppwriteJWT();
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
 async function request<T>(
-  getToken: GetToken,
   path: string,
   init: RequestInit,
   retry: boolean,
@@ -114,7 +112,7 @@ async function request<T>(
   const call = async (): Promise<T> => {
     const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: await authHeaders(getToken),
+      headers: await authHeaders(),
     });
     if (res.status === 401) throw new Error('session_expired');
     if (!res.ok) {
@@ -126,36 +124,36 @@ async function request<T>(
   return retry ? executeWithRetry(call) : call();
 }
 
-export async function listAutomations(getToken: GetToken): Promise<Automation[]> {
-  const data = await request<{ automations: Automation[] }>(getToken, '/automations', { method: 'GET' }, true);
+export async function listAutomations(): Promise<Automation[]> {
+  const data = await request<{ automations: Automation[] }>('/automations', { method: 'GET' }, true);
   return data.automations;
 }
 
-export async function createAutomation(getToken: GetToken, input: CreateAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>(getToken, '/automations', {
+export async function createAutomation(input: CreateAutomationInput): Promise<Automation> {
+  const data = await request<{ automation: Automation }>('/automations', {
     method: 'POST', body: JSON.stringify(input),
   }, false);
   return data.automation;
 }
 
-export async function updateAutomation(getToken: GetToken, id: string, patch: PatchAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>(getToken, `/automations/${id}`, {
+export async function updateAutomation(id: string, patch: PatchAutomationInput): Promise<Automation> {
+  const data = await request<{ automation: Automation }>(`/automations/${id}`, {
     method: 'PATCH', body: JSON.stringify(patch),
   }, false);
   return data.automation;
 }
 
-export async function deleteAutomation(getToken: GetToken, id: string): Promise<void> {
-  await request<null>(getToken, `/automations/${id}`, { method: 'DELETE' }, false);
+export async function deleteAutomation(id: string): Promise<void> {
+  await request<null>(`/automations/${id}`, { method: 'DELETE' }, false);
 }
 
-export async function listAutomationLogs(getToken: GetToken, id: string): Promise<AutomationLog[]> {
-  const data = await request<{ logs: AutomationLog[] }>(getToken, `/automations/${id}/logs`, { method: 'GET' }, true);
+export async function listAutomationLogs(id: string): Promise<AutomationLog[]> {
+  const data = await request<{ logs: AutomationLog[] }>(`/automations/${id}/logs`, { method: 'GET' }, true);
   return data.logs;
 }
 
-export async function listCampaignTemplates(getToken: GetToken): Promise<CampaignTemplate[]> {
-  const data = await request<{ templates: CampaignTemplate[] }>(getToken, '/automations/templates', { method: 'GET' }, true);
+export async function listCampaignTemplates(): Promise<CampaignTemplate[]> {
+  const data = await request<{ templates: CampaignTemplate[] }>('/automations/templates', { method: 'GET' }, true);
   return data.templates;
 }
 
@@ -173,10 +171,10 @@ export interface OverviewStats {
   active_automations: number;
 }
 
-export async function getAutomationStats(getToken: GetToken, automationId: string): Promise<AutomationStats> {
-  return request<AutomationStats>(getToken, `/automations/${automationId}/stats`, { method: 'GET' }, true);
+export async function getAutomationStats(automationId: string): Promise<AutomationStats> {
+  return request<AutomationStats>(`/automations/${automationId}/stats`, { method: 'GET' }, true);
 }
 
-export async function getOverviewStats(getToken: GetToken): Promise<OverviewStats> {
-  return request<OverviewStats>(getToken, '/automations/stats/overview', { method: 'GET' }, true);
+export async function getOverviewStats(): Promise<OverviewStats> {
+  return request<OverviewStats>('/automations/stats/overview', { method: 'GET' }, true);
 }

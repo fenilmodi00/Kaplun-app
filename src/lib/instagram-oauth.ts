@@ -67,8 +67,8 @@ function getRedirectDeepLink(): string {
 /**
  * Opens Instagram's OAuth authorization page and returns the auth code.
  *
- * @param clerkId - Clerk user ID (passed in `state` for the callback to identify the user)
- * @param appwriteUserId - Appwrite user ID (passed in `state` for row permissions)
+ * @param clerkId - Appwrite user $id (passed in `state` as `clerk_id` for callback compatibility)
+ * @param appwriteUserId - Appwrite user $id (passed in `state` for row permissions)
  * @returns true on successful connection
  * @throws Error if the user cancels the flow or the connection failed
  */

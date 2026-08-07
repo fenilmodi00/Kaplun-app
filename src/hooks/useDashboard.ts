@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { useUser } from "@clerk/expo";
 import { useQuery } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listDeals } from '@/lib/repository';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
 import type { Creator, DealThread, Deal } from '@/lib/types';
 
@@ -19,8 +19,8 @@ interface UseDashboardResult {
 }
 
 export function useDashboard(): UseDashboardResult {
-  const { user } = useUser();
-  const clerkUserId = user?.id ?? '';
+  const { data: user } = useAppwriteUser();
+  const appwriteUserId = user?.$id ?? '';
   const { isReady } = useBridge();
 
   const {
@@ -30,11 +30,11 @@ export function useDashboard(): UseDashboardResult {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['dashboard', clerkUserId],
+    queryKey: ['dashboard', appwriteUserId],
     queryFn: async (): Promise<DashboardData> => {
-      if (!clerkUserId) return { creator: null, threads: [], deals: [] };
+      if (!appwriteUserId) return { creator: null, threads: [], deals: [] };
 
-      const creator = await getCreatorByClerkId(clerkUserId);
+      const creator = await getCreatorByClerkId(appwriteUserId);
       if (!creator) return { creator: null, threads: [], deals: [] };
 
       const igUserId = creator.ig_user_id;
@@ -49,7 +49,7 @@ export function useDashboard(): UseDashboardResult {
 
       return { creator, threads, deals };
     },
-    enabled: !!clerkUserId && isReady,
+    enabled: !!appwriteUserId && isReady,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });

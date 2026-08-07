@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useUser, useAuth } from "@clerk/expo";
 import { useRouter, useFocusEffect } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +7,7 @@ import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ScreenShell } from '@/components/screen-shell';
 import { useShakeAnimation, useEntranceAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
-import { ensureAppwriteSession } from '@/lib/auth-bridge';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
 import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
@@ -347,8 +346,7 @@ function QuickActions() {
 // ── Main screen ──────────────────────────────────────────────────────
 
 export default function HomeScreen() {
-  const { user } = useUser();
-  const { getToken } = useAuth();
+  const { data: user } = useAppwriteUser();
   const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
 
@@ -361,12 +359,12 @@ export default function HomeScreen() {
 
   // Re-check on every focus so Profile → Disconnect immediately shows
   // the connect UI when the user returns to Home (tabs stay mounted).
-  const clerkUserId = user?.id;
+  const appwriteUserId = user?.$id;
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       async function checkConnection() {
-        if (!clerkUserId) {
+        if (!appwriteUserId) {
           setIsCheckingConnection(false);
           return;
         }
@@ -378,7 +376,7 @@ export default function HomeScreen() {
           // Prefer Appwrite TablesDB as source of truth. Only call Graph when we
           // already have a usable token — otherwise fetchProfile throws
           // session_expired and the catch below used to wipe the row.
-          const creator = await getCreatorByClerkId(clerkUserId);
+          const creator = await getCreatorByClerkId(appwriteUserId);
           if (creator && creator.is_onboarded && creator.username && hasUsableToken(creator)) {
             if (!cancelled) setProfile(profileFromCreator(creator));
           } else if (hasUsableToken(creator)) {
@@ -404,24 +402,22 @@ export default function HomeScreen() {
       return () => {
         cancelled = true;
       };
-    }, [clerkUserId, bridgeReady]),
+    }, [appwriteUserId, bridgeReady]),
   );
 
   const handleConnect = useCallback(async () => {
     if (!user) return;
     setIsConnecting(true);
     setError(null);
-    addLog(`home-connect: start clerk=${user.id.slice(0, 12)}…`);
+    addLog(`home-connect: start uid=${user.$id.slice(0, 12)}…`);
     try {
-      const appwriteUser = await ensureAppwriteSession(getToken);
-      addLog(`home-connect: appwrite session ok uid=${appwriteUser.$id.slice(0, 12)}…`);
-      const success = await startInstagramOAuth(user.id, appwriteUser.$id);
+      const success = await startInstagramOAuth(user.$id, user.$id);
       if (!success) throw new Error('Instagram connection was not successful');
 
       // Appwrite is the source of truth — the OAuth callback must have written
       // a usable plaintext access_token. Do not treat "username present" alone
       // as connected (that false-positive hid empty-token reconnect failures).
-      const creator = await getCreatorByClerkId(user.id);
+      const creator = await getCreatorByClerkId(user.$id);
       const tokenLen = creator?.access_token?.length ?? 0;
       addLog(
         `home-connect: post-oauth username=${creator?.username ?? '(none)'} token_len=${tokenLen} onboarded=${creator?.is_onboarded ?? false}`
@@ -457,10 +453,10 @@ export default function HomeScreen() {
     } finally {
       setIsConnecting(false);
     }
-  }, [user, getToken]);
+  }, [user]);
 
-  const firstName = user?.firstName || 'Creator';
-  const displayName = user?.fullName || firstName;
+  const firstName = user?.name || 'Creator';
+  const displayName = user?.name || firstName;
 
   // Instant shell: real chrome + soft placeholders — never a full-screen lag spinner.
   // Once we have a profile (or skip), keep the real page even if bridge status flickers.

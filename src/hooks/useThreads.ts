@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { useUser } from "@clerk/expo";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Channel } from 'appwrite';
 import { DATABASE_ID, TABLES } from '@/lib/constants';
 import { getCreatorByClerkId, listThreads, getLastMessagePreviews } from '@/lib/repository';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useRealtimeSubscription } from '@/lib/realtime';
 import { useBridge } from '@/lib/bridge-context';
 import type { DealThread } from '@/lib/types';
@@ -20,8 +20,8 @@ interface UseThreadsResult {
 }
 
 export function useThreads(): UseThreadsResult {
-  const { user } = useUser();
-  const clerkUserId = user?.id ?? '';
+  const { data: user } = useAppwriteUser();
+  const appwriteUserId = user?.$id ?? '';
   const queryClient = useQueryClient();
   const { isReady } = useBridge();
 
@@ -32,11 +32,11 @@ export function useThreads(): UseThreadsResult {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['threads', clerkUserId],
+    queryKey: ['threads', appwriteUserId],
     queryFn: async (): Promise<ThreadWithPreview[]> => {
-      if (!clerkUserId) return [];
+      if (!appwriteUserId) return [];
 
-      const creator = await getCreatorByClerkId(clerkUserId);
+      const creator = await getCreatorByClerkId(appwriteUserId);
       if (!creator) return [];
 
       const igUserId = creator.ig_user_id as string;
@@ -52,14 +52,14 @@ export function useThreads(): UseThreadsResult {
         lastMessagePreview: previews.get(thread.$id ?? '') ?? '',
       }));
     },
-    enabled: !!clerkUserId && isReady,
+    enabled: !!appwriteUserId && isReady,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
 
   const dealThreadsChannel = Channel.tablesdb(DATABASE_ID).table(TABLES.DEAL_THREADS).row();
   useRealtimeSubscription(dealThreadsChannel.toString(), () => {
-    queryClient.invalidateQueries({ queryKey: ['threads', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['threads', appwriteUserId] });
   });
 
   const errorMessage = useMemo(() => {

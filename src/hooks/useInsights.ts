@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { useUser } from '@clerk/expo';
 import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-query';
 
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
 import {
   fetchAccountInsights,
@@ -42,16 +42,16 @@ function isSessionExpired(err: unknown): boolean {
 }
 
 export function useInsights(windowDays: number): UseInsightsResult {
-  const { user } = useUser();
-  const clerkUserId = user?.id ?? '';
+  const { data: user } = useAppwriteUser();
+  const appwriteUserId = user?.$id ?? '';
   const { isReady } = useBridge();
   const queryClient = useQueryClient();
-  const canFetch = !!clerkUserId && isReady;
+  const canFetch = !!appwriteUserId && isReady;
 
   const [profileQuery, insightsQuery, mediaQuery] = useQueries({
     queries: [
       {
-        queryKey: ['insightsProfile', clerkUserId],
+        queryKey: ['insightsProfile', appwriteUserId],
         queryFn: async (): Promise<InstagramProfileResponse | null> => {
           try {
             return await fetchProfile();
@@ -65,7 +65,7 @@ export function useInsights(windowDays: number): UseInsightsResult {
         retry: false,
       },
       {
-        queryKey: ['insightsAccount', clerkUserId, windowDays],
+        queryKey: ['insightsAccount', appwriteUserId, windowDays],
         // Insights are the screen's core content: let every error surface so
         // the UI can distinguish permission/reconnect states from "no data".
         queryFn: (): Promise<InstagramAccountInsights> =>
@@ -78,7 +78,7 @@ export function useInsights(windowDays: number): UseInsightsResult {
         retry: false,
       },
       {
-        queryKey: ['insightsMedia', clerkUserId],
+        queryKey: ['insightsMedia', appwriteUserId],
         queryFn: async (): Promise<InstagramMediaResponse[]> => {
           try {
             return await fetchMedia();
@@ -119,9 +119,9 @@ export function useInsights(windowDays: number): UseInsightsResult {
       : null;
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['insightsProfile', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['insightsAccount', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['insightsMedia', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['insightsProfile', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['insightsAccount', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['insightsMedia', appwriteUserId] });
   };
 
   return {

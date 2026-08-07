@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useUser } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
@@ -11,6 +10,7 @@ import { ScreenShell } from '@/components/screen-shell';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useEntranceAnimation } from '@/hooks/useClayAnimations';
 import { useInsights, type TopMediaItem } from '@/hooks/useInsights';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import type { InsightPoint } from '@/lib/instagram';
@@ -526,7 +526,7 @@ function InlineErrorStrip({ message, onRetry }: { message: string; onRetry: () =
 // ── Main screen ──────────────────────────────────────────────────────
 
 export default function InsightsScreen() {
-  const { user } = useUser();
+  const { data: user } = useAppwriteUser();
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState<PeriodDays>(28);
   const { profile, insights, topMedia, isLoading, isRefreshing, error, refresh } =
@@ -537,7 +537,7 @@ export default function InsightsScreen() {
     if (!user) return;
     setIsReconnecting(true);
     try {
-      await startInstagramOAuth(user.id, user.id);
+      await startInstagramOAuth(user.$id, user.$id);
       await queryClient.invalidateQueries({ queryKey: ['insightsProfile'] });
       await queryClient.invalidateQueries({ queryKey: ['insightsAccount'] });
       await queryClient.invalidateQueries({ queryKey: ['insightsMedia'] });

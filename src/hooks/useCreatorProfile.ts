@@ -1,8 +1,8 @@
 import { useRef, useEffect, useMemo } from 'react';
-import { useUser } from "@clerk/expo";
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getCreatorByClerkId, listThreads, listPosts } from '@/lib/repository';
 import { fetchMedia, fetchInsights } from '@/lib/instagram';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
 import type { Creator, DealThread } from '@/lib/types';
 import type { InstagramMediaResponse, InstagramInsightsResponse } from '@/lib/instagram';
@@ -29,8 +29,8 @@ interface UseCreatorProfileResult {
 }
 
 export function useCreatorProfile(): UseCreatorProfileResult {
-  const { user } = useUser();
-  const clerkUserId = user?.id ?? '';
+  const { data: user } = useAppwriteUser();
+  const appwriteUserId = user?.$id ?? '';
   const queryClient = useQueryClient();
   const cancelledRef = useRef(false);
   const { isReady } = useBridge();
@@ -41,25 +41,25 @@ export function useCreatorProfile(): UseCreatorProfileResult {
     };
   }, []);
 
-  const canFetch = !!clerkUserId && isReady;
+  const canFetch = !!appwriteUserId && isReady;
 
   const results = useQueries({
     queries: [
       {
-        queryKey: ['creator', clerkUserId],
+        queryKey: ['creator', appwriteUserId],
         queryFn: async (): Promise<Creator | null> => {
-          if (!clerkUserId) return null;
-          return getCreatorByClerkId(clerkUserId);
+          if (!appwriteUserId) return null;
+          return getCreatorByClerkId(appwriteUserId);
         },
         enabled: canFetch,
         staleTime: 30_000,
         gcTime: 5 * 60_000,
       },
       {
-        queryKey: ['creatorThreads', clerkUserId],
+        queryKey: ['creatorThreads', appwriteUserId],
         queryFn: async (): Promise<DealThread[]> => {
-          if (!clerkUserId) return [];
-          const creator = await getCreatorByClerkId(clerkUserId);
+          if (!appwriteUserId) return [];
+          const creator = await getCreatorByClerkId(appwriteUserId);
           if (!creator || !creator.ig_user_id) return [];
           return listThreads(creator.ig_user_id, { orderDesc: false });
         },
@@ -68,10 +68,10 @@ export function useCreatorProfile(): UseCreatorProfileResult {
         gcTime: 5 * 60_000,
       },
       {
-        queryKey: ['creatorPosts', clerkUserId],
+        queryKey: ['creatorPosts', appwriteUserId],
         queryFn: async (): Promise<PostRow[]> => {
-          if (!clerkUserId) return [];
-          const creator = await getCreatorByClerkId(clerkUserId);
+          if (!appwriteUserId) return [];
+          const creator = await getCreatorByClerkId(appwriteUserId);
           if (!creator || !creator.username) return [];
           return listPosts(creator.username, 3);
         },
@@ -80,9 +80,9 @@ export function useCreatorProfile(): UseCreatorProfileResult {
         gcTime: 5 * 60_000,
       },
       {
-        queryKey: ['creatorMedia', clerkUserId],
+        queryKey: ['creatorMedia', appwriteUserId],
         queryFn: async (): Promise<InstagramMediaResponse[]> => {
-          if (!clerkUserId) return [];
+          if (!appwriteUserId) return [];
           try {
             return await fetchMedia();
           } catch (err) {
@@ -99,9 +99,9 @@ export function useCreatorProfile(): UseCreatorProfileResult {
         retry: false,
       },
       {
-        queryKey: ['creatorInsights', clerkUserId],
+        queryKey: ['creatorInsights', appwriteUserId],
         queryFn: async (): Promise<InstagramInsightsResponse | null> => {
-          if (!clerkUserId) return null;
+          if (!appwriteUserId) return null;
           try {
             const data = await fetchInsights();
             if (data.error) return null; // business account required
@@ -159,11 +159,11 @@ export function useCreatorProfile(): UseCreatorProfileResult {
 
   const refresh = async () => {
     if (cancelledRef.current) return;
-    queryClient.invalidateQueries({ queryKey: ['creator', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['creatorThreads', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['creatorPosts', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['creatorMedia', clerkUserId] });
-    queryClient.invalidateQueries({ queryKey: ['creatorInsights', clerkUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creator', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorThreads', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorPosts', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorMedia', appwriteUserId] });
+    queryClient.invalidateQueries({ queryKey: ['creatorInsights', appwriteUserId] });
   };
 
   return {

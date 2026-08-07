@@ -1,10 +1,10 @@
 // src/hooks/useAutomations.ts
 import { useMemo } from 'react';
-import { useAuth, useUser } from '@clerk/expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Channel } from 'appwrite';
 
 import { DATABASE_ID, TABLES } from '@/lib/constants';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useRealtimeSubscription } from '@/lib/realtime';
 import {
   createAutomation,
@@ -22,23 +22,22 @@ import {
 } from '@/lib/automations';
 
 export function useAutomations() {
-  const { user } = useUser();
-  const { getToken } = useAuth();
+  const { data: user } = useAppwriteUser();
   const queryClient = useQueryClient();
 
-  const queryKey = ['automations', user?.id];
+  const queryKey = ['automations', user?.$id];
 
   const query = useQuery({
     queryKey,
     enabled: !!user,
-    queryFn: () => listAutomations(getToken),
+    queryFn: () => listAutomations(),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
   const toggle = useMutation({
     mutationFn: (automation: Automation) =>
-      updateAutomation(getToken, automation.$id, {
+      updateAutomation(automation.$id, {
         status: automation.status === 'active' ? 'paused' : 'active',
       }),
     onMutate: async (automation) => {
@@ -59,12 +58,12 @@ export function useAutomations() {
   });
 
   const create = useMutation({
-    mutationFn: (input: CreateAutomationInput) => createAutomation(getToken, input),
+    mutationFn: (input: CreateAutomationInput) => createAutomation(input),
     onSuccess: invalidate,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => deleteAutomation(getToken, id),
+    mutationFn: (id: string) => deleteAutomation(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<Automation[]>(queryKey);
@@ -98,13 +97,12 @@ export function useAutomations() {
 }
 
 export function useAutomationLogs(automationId: string) {
-  const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ['automationLogs', automationId],
     enabled: !!automationId,
-    queryFn: () => listAutomationLogs(getToken, automationId),
+    queryFn: () => listAutomationLogs(automationId),
   });
 
   const logsChannel = useMemo(
@@ -128,10 +126,9 @@ export function useAutomationLogs(automationId: string) {
 }
 
 export function useOverviewStats() {
-  const { getToken } = useAuth();
   const query = useQuery({
     queryKey: ['overviewStats'],
-    queryFn: () => getOverviewStats(getToken),
+    queryFn: () => getOverviewStats(),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: false,
@@ -145,11 +142,10 @@ export function useOverviewStats() {
 }
 
 export function useAutomationStats(automationId: string) {
-  const { getToken } = useAuth();
   const query = useQuery({
     queryKey: ['automationStats', automationId],
     enabled: !!automationId,
-    queryFn: () => getAutomationStats(getToken, automationId),
+    queryFn: () => getAutomationStats(automationId),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: false,
