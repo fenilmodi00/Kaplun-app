@@ -35,16 +35,16 @@ go test ./...
 | Path | Auth |
 |------|------|
 | `GET /health` | none |
-| `POST /auth/appwrite-session` | Clerk Bearer |
+| `POST /auth/ensure-profile` | Appwrite JWT Bearer |
 | *(removed — instagrapi proxy endpoints deleted)* | |
-| `/automations/*` | Clerk Bearer (templates unauthenticated) |
+| `/automations/*` | Appwrite JWT Bearer (templates unauthenticated) |
 | `GET\|POST /webhooks/instagram` | Meta verify / HMAC |
 | `/cron/*` | `X-Cron-Secret` |
 | `GET /instagram/callback` | none (OAuth redirect) |
 
 ## Expo env
 
-Point the Clerk-authenticated base URL at this server:
+Point the Appwrite-authenticated base URL at this server:
 
 ```
 EXPO_PUBLIC_IG_API_BASE_URL=http://localhost:8000

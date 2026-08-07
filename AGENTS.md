@@ -8,7 +8,7 @@
 
 ## OVERVIEW
 
-Kaplun is an Expo SDK 57 mobile app for Instagram creators. It uses React Native 0.86, React 19.2, and a Bun-based TypeScript toolchain. The backend is a Go/Gin service in `api-go/` (the old FastAPI `api/` has been removed). Data lives in Appwrite TablesDB, authentication is handled by Clerk, and Instagram operations call Meta's Graph API directly from the app using per-user long-lived tokens.
+Kaplun is an Expo SDK 57 mobile app for Instagram creators. It uses React Native 0.86, React 19.2, and a Bun-based TypeScript toolchain. The backend is a Go/Gin service in `api-go/` (the old FastAPI `api/` has been removed). Data lives in Appwrite TablesDB, authentication is handled by Appwrite, and Instagram operations call Meta's Graph API directly from the app using per-user long-lived tokens.
 
 The visual language is **Clay**: a cream-canvas (`#fffaf0`) design system with saturated feature cards, dark-navy CTAs, Inter typography, and rounded display type. Tokens live in `src/global.css` and the full design manual is in `DESIGN.md`.
 
@@ -30,7 +30,7 @@ Key architectural decisions:
 | Styling | NativeWind v5, Tailwind CSS v4, `react-native-css` | `useCssElement` bridge in `src/tw/`. |
 | Animations | React Native Reanimated 4.5.0 | Imported only via `@/lib/reanimated-platform` or `@/tw/animated`. Web uses no-op stubs. |
 | State / data | TanStack React Query 5 | Persisted to AsyncStorage for 24h. |
-| Auth | Clerk (`@clerk/expo`) | JWT verified by Go backend. |
+| Auth | Appwrite (`appwrite`) | Appwrite account + JWT verified by Go backend. |
 | Backend | Go 1.25, Gin 1.12 | Module path `kaplun/api-go`. |
 | Database | Appwrite TablesDB | Document-based; NOT the SQL Databases API. |
 | Instagram | Meta Graph API v26.0 | Direct from app and backend. |
@@ -75,7 +75,7 @@ Legacy files still in the repo:
 │   ├── tw/                 # className-enabled RN primitives
 │   ├── types/              # Global TypeScript types
 │   └── __tests__/          # Jest test suites
-├── __mocks__/              # Jest manual mocks (@clerk/expo, @expo/ui)
+├── __mocks__/              # Jest manual mocks (@expo/ui)
 ├── assets/                 # App icons + splash
 ├── docs/                   # Architecture/design docs and migration plans
 ├── db/schema.sql           # Legacy SQLite schema (unused)
@@ -148,7 +148,7 @@ Backend tests do not require external services (Appwrite/Meta clients are interf
 
 1. **App → Appwrite TablesDB** for CRUD + Realtime (via `@/lib/repository`).
 2. **App → `graph.instagram.com`** directly for Instagram data (via `@/lib/instagram`).
-3. **App → Gin `api-go`** for auth bridge + automations engine (via `@/lib/auth-bridge` and `@/lib/automations`), using Clerk Bearer tokens.
+3. **App → Gin `api-go`** for auth bridge + automations engine (via `@/lib/auth-bridge` and `@/lib/automations`), using Appwrite JWT Bearer tokens.
 
 ```
 Screen → Hook (useQuery/useMutation)
@@ -162,7 +162,7 @@ Instagram operations:
     → on Meta error 190: ig_refresh_token → updateCreatorToken() → retry once
 
 Auth bridge (once per sign-in):
-  Clerk getToken() → Gin POST /auth/appwrite-session → account.createSession()
+  Appwrite account.createJWT() → Gin POST /auth/ensure-profile → account.createSession()
   → ensureAppwriteSession() with 24h TTL fast path + exponential backoff retry
 ```
 
@@ -171,7 +171,7 @@ Auth bridge (once per sign-in):
 - `cmd/server/main.go` loads `.env`, builds optional dependencies, starts the HTTP server, and optionally launches a Cloudflare quick tunnel in the background.
 - Route groups are registered only when their dependencies are available, so `/health` always answers even if secrets are missing.
 - Auth modes:
-  - Clerk Bearer for app-facing routes (`/auth/*`, `/automations/*`).
+  - Appwrite JWT Bearer for app-facing routes (`/auth/*`, `/automations/*`).
   - `X-Cron-Secret` for `/cron/*`.
   - Meta HMAC `x-hub-signature-256` for `POST /webhooks/instagram`.
   - No auth for `/health`, `GET /webhooks/instagram`, `GET /instagram/callback`.
@@ -230,8 +230,7 @@ Auth bridge (once per sign-in):
 ## SECURITY CONSIDERATIONS
 
 - **Secrets are env-only.** Use `EXPO_PUBLIC_*` for app-facing values and backend env vars for server secrets. Never hardcode keys, tokens, or credentials.
-- **Clerk:** the app uses `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`; the backend verifies Clerk JWTs with `CLERK_SECRET_KEY` or `CLERK_JWT_KEY`.
-- **Appwrite:** the app uses `EXPO_PUBLIC_APPWRITE_ENDPOINT` + `EXPO_PUBLIC_APPWRITE_PROJECT_ID`. The backend uses `APPWRITE_API_KEY` for server-side operations.
+- **Appwrite:** the app uses `EXPO_PUBLIC_APPWRITE_ENDPOINT` + `EXPO_PUBLIC_APPWRITE_PROJECT_ID`. The backend uses `APPWRITE_API_KEY` for server-side operations and verifies Appwrite JWTs with `APPWRITE_JWT_KEY`.
 - **Instagram:** OAuth app ID/secret (`INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`) must match `EXPO_PUBLIC_IG_APP_ID`. Webhook HMAC verification uses `FACEBOOK_APP_SECRET`.
 - **Cron endpoints** require `CRON_SECRET` in the `X-Cron-Secret` header.
 - **Cloudflare tunnel:** the backend can open a public quick tunnel locally. Quick tunnels get a new `*.trycloudflare.com` host on every restart; do not use them for production.
@@ -252,7 +251,6 @@ Auth bridge (once per sign-in):
 
 | Variable | Used in | Purpose |
 |----------|---------|---------|
-| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `_layout.tsx` | Clerk provider key |
 | `EXPO_PUBLIC_APPWRITE_ENDPOINT` | `lib/appwrite.ts` | Appwrite API endpoint |
 | `EXPO_PUBLIC_APPWRITE_PROJECT_ID` | `lib/appwrite.ts` | Appwrite project ID |
 | `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/auth-bridge.ts`, `lib/automations.ts` | Gin api-go base URL |
@@ -265,7 +263,7 @@ Auth bridge (once per sign-in):
 | Variable | Purpose |
 |----------|---------|
 | `IG_API_PORT` | Server port (default 8000) |
-| `CLERK_SECRET_KEY` / `CLERK_JWT_KEY` | Clerk JWT verification |
+| `APPWRITE_JWT_KEY` | Appwrite JWT verification |
 | `APPWRITE_ENDPOINT` / `APPWRITE_PROJECT_ID` / `APPWRITE_API_KEY` | Appwrite server client |
 | `APPWRITE_DATABASE_ID` / `APPWRITE_CREATORS_TABLE_ID` | Appwrite DB/table IDs |
 | `APPWRITE_AUTOMATIONS_TABLE_ID` / `APPWRITE_AUTOMATION_LOGS_TABLE_ID` / `APPWRITE_AUTOMATION_JOBS_TABLE_ID` | Automation tables |

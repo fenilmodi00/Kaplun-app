@@ -6,7 +6,7 @@
 
 | Hook | File | Backend | React Query | Realtime? | Returns |
 |------|------|---------|-------------|-----------|---------|
-| `useAuthFlow` | `useAuthFlow.ts` | Clerk | No | No | Auth state machine (signIn/signUp/OTP/Google) |
+| `useAuthFlow` | `useAuthFlow.ts` | Appwrite | No | No | Auth state machine (signIn/signUp/OTP/Google) |
 | `useDashboard` | `useDashboard.ts` | Appwrite via `@/lib/repository` | `useQuery` | No | `{ data: {creator, threads, deals}, loading, error, refresh }` |
 | `useThreads` | `useThreads.ts` | Appwrite via `@/lib/repository` | `useQuery` | Yes (`deal_threads`) | `{ threads: ThreadWithPreview[], loading, error, refresh }` |
 | `useMessages` | `useMessages.ts` | Appwrite via `@/lib/repository` | `useQuery` + `useMutation` | Yes (`messages` create) | `{ messages, loading, error, sendMessage, markAsRead, refresh }` |
@@ -28,10 +28,10 @@
 
 ## CONVENTIONS
 
-- **React Query for all data** — `useQuery` for reads, `useMutation` for writes, `useQueryClient` for invalidation/setQueryData. `staleTime: 30_000`, `gcTime: 5 * 60_000`, `retry: false` in all hooks. Gate Appwrite queries with `enabled: !!clerkUserId && useBridge().isReady`.
-- **Appwrite via `@/lib/repository`** — hooks never call `tablesDB` directly. All Appwrite operations go through typed repository functions (e.g. `getCreatorByClerkId`, `listThreads`, `listMessages`, `sendMessage`).
+- **React Query for all data** — `useQuery` for reads, `useMutation` for writes, `useQueryClient` for invalidation/setQueryData. `staleTime: 30_000`, `gcTime: 5 * 60_000`, `retry: false` in all hooks. Gate Appwrite queries with `enabled: !!appwriteUserId && useBridge().isReady`.
+- **Appwrite via `@/lib/repository`** — hooks never call `tablesDB` directly. All Appwrite operations go through typed repository functions (e.g. `getCreatorByAppwriteId`, `listThreads`, `listMessages`, `sendMessage`).
 - **Instagram via `@/lib/instagram`** — `fetchMedia`, `fetchInsights`, `fetchProfile` from `@/lib/instagram` (direct Graph API with the per-user token; no `withFreshSession` wrapper needed).
-- **`clerkUserId` from `useUser()`** — `const { user } = useUser(); const clerkUserId = user?.id ?? ''`. Used as the query key discriminator and passed to repository functions.
+- **`appwriteUserId` from `useAppwriteUser()`** — `const { data: user } = useAppwriteUser(); const appwriteUserId = user?.$id ?? ''`. Used as the query key discriminator and passed to repository functions.
 - **`refresh` callback** — every hook returns `refresh: () => void` that calls `queryClient.invalidateQueries({ queryKey: [...] })`. Provided for backward compat and error retry buttons.
 - **`'session_expired'` handling** — Instagram token missing/unusable → `throw new Error('session_expired')` from `@/lib/instagram`. Hooks surface this as `error: 'session_expired'` to trigger re-login UI.
 - **Realtime invalidation pattern** — `useRealtimeSubscription(channel, () => queryClient.invalidateQueries({ queryKey: [...] }))`. Subscribe once, invalidate on any event.
