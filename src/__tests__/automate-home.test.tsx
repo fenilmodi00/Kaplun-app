@@ -22,10 +22,6 @@ jest.mock('@/lib/instagram-oauth', () => ({
   startInstagramOAuth: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('@/lib/auth-bridge', () => ({
-  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
-}));
-
 jest.mock('@/lib/bridge-context', () => ({
   useBridge: jest.fn().mockReturnValue({ isReady: true }),
 }));

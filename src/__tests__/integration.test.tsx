@@ -24,43 +24,8 @@ const mockDisconnectInstagram = disconnectInstagram as jest.Mock;
 const mockStartInstagramOAuth = startInstagramOAuth as jest.Mock;
 const mockFetchProfile = fetchProfile as jest.Mock;
 
-jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({
-    isSignedIn: true,
-    userId: 'test-user-id',
-    getToken: jest.fn().mockResolvedValue('test-token'),
-  }),
-  useUser: () => ({
-    user: {
-      id: 'test-user-id',
-      firstName: 'Test',
-      emailAddresses: [{ emailAddress: 'test@example.com' }],
-    },
-  }),
-  useClerk: () => ({
-    signOut: jest.fn().mockResolvedValue(undefined),
-  }),
-  useSignIn: () => ({
-    signIn: {
-      create: jest.fn().mockResolvedValue({ status: 'complete' }),
-      finalize: jest.fn().mockResolvedValue(undefined),
-      status: 'complete',
-    },
-  }),
-  useSignUp: () => ({
-    signUp: {
-      create: jest.fn().mockResolvedValue({ status: 'missing_requirements' }),
-      finalize: jest.fn().mockResolvedValue(undefined),
-      status: 'missing_requirements',
-      verifications: {
-        sendEmailCode: jest.fn().mockResolvedValue(undefined),
-        verifyEmailCode: jest.fn().mockResolvedValue(undefined),
-      },
-    },
-  }),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
+jest.mock('@/hooks/useAppwriteUser', () => ({
+  useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
 jest.mock('expo-linear-gradient', () => ({
@@ -93,10 +58,6 @@ jest.mock('@/lib/instagram', () => ({
 
 jest.mock('@/lib/instagram-oauth', () => ({
   startInstagramOAuth: jest.fn().mockResolvedValue(true),
-}));
-
-jest.mock('@/lib/auth-bridge', () => ({
-  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
 }));
 
 jest.mock('@/lib/bridge-context', () => ({

@@ -1,13 +1,17 @@
 /**
- * Automations FastAPI client tests.
+ * Automations Go/Gin client tests.
  *
- * Tests the Clerk-Bearer-authenticated automations client.
+ * Tests the Appwrite-JWT-authenticated automations client.
  * All network calls are mocked via global fetch.
  */
 
 // Must mock before importing the module
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
+
+jest.mock('@/lib/auth-session', () => ({
+  getAppwriteJWT: jest.fn().mockResolvedValue('mock-appwrite-jwt'),
+}));
 
 // EXPO_PUBLIC_IG_API_BASE_URL is set in jest.setup.ts to http://localhost:8000
 
@@ -23,12 +27,8 @@ import {
   type CreateAutomationInput,
 } from '@/lib/automations';
 
-const mockGetToken = jest.fn<Promise<string | null>, []>();
-
 beforeEach(() => {
   mockFetch.mockReset();
-  mockGetToken.mockReset();
-  mockGetToken.mockResolvedValue('mock-clerk-token');
 });
 
 const mockAutomation = {
@@ -81,14 +81,14 @@ describe('createAutomation', () => {
       json: async () => ({ automation: mockAutomation }),
     } as Response);
 
-    const result = await createAutomation(mockGetToken, createInput);
+    const result = await createAutomation(createInput);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations');
     expect(options.method).toBe('POST');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(JSON.parse(options.body)).toEqual(createInput);
@@ -102,13 +102,7 @@ describe('createAutomation', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(createAutomation(mockGetToken, createInput)).rejects.toThrow('session_expired');
-  });
-
-  it('session_expired: throws when getToken returns null', async () => {
-    mockGetToken.mockResolvedValueOnce(null);
-
-    await expect(createAutomation(mockGetToken, createInput)).rejects.toThrow('session_expired');
+    await expect(createAutomation(createInput)).rejects.toThrow('session_expired');
   });
 
   it('non-ok: throws descriptive error on 422', async () => {
@@ -118,7 +112,7 @@ describe('createAutomation', () => {
       text: async () => '{"detail":[{"loc":["body","keywords"],"msg":"field required"}]}',
     } as Response);
 
-    await expect(createAutomation(mockGetToken, createInput)).rejects.toThrow(
+    await expect(createAutomation(createInput)).rejects.toThrow(
       'automations request failed (422):',
     );
   });
@@ -132,14 +126,14 @@ describe('listAutomations', () => {
       json: async () => ({ automations: [mockAutomation] }),
     } as Response);
 
-    const result = await listAutomations(mockGetToken);
+    const result = await listAutomations();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations');
     expect(options.method).toBe('GET');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result).toEqual([mockAutomation]);
@@ -152,7 +146,7 @@ describe('listAutomations', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(listAutomations(mockGetToken)).rejects.toThrow('session_expired');
+    await expect(listAutomations()).rejects.toThrow('session_expired');
   });
 
   it('empty: returns empty array when no automations', async () => {
@@ -162,7 +156,7 @@ describe('listAutomations', () => {
       json: async () => ({ automations: [] }),
     } as Response);
 
-    const result = await listAutomations(mockGetToken);
+    const result = await listAutomations();
     expect(result).toEqual([]);
   });
 });
@@ -175,14 +169,14 @@ describe('updateAutomation', () => {
       json: async () => ({ automation: { ...mockAutomation, name: 'Updated' } }),
     } as Response);
 
-    const result = await updateAutomation(mockGetToken, 'auto_1', { name: 'Updated' });
+    const result = await updateAutomation('auto_1', { name: 'Updated' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/auto_1');
     expect(options.method).toBe('PATCH');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result.name).toBe('Updated');
@@ -195,7 +189,7 @@ describe('updateAutomation', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(updateAutomation(mockGetToken, 'auto_1', { name: 'x' })).rejects.toThrow('session_expired');
+    await expect(updateAutomation('auto_1', { name: 'x' })).rejects.toThrow('session_expired');
   });
 });
 
@@ -207,14 +201,14 @@ describe('deleteAutomation', () => {
       json: async () => undefined,
     } as Response);
 
-    await deleteAutomation(mockGetToken, 'auto_1');
+    await deleteAutomation('auto_1');
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/auto_1');
     expect(options.method).toBe('DELETE');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
   });
@@ -226,7 +220,7 @@ describe('deleteAutomation', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(deleteAutomation(mockGetToken, 'auto_1')).rejects.toThrow('session_expired');
+    await expect(deleteAutomation('auto_1')).rejects.toThrow('session_expired');
   });
 });
 
@@ -238,14 +232,14 @@ describe('listAutomationLogs', () => {
       json: async () => ({ logs: [mockLog] }),
     } as Response);
 
-    const result = await listAutomationLogs(mockGetToken, 'auto_1');
+    const result = await listAutomationLogs('auto_1');
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/auto_1/logs');
     expect(options.method).toBe('GET');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result).toEqual([mockLog]);
@@ -258,7 +252,7 @@ describe('listAutomationLogs', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(listAutomationLogs(mockGetToken, 'auto_1')).rejects.toThrow('session_expired');
+    await expect(listAutomationLogs('auto_1')).rejects.toThrow('session_expired');
   });
 });
 
@@ -275,14 +269,14 @@ describe('listCampaignTemplates', () => {
       json: async () => ({ templates: mockTemplates }),
     } as Response);
 
-    const result = await listCampaignTemplates(mockGetToken);
+    const result = await listCampaignTemplates();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/templates');
     expect(options.method).toBe('GET');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result).toEqual(mockTemplates);
@@ -295,7 +289,7 @@ describe('listCampaignTemplates', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(listCampaignTemplates(mockGetToken)).rejects.toThrow('session_expired');
+    await expect(listCampaignTemplates()).rejects.toThrow('session_expired');
   });
 
   it('empty: returns empty array when no templates', async () => {
@@ -305,7 +299,7 @@ describe('listCampaignTemplates', () => {
       json: async () => ({ templates: [] }),
     } as Response);
 
-    const result = await listCampaignTemplates(mockGetToken);
+    const result = await listCampaignTemplates();
     expect(result).toEqual([]);
   });
 });
@@ -324,14 +318,14 @@ describe('getAutomationStats', () => {
       json: async () => mockStats,
     } as Response);
 
-    const result = await getAutomationStats(mockGetToken, 'auto_1');
+    const result = await getAutomationStats('auto_1');
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/auto_1/stats');
     expect(options.method).toBe('GET');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result).toEqual(mockStats);
@@ -344,7 +338,7 @@ describe('getAutomationStats', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(getAutomationStats(mockGetToken, 'auto_1')).rejects.toThrow('session_expired');
+    await expect(getAutomationStats('auto_1')).rejects.toThrow('session_expired');
   });
 });
 
@@ -362,14 +356,14 @@ describe('getOverviewStats', () => {
       json: async () => mockOverview,
     } as Response);
 
-    const result = await getOverviewStats(mockGetToken);
+    const result = await getOverviewStats();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toBe('http://localhost:8000/automations/stats/overview');
     expect(options.method).toBe('GET');
     expect(options.headers).toEqual({
-      Authorization: 'Bearer mock-clerk-token',
+      Authorization: 'Bearer mock-appwrite-jwt',
       'Content-Type': 'application/json',
     });
     expect(result).toEqual(mockOverview);
@@ -382,6 +376,6 @@ describe('getOverviewStats', () => {
       text: async () => 'Unauthorized',
     } as Response);
 
-    await expect(getOverviewStats(mockGetToken)).rejects.toThrow('session_expired');
+    await expect(getOverviewStats()).rejects.toThrow('session_expired');
   });
 });

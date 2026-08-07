@@ -1,7 +1,5 @@
 /**
- * AuthGate — Appwrite bridge: instant shell + retry + soft failure banner.
- *
- * Uses fake timers to control setTimeout-based backoff.
+ * AuthGate — Appwrite-native auth: loading / signed-out / signed-in states.
  */
 
 jest.mock('@/global.css', () => ({}), { virtual: true });
@@ -26,17 +24,8 @@ jest.mock('expo-router', () => {
   };
 });
 
-const mockGetToken = jest.fn().mockResolvedValue('fake-token');
-
-jest.mock('@clerk/expo', () => ({
-  useAuth: jest.fn(() => ({
-    isSignedIn: true,
-    isLoaded: true,
-    getToken: mockGetToken,
-  })),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
+jest.mock('@/hooks/useAppwriteUser', () => ({
+  useAppwriteUser: jest.fn(),
 }));
 
 jest.mock('@/lib/fonts', () => ({
@@ -62,177 +51,38 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 import React from 'react';
-import { render, act, fireEvent } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import RootLayout from '@/app/_layout';
-import { ensureAppwriteSession } from '@/lib/auth-bridge';
+import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 
-const mockEnsureAppwriteSession = ensureAppwriteSession as jest.Mock;
+const mockUseAppwriteUser = useAppwriteUser as jest.Mock;
 
-describe('AuthGate — Appwrite bridge', () => {
-  let mockUseAuth: jest.Mock;
-
+describe('AuthGate — Appwrite native', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockEnsureAppwriteSession.mockReset();
-    mockGetToken.mockReset();
-    mockGetToken.mockResolvedValue('fake-token');
-    jest.useFakeTimers();
-    mockUseAuth = (jest.requireMock('@clerk/expo') as { useAuth: jest.Mock }).useAuth;
-    mockUseAuth.mockReturnValue({
-      isSignedIn: true,
-      isLoaded: true,
-      getToken: mockGetToken,
-    });
+    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: false });
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
+  it('shows loading spinner while user is loading', async () => {
+    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: true });
+
+    const { getByText } = await render(<RootLayout />);
+    expect(getByText('Loading')).toBeTruthy();
   });
 
-  it('renders Slot immediately while bridge is pending (instant shell)', async () => {
-    let resolveBridge!: (v: unknown) => void;
-    mockEnsureAppwriteSession.mockReturnValue(
-      new Promise((resolve) => {
-        resolveBridge = resolve;
-      }),
-    );
+  it('shows AuthScreen when no user is authenticated', async () => {
+    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: false });
 
-    const { queryByText } = await act(async () => render(<RootLayout />));
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(queryByText('Slot')).toBeTruthy();
-    expect(queryByText(/Retry/i)).toBeNull();
-
-    await act(async () => {
-      resolveBridge({});
-    });
-    expect(queryByText('Slot')).toBeTruthy();
+    const { getByText, queryByText } = await render(<RootLayout />);
+    expect(getByText('AuthScreen')).toBeTruthy();
+    expect(queryByText('Slot')).toBeNull();
   });
 
-  it('retries with 1s backoff on first failure, succeeds on retry, no third call', async () => {
-    mockEnsureAppwriteSession
-      .mockRejectedValueOnce(new Error('bridge_failed'))
-      .mockResolvedValueOnce({});
+  it('shows Slot when a user is authenticated', async () => {
+    mockUseAppwriteUser.mockReturnValue({ data: { $id: 'user_abc' }, isLoading: false });
 
-    await act(async () => { render(<RootLayout />); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
-
-    await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
-
-    await act(async () => { jest.advanceTimersByTime(10000); await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
-  });
-
-  it('stops after 4 total attempts and shows Retry banner without unmounting Slot', async () => {
-    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
-
-    const { queryByText, getByText } = await act(async () => render(<RootLayout />));
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
-    expect(queryByText('Slot')).toBeTruthy();
-
-    await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(2);
-
-    await act(async () => { jest.advanceTimersByTime(2000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(3);
-
-    await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(4);
-
-    await act(async () => { jest.advanceTimersByTime(10000); await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(4);
-    expect(queryByText('Slot')).toBeTruthy();
-    expect(getByText(/Retry/i)).toBeTruthy();
-  });
-
-  it('Retry button re-runs the bridge', async () => {
-    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
-
-    const { getByText } = await act(async () => render(<RootLayout />));
-    await act(async () => { await Promise.resolve(); });
-
-    await act(async () => { jest.advanceTimersByTime(1000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    await act(async () => { jest.advanceTimersByTime(2000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-    await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-
-    expect(getByText(/Retry/i)).toBeTruthy();
-    const callsBefore = mockEnsureAppwriteSession.mock.calls.length;
-
-    mockEnsureAppwriteSession.mockReset();
-    mockEnsureAppwriteSession.mockResolvedValue({});
-
-    await act(async () => {
-      fireEvent.press(getByText(/Retry/i));
-    });
-    await act(async () => { await Promise.resolve(); });
-
-    expect(mockEnsureAppwriteSession.mock.calls.length).toBeGreaterThan(0);
-    expect(callsBefore).toBeGreaterThan(0);
-  });
-
-  it('does not re-bridge when Clerk getToken identity changes', async () => {
-    mockEnsureAppwriteSession.mockResolvedValue({});
-
-    const { rerender } = await act(async () => render(<RootLayout />));
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
-
-    // Simulate Clerk returning a new getToken function every render.
-    mockUseAuth.mockReturnValue({
-      isSignedIn: true,
-      isLoaded: true,
-      getToken: jest.fn().mockResolvedValue('fake-token'),
-    });
-    await act(async () => {
-      rerender(<RootLayout />);
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
-  });
-
-  it('resets retry state on sign-out then sign-in', async () => {
-    mockEnsureAppwriteSession.mockRejectedValue(new Error('bridge_failed'));
-
-    await act(async () => { render(<RootLayout />); });
-    await act(async () => { await Promise.resolve(); });
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
-
-    mockUseAuth.mockReturnValue({
-      isSignedIn: false,
-      isLoaded: true,
-      getToken: mockGetToken,
-    });
-    const utils = await act(async () => { return render(<RootLayout />); });
-    await act(async () => { await Promise.resolve(); });
-
-    mockEnsureAppwriteSession.mockReset();
-    mockEnsureAppwriteSession.mockResolvedValue({});
-    mockUseAuth.mockReturnValue({
-      isSignedIn: true,
-      isLoaded: true,
-      getToken: mockGetToken,
-    });
-    await act(async () => { utils.rerender(<RootLayout />); });
-    await act(async () => { await Promise.resolve(); });
-    await act(async () => { await Promise.resolve(); });
-
-    expect(mockEnsureAppwriteSession).toHaveBeenCalledTimes(1);
+    const { getByText, queryByText } = await render(<RootLayout />);
+    expect(getByText('Slot')).toBeTruthy();
+    expect(queryByText('AuthScreen')).toBeNull();
   });
 });

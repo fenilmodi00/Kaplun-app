@@ -5,23 +5,8 @@
  * Mocks fetchProfile to return a profile.
  */
 
-// Mock Clerk before component imports — screens import from @clerk/expo
-jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({
-    isSignedIn: true,
-    userId: 'test-user-id',
-    getToken: jest.fn().mockResolvedValue('test-token'),
-  }),
-  useUser: () => ({
-    user: {
-      id: 'test-user-id',
-      firstName: 'Test',
-      emailAddresses: [{ emailAddress: 'test@example.com' }],
-    },
-  }),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
+jest.mock('@/hooks/useAppwriteUser', () => ({
+  useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
 jest.mock('expo-linear-gradient', () => ({
@@ -41,10 +26,6 @@ jest.mock('@/lib/instagram', () => ({
 
 jest.mock('@/lib/instagram-oauth', () => ({
   startInstagramOAuth: jest.fn().mockResolvedValue(true),
-}));
-
-jest.mock('@/lib/auth-bridge', () => ({
-  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-id' }),
 }));
 
 jest.mock('@/lib/bridge-context', () => ({

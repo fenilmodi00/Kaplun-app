@@ -5,26 +5,8 @@
  * Mocks useCreatorProfile and useDashboard hooks.
  */
 
-// Mock Clerk before component imports — screens import from @clerk/expo
-jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({
-    isSignedIn: true,
-    userId: 'test-user-id',
-    getToken: jest.fn().mockResolvedValue('test-token'),
-  }),
-  useUser: () => ({
-    user: {
-      id: 'test-user-id',
-      firstName: 'Test',
-      emailAddresses: [{ emailAddress: 'test@example.com' }],
-    },
-  }),
-  useClerk: () => ({
-    signOut: jest.fn().mockResolvedValue(undefined),
-  }),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
+jest.mock('@/hooks/useAppwriteUser', () => ({
+  useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
 jest.mock('@/hooks/useCreatorProfile', () => ({
