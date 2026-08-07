@@ -39,6 +39,15 @@
         }
       ],
       "expo-image"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "expo-navigation-bar": {
+        "style": "light"
+      },
+      "eas": {
+        "projectId": "2273aa7a-0e8b-40e9-b1c2-98cd98d1b4a4"
+      }
+    }
   }
 }

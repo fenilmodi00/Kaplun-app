@@ -172,35 +172,78 @@ func (c *Client) DeleteRow(ctx context.Context, tableID, rowID string) error {
 	return nil
 }
 
-// StoreCreatorProfile upserts a creators row keyed by clerk_user_id and
-// returns the row's $id (known on update, decoded from the create response).
-func (c *Client) StoreCreatorProfile(ctx context.Context, clerkUserID string, profile map[string]any) (string, bool, error) {
-	if strings.TrimSpace(clerkUserID) == "" {
-		return "", false, errors.New("clerk user id is required")
+// ErrInstagramAlreadyConnected is returned when ig_user_id (or username) is
+// already owned by a different Appwrite auth user. One Instagram ↔ one Kaplun user.
+type ErrInstagramAlreadyConnected struct {
+	OwnerUserID string
+	IGUserID    string
+	Username    string
+}
+
+func (e *ErrInstagramAlreadyConnected) Error() string {
+	name := e.Username
+	if name == "" {
+		name = e.IGUserID
+	}
+	return fmt.Sprintf("instagram @%s already connected to another account", name)
+}
+
+// StoreCreatorProfile upserts a creators row for this Appwrite auth user and
+// returns its $id. Instagram identity is exclusive: if another user already
+// owns the ig_user_id (or unique username), returns *ErrInstagramAlreadyConnected.
+//
+// Lookup:
+//  1. ig_user_id — conflict unless owner == requester
+//  2. username — same (skips stub placeholders where username == auth user id)
+//  3. clerk_user_id stub for this user — update
+//  4. else create
+func (c *Client) StoreCreatorProfile(ctx context.Context, authUserID string, profile map[string]any) (string, bool, error) {
+	if strings.TrimSpace(authUserID) == "" {
+		return "", false, errors.New("auth user id is required")
 	}
 	if profile == nil {
 		profile = map[string]any{}
 	}
-	profile["clerk_user_id"] = clerkUserID
+	profile["clerk_user_id"] = authUserID
+	perms := UserPermissions(authUserID)
 
-	result, err := c.ListRows(ctx, c.creatorsTableID, []string{
-		QueryEqual("clerk_user_id", clerkUserID),
-		QueryLimit(1),
-	})
+	igUserID, _ := profile["ig_user_id"].(string)
+	igUserID = strings.TrimSpace(igUserID)
+	username, _ := profile["username"].(string)
+	username = strings.TrimSpace(username)
+
+	if igUserID != "" {
+		byIG, err := c.findCreatorRow(ctx, QueryEqual("ig_user_id", igUserID))
+		if err != nil {
+			return "", false, err
+		}
+		if byIG != nil {
+			if conflict := foreignOwnerConflict(byIG, authUserID, igUserID, username); conflict != nil {
+				return "", false, conflict
+			}
+			return c.updateCreatorRow(ctx, byIG, profile, perms)
+		}
+	}
+
+	if username != "" && username != authUserID {
+		byUsername, err := c.findCreatorRow(ctx, QueryEqual("username", username))
+		if err != nil {
+			return "", false, err
+		}
+		if byUsername != nil {
+			if conflict := foreignOwnerConflict(byUsername, authUserID, igUserID, username); conflict != nil {
+				return "", false, conflict
+			}
+			return c.updateCreatorRow(ctx, byUsername, profile, perms)
+		}
+	}
+
+	byAuth, err := c.findCreatorRow(ctx, QueryEqual("clerk_user_id", authUserID))
 	if err != nil {
 		return "", false, err
 	}
-
-	perms := UserPermissions(clerkUserID)
-	if len(result.Rows) > 0 {
-		docID, _ := result.Rows[0]["$id"].(string)
-		if docID == "" {
-			return "", false, errors.New("creator row missing $id")
-		}
-		if _, err := c.UpdateRow(ctx, c.creatorsTableID, docID, profile, perms); err != nil {
-			return "", false, err
-		}
-		return docID, true, nil
+	if byAuth != nil {
+		return c.updateCreatorRow(ctx, byAuth, profile, perms)
 	}
 
 	created, err := c.CreateRow(ctx, c.creatorsTableID, UniqueID, profile, perms)
@@ -209,6 +252,65 @@ func (c *Client) StoreCreatorProfile(ctx context.Context, clerkUserID string, pr
 	}
 	docID, _ := created["$id"].(string)
 	return docID, true, nil
+}
+
+func foreignOwnerConflict(row map[string]any, authUserID, igUserID, username string) *ErrInstagramAlreadyConnected {
+	owner, _ := row["clerk_user_id"].(string)
+	if owner == "" || owner == authUserID {
+		return nil
+	}
+	if username == "" {
+		username, _ = row["username"].(string)
+	}
+	if igUserID == "" {
+		igUserID, _ = row["ig_user_id"].(string)
+	}
+	return &ErrInstagramAlreadyConnected{OwnerUserID: owner, IGUserID: igUserID, Username: username}
+}
+
+func (c *Client) updateCreatorRow(ctx context.Context, row map[string]any, profile map[string]any, perms []string) (string, bool, error) {
+	docID, _ := row["$id"].(string)
+	if docID == "" {
+		return "", false, errors.New("creator row missing $id")
+	}
+	if _, err := c.UpdateRow(ctx, c.creatorsTableID, docID, profile, perms); err != nil {
+		return "", false, err
+	}
+	return docID, true, nil
+}
+
+func (c *Client) findCreatorRow(ctx context.Context, equalQuery string) (map[string]any, error) {
+	result, err := c.ListRows(ctx, c.creatorsTableID, []string{equalQuery, QueryLimit(1)})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Rows) == 0 {
+		return nil, nil
+	}
+	return result.Rows[0], nil
+}
+
+// GetUserEmail returns the email for an Appwrite Auth user id, or "" if missing.
+func (c *Client) GetUserEmail(ctx context.Context, userID string) (string, error) {
+	if strings.TrimSpace(userID) == "" {
+		return "", errors.New("user id is required")
+	}
+	body, status, err := c.do(ctx, http.MethodGet, fmt.Sprintf("/users/%s", url.PathEscape(userID)), nil, nil)
+	if err != nil {
+		return "", err
+	}
+	if status == http.StatusNotFound {
+		return "", &APIError{Status: status, Body: string(body)}
+	}
+	if status < 200 || status >= 300 {
+		return "", parseAPIError(status, body)
+	}
+	obj, err := decodeObject(body)
+	if err != nil {
+		return "", err
+	}
+	email, _ := obj["email"].(string)
+	return email, nil
 }
 
 // EnsureCreatorProfile creates a minimal creators row when one does not exist.

@@ -22,13 +22,11 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from '@/lib/reanimated-platform';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { useDashboard } from '@/hooks/useDashboard';
 import { disconnectInstagram } from '@/lib/instagram';
-import { clearStoredSession } from '@/lib/auth-session';
+import { useSession } from '@/lib/session-context';
 import { addLog } from '@/lib/logger';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
@@ -102,8 +100,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const queryClient = useQueryClient();
+  const { signOut } = useSession();
   const {
     creator,
     dealThreads,
@@ -116,9 +113,7 @@ export default function ProfileScreen() {
   const { loading: dashboardLoading } = useDashboard();
 
   async function handleSignOut() {
-    await clearStoredSession();
-    queryClient.clear();
-    router.replace('/');
+    await signOut();
   }
 
   // Avatar scale-in entrance (reanimated-platform is web/native safe)

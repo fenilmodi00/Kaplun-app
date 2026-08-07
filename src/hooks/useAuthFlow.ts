@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
 import { ID, OAuthProvider } from 'appwrite';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { account } from '@/lib/appwrite';
-import { persistSession } from '@/lib/auth-session';
+import { extractSessionSecret } from '@/lib/auth-session';
+import { useSession } from '@/lib/session-context';
 
 export type AuthMode = 'login' | 'signup';
 export type AuthStep = 'idle' | 'otp-sent' | 'verifying' | 'complete' | 'error';
@@ -37,7 +37,7 @@ function authErr(err: unknown): string {
 }
 
 export function useAuthFlow(): UseAuthFlowReturn {
-  const router = useRouter();
+  const { signIn } = useSession();
 
   const [state, setState] = useState<AuthState>({
     mode: 'login',
@@ -59,10 +59,6 @@ export function useAuthFlow(): UseAuthFlowReturn {
   const setLoading = useCallback((isLoading: boolean) => {
     setState((s) => ({ ...s, isLoading }));
   }, []);
-
-  const navigateHome = useCallback(() => {
-    router.replace('/(tabs)/(home)');
-  }, [router]);
 
   const submitEmailPassword = useCallback(
     async (email: string, password: string) => {
@@ -126,16 +122,15 @@ export function useAuthFlow(): UseAuthFlowReturn {
           userId: userIdRef.current,
           secret: code,
         });
-        await persistSession(session);
+        await signIn(extractSessionSecret(session));
         setState((s) => ({ ...s, step: 'complete' }));
-        navigateHome();
       } catch (err: unknown) {
         setState((s) => ({ ...s, step: 'otp-sent', error: authErr(err) }));
       } finally {
         setLoading(false);
       }
     },
-    [setLoading, navigateHome],
+    [setLoading, signIn],
   );
 
   const resendOTP = useCallback(async () => {
@@ -162,14 +157,13 @@ export function useAuthFlow(): UseAuthFlowReturn {
     setState((s) => ({ ...s, error: null }));
 
     try {
-      const deepLink = makeRedirectUri({
-        preferLocalhost: true,
-        scheme: 'kaplun',
-      });
-      const loginUrl = account.createOAuth2Token({
+      // Appwrite RN OAuth: deep link with preferLocalhost for success/failure URLs
+      const deepLink = new URL(makeRedirectUri({ preferLocalhost: true, scheme: 'kaplun' }));
+      const scheme = `${deepLink.protocol}//`;
+      const loginUrl = await account.createOAuth2Token({
         provider: OAuthProvider.Google,
-        success: deepLink,
-        failure: deepLink,
+        success: `${deepLink}`,
+        failure: `${deepLink}`,
       });
 
       if (!loginUrl || typeof loginUrl !== 'string') {
@@ -177,7 +171,7 @@ export function useAuthFlow(): UseAuthFlowReturn {
         return;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(loginUrl, 'kaplun://');
+      const result = await WebBrowser.openAuthSessionAsync(`${loginUrl}`, scheme);
       if (result.type === 'cancel' || result.type === 'dismiss') {
         setState((s) => ({ ...s, error: 'Google sign-in was cancelled' }));
         return;
@@ -198,15 +192,14 @@ export function useAuthFlow(): UseAuthFlowReturn {
       }
 
       const session = await account.createSession({ userId, secret });
-      await persistSession(session);
+      await signIn(extractSessionSecret(session));
       setState((s) => ({ ...s, step: 'complete' }));
-      navigateHome();
     } catch (err: unknown) {
       setState((s) => ({ ...s, error: authErr(err) }));
     } finally {
       setLoading(false);
     }
-  }, [setLoading, navigateHome]);
+  }, [setLoading, signIn]);
 
   return {
     mode: state.mode,

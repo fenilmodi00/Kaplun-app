@@ -46,6 +46,9 @@ describe('startInstagramOAuth', () => {
     expect(authUrl).toContain('response_type=code');
     expect(authUrl).toContain('redirect_uri=https%3A%2F%2Ftest-callback.example.com%2F');
     expect(authUrl).toContain('force_reauth=true');
+    expect(authUrl).toContain('enable_fb_login=0');
+    expect(authUrl).toContain('instagram_business_basic');
+    expect(authUrl).not.toContain('instagram_manage_comments');
     expect(authUrl).toContain('state=');
     expect(redirectUrl).toBe('kaplun://instagram-callback');
   });
@@ -72,12 +75,12 @@ describe('startInstagramOAuth', () => {
   it('failure: throws when redirect URL has status=error', async () => {
     mockOpenAuthSessionAsync.mockResolvedValueOnce({
       type: 'success',
-      url: 'kaplun://instagram-callback?status=error',
+      url: 'kaplun://instagram-callback?status=error&message=This+Instagram+account+%40whosfenil+is+already+connected+to+owner%40example.com',
     });
 
     await expect(
       startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID)
-    ).rejects.toThrow('Instagram connection failed');
+    ).rejects.toThrow(/already connected to owner@example.com/);
   });
 
   it('optimistic: returns true on unexpected result type (Expo Go behavior)', async () => {

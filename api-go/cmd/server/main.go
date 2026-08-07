@@ -370,6 +370,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 				cfg.RedirectURI,
 				logger,
 			)
+			oauthHandler.Users = awClient
 			// Meta Step 3: POST /{ig-user-id}/subscribed_apps after OAuth so
 			// comments/messages webhooks actually deliver for that IG account.
 			oauthHandler.Subscriber = graphClient

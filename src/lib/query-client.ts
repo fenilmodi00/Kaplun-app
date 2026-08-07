@@ -4,7 +4,7 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import type { PersistQueryClientOptions } from '@tanstack/react-query-persist-client';
 
 export const PERSIST_MAX_AGE = 24 * 60 * 60_000; // 24h
-export const PERSIST_BUSTER = '1'; // bump to invalidate every persisted cache
+export const PERSIST_BUSTER = '2';
 
 type QueryStatusShape = { state: { status: 'success' | 'error' | 'pending' } };
 
@@ -28,5 +28,10 @@ export const persistOptions: Omit<PersistQueryClientOptions, 'queryClient'> = {
   persister: createAsyncStoragePersister({ storage: AsyncStorage }),
   maxAge: PERSIST_MAX_AGE,
   buster: PERSIST_BUSTER,
-  dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => {
+      if (query.queryKey[0] === 'appwrite-user') return false;
+      return shouldPersistQuery(query);
+    },
+  },
 };

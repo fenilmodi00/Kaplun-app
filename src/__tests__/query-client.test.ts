@@ -37,4 +37,12 @@ describe('query-client persistence wiring', () => {
     expect(shouldPersistQuery({ state: { status: 'error' } })).toBe(false);
     expect(shouldPersistQuery({ state: { status: 'pending' } })).toBe(false);
   });
+
+  it('never persists the appwrite-user auth query', () => {
+    const authQuery = {
+      state: { status: 'success' as const },
+      queryKey: ['appwrite-user'],
+    };
+    expect(persistOptions.dehydrateOptions?.shouldDehydrateQuery?.(authQuery as never)).toBe(false);
+  });
 });

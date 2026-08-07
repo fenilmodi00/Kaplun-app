@@ -1,5 +1,5 @@
 /**
- * AuthGate — Appwrite-native auth: loading / signed-out / signed-in states.
+ * Root auth layout — SessionProvider + Stack.Protected.
  */
 
 jest.mock('@/global.css', () => ({}), { virtual: true });
@@ -11,34 +11,44 @@ jest.mock('expo-navigation-bar', () => ({
   setBackgroundColorAsync: jest.fn().mockResolvedValue(undefined),
   setButtonStyleAsync: jest.fn().mockResolvedValue(undefined),
   setBorderColorAsync: jest.fn().mockResolvedValue(undefined),
+  setStyle: jest.fn().mockResolvedValue(undefined),
+}));
+
+const mockUseSession = jest.fn();
+
+jest.mock('@/lib/session-context', () => ({
+  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
+  useSession: () => mockUseSession(),
 }));
 
 jest.mock('expo-router', () => {
   const React = require('react');
   const { View, Text } = require('react-native');
-  return {
-    Slot: () => React.createElement(View, null, React.createElement(Text, null, 'Slot')),
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-    useLocalSearchParams: () => ({}),
-    Link: ({ children }: { children: React.ReactNode }) => children,
-  };
+  const Stack = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(View, { testID: 'stack' }, children);
+  Stack.Protected = ({
+    guard,
+    children,
+  }: {
+    guard: boolean;
+    children: React.ReactNode;
+  }) =>
+    guard
+      ? React.createElement(View, { testID: 'protected-open' }, children)
+      : React.createElement(View, { testID: 'protected-closed' });
+  Stack.Screen = ({ name }: { name: string }) =>
+    React.createElement(Text, null, `screen:${name}`);
+  return { Stack };
 });
-
-jest.mock('@/hooks/useAppwriteUser', () => ({
-  useAppwriteUser: jest.fn(),
-}));
 
 jest.mock('@/lib/fonts', () => ({
   useClayFonts: () => [true, null] as [boolean, null],
-  CLAY_FONTS: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold' },
+  CLAY_FONTS: {
+    regular: 'Inter_400Regular',
+    medium: 'Inter_500Medium',
+    semibold: 'Inter_600SemiBold',
+  },
 }));
-
-jest.mock('@/components/auth/AuthScreen', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-  const AuthScreen = () => React.createElement(Text, null, 'AuthScreen');
-  return { __esModule: true, default: AuthScreen };
-});
 
 jest.mock('@/components/clay/ClaySpinner', () => {
   const React = require('react');
@@ -46,43 +56,65 @@ jest.mock('@/components/clay/ClaySpinner', () => {
   return { ClaySpinner: () => React.createElement(Text, null, 'Loading') };
 });
 
-jest.mock('@/lib/logger', () => ({
-  addLog: jest.fn(),
+jest.mock('@/lib/bridge-context', () => ({
+  BridgeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useBridge: () => ({
+    status: 'ready',
+    isReady: true,
+    retry: jest.fn(),
+    setStatus: jest.fn(),
+    attemptKey: 0,
+  }),
 }));
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import RootLayout from '@/app/_layout';
-import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 
-const mockUseAppwriteUser = useAppwriteUser as jest.Mock;
-
-describe('AuthGate — Appwrite native', () => {
+describe('Root auth layout — SessionProvider + Protected', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: false });
   });
 
-  it('shows loading spinner while user is loading', async () => {
-    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: true });
+  it('shows loading spinner while session is loading', async () => {
+    mockUseSession.mockReturnValue({
+      session: null,
+      isLoading: true,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+    });
 
     const { getByText } = await render(<RootLayout />);
     expect(getByText('Loading')).toBeTruthy();
   });
 
-  it('shows AuthScreen when no user is authenticated', async () => {
-    mockUseAppwriteUser.mockReturnValue({ data: null, isLoading: false });
+  it('opens sign-in when session is null', async () => {
+    mockUseSession.mockReturnValue({
+      session: null,
+      isLoading: false,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+    });
 
     const { getByText, queryByText } = await render(<RootLayout />);
-    expect(getByText('AuthScreen')).toBeTruthy();
-    expect(queryByText('Slot')).toBeNull();
+    await waitFor(() => {
+      expect(getByText('screen:sign-in')).toBeTruthy();
+    });
+    expect(queryByText('screen:(tabs)')).toBeNull();
   });
 
-  it('shows Slot when a user is authenticated', async () => {
-    mockUseAppwriteUser.mockReturnValue({ data: { $id: 'user_abc' }, isLoading: false });
+  it('opens tabs when session is present', async () => {
+    mockUseSession.mockReturnValue({
+      session: 'session-secret',
+      isLoading: false,
+      signIn: jest.fn(),
+      signOut: jest.fn(),
+    });
 
     const { getByText, queryByText } = await render(<RootLayout />);
-    expect(getByText('Slot')).toBeTruthy();
-    expect(queryByText('AuthScreen')).toBeNull();
+    await waitFor(() => {
+      expect(getByText('screen:(tabs)')).toBeTruthy();
+    });
+    expect(queryByText('screen:sign-in')).toBeNull();
   });
 });

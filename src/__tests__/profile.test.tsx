@@ -9,6 +9,15 @@ jest.mock('@/hooks/useAppwriteUser', () => ({
   useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
+jest.mock('@/lib/session-context', () => ({
+  useSession: () => ({
+    session: 'test-session',
+    isLoading: false,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+  }),
+}));
+
 jest.mock('@/hooks/useCreatorProfile', () => ({
   useCreatorProfile: jest.fn(),
 }));

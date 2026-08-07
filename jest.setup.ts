@@ -19,6 +19,17 @@ jest.mock('@/lib/auth-session', () => ({
   persistSession: jest.fn().mockResolvedValue(undefined),
   clearStoredSession: jest.fn().mockResolvedValue(undefined),
   getAppwriteJWT: jest.fn().mockResolvedValue('test-jwt'),
+  extractSessionSecret: (session: { secret?: string }) => {
+    if (session.secret) return session.secret;
+    const raw = globalThis.localStorage?.getItem('cookieFallback');
+    if (!raw) throw new Error('session_secret_missing');
+    const cookies = JSON.parse(raw) as Record<string, string>;
+    const projectId = process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID ?? '';
+    const key = `a_session_${projectId}`;
+    const fromCookie = cookies[key] ?? Object.values(cookies).find((v) => !!v);
+    if (!fromCookie) throw new Error('session_secret_missing');
+    return fromCookie;
+  },
 }));
 
 // Mock expo-router

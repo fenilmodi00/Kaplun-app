@@ -33,12 +33,12 @@ if (!IG_OAUTH_REDIRECT_URI) {
 
 const IG_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
 
+/** Instagram API with Instagram Login scopes only (not Facebook Login scopes). */
 const SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_comments',
   'instagram_business_manage_messages',
   'instagram_business_manage_insights',
-  'instagram_manage_comments',
 ];
 
 /**
@@ -89,6 +89,8 @@ export async function startInstagramOAuth(
     redirect_uri: IG_OAUTH_REDIRECT_URI!,
     response_type: 'code',
     scope: SCOPES.join(','),
+    // Instagram Login only — hide Facebook Login option on the consent page.
+    enable_fb_login: '0',
     // Force a fresh Instagram login even when the browser already has a
     // session — required after disconnect so reconnect is not a silent reuse.
     force_reauth: 'true',

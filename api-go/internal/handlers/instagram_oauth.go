@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html"
 	"log/slog"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"kaplun/api-go/internal/platform/appwrite"
 	"kaplun/api-go/internal/services/oauth"
 )
 
@@ -22,7 +25,7 @@ type OAuthTokenExchanger interface {
 }
 
 type CreatorProfileStore interface {
-	StoreCreatorProfile(ctx context.Context, clerkID string, data map[string]any) (rowID string, ok bool, err error)
+	StoreCreatorProfile(ctx context.Context, authUserID string, data map[string]any) (rowID string, ok bool, err error)
 }
 
 type WebhookSubscriber interface {
@@ -30,8 +33,12 @@ type WebhookSubscriber interface {
 }
 
 type InstagramOAuthHandler struct {
-	OAuth       OAuthTokenExchanger
-	Store       CreatorProfileStore
+	OAuth OAuthTokenExchanger
+	Store CreatorProfileStore
+	// Users resolves owner email for already-connected errors (optional).
+	Users interface {
+		GetUserEmail(ctx context.Context, userID string) (string, error)
+	}
 	Subscriber  WebhookSubscriber
 	AppID       string
 	AppSecret   string
@@ -215,8 +222,36 @@ func (h *InstagramOAuthHandler) Callback(c *gin.Context) {
 	creatorData := oauth.BuildCreatorData(profile, longToken.AccessToken, tokenExpiresAt, clerkID, now)
 	rowID, ok, err := h.Store.StoreCreatorProfile(c.Request.Context(), clerkID, creatorData)
 	if err != nil {
+		var conflict *appwrite.ErrInstagramAlreadyConnected
+		if errors.As(err, &conflict) {
+			handle := conflict.Username
+			if handle == "" {
+				handle = conflict.IGUserID
+			}
+			msg := fmt.Sprintf(
+				"This Instagram account (@%s) is already connected to another Kaplun account. Sign in with that account, or disconnect Instagram there first.",
+				handle,
+			)
+			if h.Users != nil && conflict.OwnerUserID != "" {
+				if email, emailErr := h.Users.GetUserEmail(c.Request.Context(), conflict.OwnerUserID); emailErr == nil && strings.TrimSpace(email) != "" {
+					msg = fmt.Sprintf(
+						"This Instagram account (@%s) is already connected to %s. Sign in with that email, or disconnect Instagram there first.",
+						handle,
+						email,
+					)
+				}
+			}
+			h.logger.Warn("instagram oauth already connected",
+				"auth_user_id", clerkID,
+				"ig_user_id", conflict.IGUserID,
+				"owner_user_id", conflict.OwnerUserID,
+				"username", conflict.Username,
+			)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(errorPage(msg, redirectURL)))
+			return
+		}
 		h.logger.Error("instagram oauth store profile failed",
-			"clerk_user_id", clerkID,
+			"auth_user_id", clerkID,
 			"ig_user_id", firstNonEmpty(profile.UserID, profile.ID),
 			"err", err,
 		)
