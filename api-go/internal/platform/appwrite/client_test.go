@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"kaplun/api-go/internal/platform/appwrite"
@@ -143,49 +142,6 @@ func TestCreateRowSendsJSONBody(t *testing.T) {
 	}
 	if row["$id"] != "new1" {
 		t.Fatalf("row=%#v", row)
-	}
-}
-
-func TestCreateUserSessionCreatesMissingUserAndToken(t *testing.T) {
-	t.Parallel()
-
-	var paths []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.Method+" "+r.URL.Path)
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/users":
-			_ = json.NewEncoder(w).Encode(map[string]any{"users": []any{}, "total": 0})
-		case r.Method == http.MethodPost && r.URL.Path == "/users":
-			_ = json.NewEncoder(w).Encode(map[string]any{"$id": "clerk_1"})
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/users/") && strings.HasSuffix(r.URL.Path, "/tokens"):
-			_ = json.NewEncoder(w).Encode(map[string]any{"secret": "tok_secret"})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	client, err := appwrite.New(appwrite.Config{
-		Endpoint:        srv.URL,
-		ProjectID:       "proj",
-		APIKey:          "key",
-		DatabaseID:      "db",
-		CreatorsTableID: "creators",
-		HTTPClient:      srv.Client(),
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	session, err := client.CreateUserSession(context.Background(), "clerk_1")
-	if err != nil {
-		t.Fatalf("CreateUserSession: %v", err)
-	}
-	if session.UserID != "clerk_1" || session.Secret != "tok_secret" {
-		t.Fatalf("session=%#v", session)
-	}
-	if len(paths) != 3 {
-		t.Fatalf("paths=%v", paths)
 	}
 }
 

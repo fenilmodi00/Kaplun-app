@@ -45,9 +45,6 @@ func TestFromMapLoadsAllEnvExampleKeys(t *testing.T) {
 	t.Parallel()
 
 	cfg, err := config.FromMap(map[string]string{
-		"CLERK_SECRET_KEY":                  "sk_test",
-		"CLERK_JWT_KEY":                     "pem",
-		"CLERK_AUTHORIZED_PARTIES":          "https://kaplun.tech,http://localhost:8081",
 		"CORS_ORIGINS":                      "https://a.test",
 		"IG_API_PORT":                       "9000",
 		"APPWRITE_ENDPOINT":                 "https://example.appwrite.io/v1",
@@ -71,12 +68,6 @@ func TestFromMapLoadsAllEnvExampleKeys(t *testing.T) {
 		t.Fatalf("FromMap: %v", err)
 	}
 
-	if cfg.ClerkSecretKey != "sk_test" || cfg.ClerkJWTKey != "pem" {
-		t.Fatalf("clerk keys not loaded: %#v %#v", cfg.ClerkSecretKey, cfg.ClerkJWTKey)
-	}
-	if len(cfg.ClerkAuthorizedParties) != 2 {
-		t.Fatalf("authorized parties: %#v", cfg.ClerkAuthorizedParties)
-	}
 	if cfg.Port != "9000" {
 		t.Fatalf("port: %q", cfg.Port)
 	}
@@ -95,7 +86,7 @@ func TestFromMapLoadsAllEnvExampleKeys(t *testing.T) {
 	if cfg.AutomationSweeperEnabled {
 		t.Fatal("expected AUTOMATION_SWEEPER_ENABLED=false")
 	}
-	if !cfg.HasAppwriteCore() || !cfg.HasClerkAuth() || !cfg.HasAutomationTables() {
+	if !cfg.HasAppwriteCore() || !cfg.HasAutomationTables() {
 		t.Fatal("expected capability helpers to be true")
 	}
 }
@@ -119,7 +110,7 @@ func TestFromMapDefaultsAppwriteAndSweeper(t *testing.T) {
 	if !cfg.CloudflareTunnelEnabled {
 		t.Fatal("expected cloudflare tunnel enabled by default")
 	}
-	if cfg.HasAppwriteCore() || cfg.HasClerkAuth() || cfg.HasAutomationTables() {
+	if cfg.HasAppwriteCore() || cfg.HasAutomationTables() {
 		t.Fatal("expected capability helpers false without secrets")
 	}
 }

@@ -15,10 +15,10 @@ import (
 // Dependencies are optional handlers/middleware. Nil fields skip route registration
 // so the server can still expose /health when secrets are missing.
 type Dependencies struct {
-	ClerkAuth gin.HandlerFunc
-	CronAuth  gin.HandlerFunc
+	AppwriteAuth gin.HandlerFunc
+	CronAuth     gin.HandlerFunc
 
-	Bridge         *handlers.BridgeHandler
+	EnsureProfile  *handlers.EnsureProfileHandler
 	Automations    *handlers.AutomationsHandler
 	Webhooks       *handlers.WebhooksHandler
 	Cron           *handlers.CronHandler
@@ -43,12 +43,12 @@ func New(cfg config.Config, deps Dependencies) *gin.Engine {
 }
 
 func registerRoutes(engine *gin.Engine, deps Dependencies) {
-	if deps.Bridge != nil && deps.ClerkAuth != nil {
-		engine.POST("/auth/appwrite-session", deps.ClerkAuth, deps.Bridge.CreateSession)
+	if deps.EnsureProfile != nil && deps.AppwriteAuth != nil {
+		engine.POST("/auth/ensure-profile", deps.AppwriteAuth, deps.EnsureProfile.EnsureProfile)
 	}
 
-	if deps.Automations != nil && deps.ClerkAuth != nil {
-		deps.Automations.Register(engine.Group("/automations"), deps.ClerkAuth)
+	if deps.Automations != nil && deps.AppwriteAuth != nil {
+		deps.Automations.Register(engine.Group("/automations"), deps.AppwriteAuth)
 	}
 
 	if deps.Webhooks != nil {

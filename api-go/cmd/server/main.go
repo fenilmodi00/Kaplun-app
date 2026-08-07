@@ -19,12 +19,10 @@ import (
 	"kaplun/api-go/internal/handlers"
 	"kaplun/api-go/internal/middleware"
 	"kaplun/api-go/internal/platform/appwrite"
-	"kaplun/api-go/internal/platform/clerk"
 	"kaplun/api-go/internal/platform/cloudflare"
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/router"
 	"kaplun/api-go/internal/services/automations"
-	"kaplun/api-go/internal/services/bridge"
 	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/services/oauth"
 	"kaplun/api-go/internal/services/reconcile"
@@ -159,16 +157,11 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		}
 	}
 
-	if cfg.HasClerkAuth() {
-		verifier := clerk.NewVerifier(clerk.Config{
-			SecretKey:         cfg.ClerkSecretKey,
-			JWTKey:            cfg.ClerkJWTKey,
-			AuthorizedParties: cfg.ClerkAuthorizedParties,
-		})
-		deps.ClerkAuth = middleware.ClerkAuth(verifier)
-		logger.Info("clerk auth enabled")
+	if cfg.HasAppwriteJWT() {
+		deps.AppwriteAuth = middleware.AppwriteAuth(cfg.AppwriteEndpoint, cfg.AppwriteProjectID, logger)
+		logger.Info("appwrite jwt auth enabled")
 	} else {
-		logger.Warn("clerk auth disabled: set CLERK_SECRET_KEY or CLERK_JWT_KEY")
+		logger.Warn("appwrite auth disabled: set APPWRITE_ENDPOINT and APPWRITE_PROJECT_ID")
 	}
 
 	var awClient *appwrite.Client
@@ -190,9 +183,9 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		logger.Warn("appwrite disabled: set APPWRITE_PROJECT_ID and APPWRITE_API_KEY")
 	}
 
-	if awClient != nil && deps.ClerkAuth != nil {
-		deps.Bridge = handlers.NewBridgeHandler(bridge.NewService(awClient))
-		logger.Info("route enabled", "path", "POST /auth/appwrite-session")
+	if awClient != nil && deps.AppwriteAuth != nil {
+		deps.EnsureProfile = handlers.NewEnsureProfileHandler(awClient)
+		logger.Info("route enabled", "path", "POST /auth/ensure-profile")
 	}
 
 	graphClient := meta.NewClient(nil)
@@ -293,7 +286,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		startInsightsSyncLoop(insightsLoopCtx, insightsSvc, logger)
 	}
 
-	if autoStore != nil && deps.ClerkAuth != nil {
+	if autoStore != nil && deps.AppwriteAuth != nil {
 		deps.Automations = handlers.NewAutomationsHandler(automations.NewService(autoStore))
 		logger.Info("route enabled", "path", "/automations/*")
 	}

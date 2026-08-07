@@ -10,11 +10,6 @@ import (
 // Config holds all environment-backed settings for the Gin API.
 // Field names mirror api/.env.example.
 type Config struct {
-	// Clerk Auth
-	ClerkSecretKey         string
-	ClerkJWTKey            string
-	ClerkAuthorizedParties []string
-
 	// CORS / server
 	CORSOrigins []string
 	Port        string
@@ -66,10 +61,6 @@ func Load() (Config, error) {
 // FromMap builds Config from a key/value map (testable without mutating os.Environ).
 func FromMap(values map[string]string) (Config, error) {
 	cfg := Config{
-		ClerkSecretKey:         strings.TrimSpace(values["CLERK_SECRET_KEY"]),
-		ClerkJWTKey:            strings.TrimSpace(values["CLERK_JWT_KEY"]),
-		ClerkAuthorizedParties: splitCSV(values["CLERK_AUTHORIZED_PARTIES"]),
-
 		CORSOrigins: splitCSV(values["CORS_ORIGINS"]),
 		Port:        strings.TrimSpace(values["IG_API_PORT"]),
 
@@ -150,9 +141,10 @@ func (c Config) HasAppwriteCore() bool {
 	return c.AppwriteEndpoint != "" && c.AppwriteProjectID != "" && c.AppwriteAPIKey != ""
 }
 
-// HasClerkAuth reports whether Clerk JWT verification can be configured.
-func (c Config) HasClerkAuth() bool {
-	return c.ClerkSecretKey != "" || c.ClerkJWTKey != ""
+// HasAppwriteJWT reports whether Appwrite user JWT validation can be performed.
+// This only needs the endpoint + project ID; it does NOT need the server API key.
+func (c Config) HasAppwriteJWT() bool {
+	return c.AppwriteEndpoint != "" && c.AppwriteProjectID != ""
 }
 
 // HasAutomationTables reports whether all automation table IDs are set.
@@ -173,9 +165,6 @@ func (c Config) HasInsightsTables() bool {
 
 func envMap() map[string]string {
 	keys := []string{
-		"CLERK_SECRET_KEY",
-		"CLERK_JWT_KEY",
-		"CLERK_AUTHORIZED_PARTIES",
 		"CORS_ORIGINS",
 		"IG_API_PORT",
 		"APPWRITE_ENDPOINT",

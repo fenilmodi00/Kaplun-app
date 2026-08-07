@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"kaplun/api-go/internal/models"
 )
 
 type Config struct {
@@ -172,38 +170,6 @@ func (c *Client) DeleteRow(ctx context.Context, tableID, rowID string) error {
 		return parseAPIError(status, body)
 	}
 	return nil
-}
-
-// CreateUserSession looks up or creates an Appwrite user for the Clerk ID, then
-// creates a session token the mobile client can exchange.
-func (c *Client) CreateUserSession(ctx context.Context, clerkUserID string) (models.BridgeSession, error) {
-	if strings.TrimSpace(clerkUserID) == "" {
-		return models.BridgeSession{}, errors.New("clerk user id is required")
-	}
-
-	users, err := c.listUsers(ctx, []string{QueryEqual("$id", clerkUserID), QueryLimit(1)})
-	if err != nil {
-		return models.BridgeSession{}, err
-	}
-
-	appwriteUID := clerkUserID
-	if len(users) == 0 {
-		created, createErr := c.createUser(ctx, clerkUserID, clerkUserID)
-		if createErr != nil {
-			return models.BridgeSession{}, createErr
-		}
-		appwriteUID = created
-	} else {
-		if id, ok := users[0]["$id"].(string); ok && id != "" {
-			appwriteUID = id
-		}
-	}
-
-	secret, err := c.createUserToken(ctx, appwriteUID)
-	if err != nil {
-		return models.BridgeSession{}, err
-	}
-	return models.BridgeSession{UserID: appwriteUID, Secret: secret}, nil
 }
 
 // StoreCreatorProfile upserts a creators row keyed by clerk_user_id and
