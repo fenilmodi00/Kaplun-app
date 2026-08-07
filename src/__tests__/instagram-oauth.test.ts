@@ -23,7 +23,7 @@ import { startInstagramOAuth } from '@/lib/instagram-oauth';
 const mockOpenAuthSessionAsync =
   require('expo-web-browser').openAuthSessionAsync as jest.Mock;
 
-const CLERK_ID = 'clerk123';
+const TEST_CLERK_USER_ID = 'clerk123';
 const APPWRITE_UID = 'uid456';
 
 beforeEach(() => {
@@ -37,7 +37,7 @@ describe('startInstagramOAuth', () => {
       url: 'kaplun://instagram-callback?status=success',
     });
 
-    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    const result = await startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID);
 
     expect(result).toBe(true);
     expect(mockOpenAuthSessionAsync).toHaveBeenCalledTimes(1);
@@ -56,7 +56,7 @@ describe('startInstagramOAuth', () => {
     });
 
     await expect(
-      startInstagramOAuth(CLERK_ID, APPWRITE_UID)
+      startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID)
     ).rejects.toThrow('Instagram OAuth was cancelled');
   });
 
@@ -65,7 +65,7 @@ describe('startInstagramOAuth', () => {
       type: 'dismiss',
     });
 
-    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    const result = await startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID);
     expect(result).toBe(true);
   });
 
@@ -76,7 +76,7 @@ describe('startInstagramOAuth', () => {
     });
 
     await expect(
-      startInstagramOAuth(CLERK_ID, APPWRITE_UID)
+      startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID)
     ).rejects.toThrow('Instagram connection failed');
   });
 
@@ -85,7 +85,7 @@ describe('startInstagramOAuth', () => {
       type: 'locked',
     });
 
-    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    const result = await startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID);
     expect(result).toBe(true);
   });
 
@@ -95,7 +95,7 @@ describe('startInstagramOAuth', () => {
       url: 'kaplun://instagram-callback',
     });
 
-    const result = await startInstagramOAuth(CLERK_ID, APPWRITE_UID);
+    const result = await startInstagramOAuth(TEST_CLERK_USER_ID, APPWRITE_UID);
     expect(result).toBe(true);
   });
 });
