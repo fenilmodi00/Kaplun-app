@@ -1,6 +1,5 @@
 // Set required env vars before any module imports
 process.env.EXPO_PUBLIC_IG_API_BASE_URL = 'http://localhost:8000';
-process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.EXPO_PUBLIC_IG_APP_ID = 'test_app_id';
 process.env.EXPO_PUBLIC_IG_API_PROXY_URL = 'https://test-proxy.example.com';
 process.env.EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI = 'https://test-callback.example.com/';
@@ -14,60 +13,12 @@ jest.mock('expo-font', () => ({
   loadAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Mock @clerk/expo
-jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({
-    isSignedIn: true,
-    userId: 'test-user-id',
-    getToken: jest.fn().mockResolvedValue('test-token'),
-  }),
-  useUser: () => ({
-    user: {
-      id: 'test-user-id',
-      firstName: 'Test',
-      emailAddresses: [{ emailAddress: 'test@example.com' }],
-    },
-  }),
-  useClerk: () => ({
-    signOut: jest.fn().mockResolvedValue(undefined),
-  }),
-  useSignIn: () => ({
-    signIn: {
-      status: 'complete',
-      emailCode: {
-        sendCode: jest.fn().mockResolvedValue({ error: null }),
-        verifyCode: jest.fn().mockResolvedValue({ error: null }),
-      },
-      password: jest.fn().mockResolvedValue({ error: null }),
-      finalize: jest.fn().mockResolvedValue({ error: null }),
-    },
-    errors: { fields: {} },
-    fetchStatus: 'idle',
-  }),
-  useSignUp: () => ({
-    signUp: {
-      status: 'missing_requirements',
-      unverifiedFields: ['email_address'],
-      missingFields: [],
-      password: jest.fn().mockResolvedValue({ error: null }),
-      verifications: {
-        sendEmailCode: jest.fn().mockResolvedValue({ error: null }),
-        verifyEmailCode: jest.fn().mockResolvedValue({ error: null }),
-      },
-      finalize: jest.fn().mockResolvedValue({ error: null }),
-    },
-    errors: { fields: {} },
-    fetchStatus: 'idle',
-  }),
-  useSSO: () => ({
-    startSSOFlow: jest.fn().mockResolvedValue({
-      createdSessionId: 'test-session',
-      setActive: jest.fn().mockResolvedValue(undefined),
-    }),
-  }),
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-  ClerkLoading: ({ children }: { children: React.ReactNode }) => children,
+// Mock @/lib/auth-session
+jest.mock('@/lib/auth-session', () => ({
+  restoreSession: jest.fn().mockResolvedValue(null),
+  persistSession: jest.fn().mockResolvedValue(undefined),
+  clearStoredSession: jest.fn().mockResolvedValue(undefined),
+  getAppwriteJWT: jest.fn().mockResolvedValue('test-jwt'),
 }));
 
 // Mock expo-router
@@ -91,7 +42,6 @@ jest.mock('expo-router', () => ({
   Slot: ({ children }: { children?: React.ReactNode }) => children || null,
 }));
 
-// Mock @/lib/appwrite
 jest.mock('@/lib/appwrite', () => ({
   tablesDB: {
     listRows: jest.fn().mockResolvedValue({ rows: [], total: 0 }),
@@ -106,13 +56,20 @@ jest.mock('@/lib/appwrite', () => ({
     }),
   },
   account: {
-    createSession: jest.fn().mockResolvedValue({}),
     get: jest.fn().mockResolvedValue({ $id: 'test-appwrite-user-id' }),
+    create: jest.fn().mockResolvedValue({}),
+    createEmailPasswordSession: jest.fn().mockResolvedValue({}),
+    createEmailToken: jest.fn().mockResolvedValue({ userId: 'test-appwrite-user-id' }),
+    createSession: jest.fn().mockResolvedValue({}),
+    createOAuth2Token: jest.fn().mockReturnValue('kaplun://oauth-callback?userId=test&secret=abc'),
     createJWT: jest.fn().mockResolvedValue({ jwt: 'test-jwt' }),
     deleteSession: jest.fn().mockResolvedValue({}),
+    deleteSessions: jest.fn().mockResolvedValue({}),
   },
   storage: {},
-  client: {},
+  client: {
+    setSession: jest.fn(),
+  },
 }));
 
 // Mock @/lib/auth-bridge
