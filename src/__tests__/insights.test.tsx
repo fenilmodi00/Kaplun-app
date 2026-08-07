@@ -16,6 +16,7 @@ jest.mock('@/hooks/useInsights', () => ({
 
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: jest.fn() }),
+  useQuery: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
 import InsightsScreen from '@/app/(tabs)/(insights)/index';

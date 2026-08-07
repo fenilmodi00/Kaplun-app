@@ -21,6 +21,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import ProfileScreen from '@/app/(tabs)/(profile)/index';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
+import { createQueryClientWrapper } from './test-utils';
 
 const mockUseCreatorProfile = useCreatorProfile as jest.Mock;
 
@@ -85,7 +86,7 @@ describe('ProfileScreen', () => {
       isLoading: true,
     });
 
-    const { container } = await render(<ProfileScreen />);
+    const { container } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     // Skeleton renders without crashing
     expect(container).toBeTruthy();
   });
@@ -100,7 +101,7 @@ describe('ProfileScreen', () => {
       refresh,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText('Failed to fetch profile')).toBeTruthy();
 
     const retryButton = getByText('Retry');
@@ -112,7 +113,7 @@ describe('ProfileScreen', () => {
   // ── Empty state (no creator connected) ──
 
   it('shows empty state when no Instagram account is connected', async () => {
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText(/Connect your Instagram/)).toBeTruthy();
     expect(getByText('Refresh')).toBeTruthy();
   });
@@ -125,7 +126,7 @@ describe('ProfileScreen', () => {
       creator: mockCreator,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText('Test Creator')).toBeTruthy();
     expect(getByText('@test_creator')).toBeTruthy();
   });
@@ -136,7 +137,7 @@ describe('ProfileScreen', () => {
       creator: mockCreator,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText(/1.5K followers/)).toBeTruthy();
     expect(getByText(/500 following/)).toBeTruthy();
     expect(getByText(/50 posts/)).toBeTruthy();
@@ -148,7 +149,7 @@ describe('ProfileScreen', () => {
       creator: mockCreator,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText(/5.2% engagement/)).toBeTruthy();
     expect(getByText(/established micro/)).toBeTruthy();
     expect(getByText(/food/)).toBeTruthy();
@@ -161,7 +162,7 @@ describe('ProfileScreen', () => {
       recentReels: [],
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText('No recent reels')).toBeTruthy();
   });
 
@@ -172,7 +173,7 @@ describe('ProfileScreen', () => {
       insights: null,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(
       getByText('Insights available for business accounts only')
     ).toBeTruthy();
@@ -185,7 +186,7 @@ describe('ProfileScreen', () => {
       dealThreads: [],
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText('No active deals')).toBeTruthy();
   });
 
@@ -195,7 +196,7 @@ describe('ProfileScreen', () => {
       creator: mockCreator,
     });
 
-    const { getByText } = await render(<ProfileScreen />);
+    const { getByText } = await render(<ProfileScreen />, { wrapper: createQueryClientWrapper() });
     expect(getByText('Disconnect Instagram')).toBeTruthy();
     expect(getByText('Sign Out')).toBeTruthy();
   });

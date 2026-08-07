@@ -103,8 +103,8 @@ describe('useAutomationGate', () => {
     });
 
     expect(mockStartInstagramOAuth).toHaveBeenCalledWith(
-      'test-user-id',
-      'test-user-id'
+      'test-appwrite-user-id',
+      'test-appwrite-user-id'
     );
   });
 

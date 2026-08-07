@@ -72,12 +72,6 @@ jest.mock('@/lib/appwrite', () => ({
   },
 }));
 
-// Mock @/lib/auth-bridge
-jest.mock('@/lib/auth-bridge', () => ({
-  createAppwriteSession: jest.fn().mockResolvedValue({}),
-  ensureAppwriteSession: jest.fn().mockResolvedValue({ $id: 'test-appwrite-user-id' }),
-}));
-
 // Mock @/lib/realtime
 jest.mock('@/lib/realtime', () => ({
   useRealtimeSubscription: jest.fn(),

@@ -4,7 +4,7 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|nativewind|react-native-css|appwrite|node-appwrite|react-native-reanimated|react-native-worklets)'
   ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
-  testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/.worktrees/'],
+  testPathIgnorePatterns: ['/node_modules/', '/e2e/', '\\.worktrees'],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',

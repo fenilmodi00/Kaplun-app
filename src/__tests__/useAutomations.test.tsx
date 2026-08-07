@@ -13,6 +13,10 @@ jest.mock('@/lib/automations', () => ({
   listAutomationLogs: jest.fn(),
 }));
 
+jest.mock('@/hooks/useAppwriteUser', () => ({
+  useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
+}));
+
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { useAutomations, useAutomationLogs } from '@/hooks/useAutomations';
@@ -170,7 +174,6 @@ describe('useAutomations', () => {
 
     expect(mockUpdateAutomation).toHaveBeenCalledTimes(1);
     expect(mockUpdateAutomation).toHaveBeenCalledWith(
-      expect.any(Function),
       mockAutomation.$id,
       { status: 'paused' },
     );
@@ -195,7 +198,6 @@ describe('useAutomations', () => {
     await result.current.toggleStatus(pausedAutomation);
 
     expect(mockUpdateAutomation).toHaveBeenCalledWith(
-      expect.any(Function),
       pausedAutomation.$id,
       { status: 'active' },
     );
