@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">=14.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_YWNjZXB0ZWQtbW9jY2FzaW4tMjguY2xlcmsuYWNjb3VudHMuZGV2JA",
+        "EXPO_PUBLIC_APPWRITE_ENDPOINT": "https://sgp.cloud.appwrite.io/v1",
+        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "6a4f2e330009199ecb31",
+        "EXPO_PUBLIC_IG_API_BASE_URL": "http://192.168.0.103:8001",
+        "EXPO_PUBLIC_IG_APP_ID": "1773285020686209",
+        "EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI": "https://api-dev.kaplun.tech/instagram/callback"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {}
+  }
+}
