@@ -126,7 +126,7 @@ describe('TabBar', () => {
     const base = createMockProps();
     const routes = base.state.routes.map((r, i) =>
       i === base.state.index
-        ? { ...r, state: { index: 0, routes: [{ name: 'new' }] } as any }
+        ? { ...r, state: { index: 0, routes: [{ name: 'new' }] } as unknown as BottomTabBarProps['state']['routes'][number]['state'] }
         : r,
     );
     const props = createMockProps({ state: { ...base.state, routes } });
