@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
+import { Image } from '@/tw/image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
@@ -80,22 +81,35 @@ function Entrance({ delay = 0, children }: { delay?: number; children: React.Rea
 
 // ── Sub-components ───────────────────────────────────────────────────
 
-function HeaderAvatar({ name }: { name: string }) {
+function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
+  const router = useRouter();
   return (
-    <View
-      className="bg-brand-ochre items-center justify-center"
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        borderWidth: 1,
-        borderColor: '#e5e5e5',
-      }}
+    <Pressable
+      onPress={() => router.push('/(tabs)/(profile)' as never)}
+      accessibilityLabel="Profile"
+      accessibilityRole="button"
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Text className="font-semibold text-ink" style={{ fontSize: 15 }}>
-        {getInitials(name)}
-      </Text>
-    </View>
+      <View
+        className="bg-brand-ochre items-center justify-center"
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 19,
+          borderWidth: 1,
+          borderColor: '#e5e5e5',
+          overflow: 'hidden',
+        }}
+      >
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={{ width: 38, height: 38 }} />
+        ) : (
+          <Text className="font-semibold text-ink" style={{ fontSize: 15 }}>
+            {getInitials(name)}
+          </Text>
+        )}
+      </View>
+    </Pressable>
   );
 }
 
@@ -499,7 +513,7 @@ export default function HomeScreen() {
           <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
             Kaplun
           </Text>
-          <HeaderAvatar name={displayName} />
+          <HeaderAvatar name={displayName} imageUrl={profile?.profile_picture_url} />
         </View>
       </Entrance>
 
