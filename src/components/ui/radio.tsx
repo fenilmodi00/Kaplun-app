@@ -2,6 +2,7 @@ import React, { createContext, useContext } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable } from '@/tw';
 import { cn } from '@/tw/cn';
+import { useThemeColors } from '@/lib/theme';
 import { Pop } from './reveal';
 
 /* ── RadioGroup context ── */
@@ -103,6 +104,7 @@ export interface RadioIndicatorProps extends React.ComponentProps<typeof View> {
 
 export function RadioIndicator({ className, ...rest }: RadioIndicatorProps) {
   const radio = useRadio();
+  const t = useThemeColors();
   return (
     <View
       className={cn(
@@ -114,7 +116,7 @@ export function RadioIndicator({ className, ...rest }: RadioIndicatorProps) {
     >
       {radio.selected && (
         <Pop>
-          <Ionicons name="checkmark" size={13} color="#ffffff" />
+          <Ionicons name="checkmark" size={13} color={t.onPrimary} />
         </Pop>
       )}
     </View>

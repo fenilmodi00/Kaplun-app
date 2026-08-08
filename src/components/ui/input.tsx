@@ -1,6 +1,7 @@
 import React, { useRef, useState, useImperativeHandle, forwardRef, createContext, useContext } from 'react';
 import { TextInput as RNTextInput, StyleSheet } from 'react-native';
 import { View } from '@/tw';
+import { useThemeColors } from '@/lib/theme';
 
 export type InputVariant = 'outline' | 'rounded' | 'underlined';
 export type InputSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -128,6 +129,7 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
     },
   }));
 
+  const t = useThemeColors();
   const editable = editableProp !== undefined ? editableProp : !ctx.isDisabled && !ctx.isReadOnly;
   const isUnderlined = ctx.variant === 'underlined';
 
@@ -136,11 +138,12 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
     {
       height: SIZE_HEIGHT[ctx.size],
       borderRadius: borderRadiusFor(ctx.variant),
-      backgroundColor: isUnderlined ? 'transparent' : focused ? '#ffffff' : '#faf5e8',
-      borderColor: ctx.isInvalid ? '#ef4444' : focused ? '#b8a4ed' : '#e5e5e5',
+      backgroundColor: isUnderlined ? 'transparent' : focused ? t.onPrimary : t.surfaceSoft,
+      borderColor: ctx.isInvalid ? '#ef4444' : focused ? '#b8a4ed' : t.hairline,
       borderWidth: isUnderlined ? 0 : 2,
       borderBottomWidth: isUnderlined ? 2 : undefined,
       opacity: ctx.isDisabled ? 0.5 : 1,
+      color: t.ink,
     },
   ];
 
@@ -153,7 +156,7 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
         onChangeText?.(text);
       }}
       placeholder={placeholder}
-      placeholderTextColor="#9a9a9a"
+      placeholderTextColor={t.mutedSoft}
       keyboardType={keyboardType}
       maxLength={maxLength}
       secureTextEntry={secureTextEntry}
@@ -164,7 +167,7 @@ export const InputField = forwardRef<InputFieldRef, InputFieldProps>(function In
       autoFocus={autoFocus}
       testID={testID}
       accessibilityLabel={accessibilityLabel}
-      cursorColor="#0a0a0a"
+      cursorColor={t.ink}
       selectionColor="#b8a4ed"
       returnKeyType="done"
       blurOnSubmit
@@ -187,6 +190,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
-    color: '#0a0a0a',
   },
 });

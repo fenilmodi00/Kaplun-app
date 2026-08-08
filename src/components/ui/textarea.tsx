@@ -1,6 +1,7 @@
 import React, { useRef, useState, useImperativeHandle, forwardRef, createContext, useContext } from 'react';
 import { TextInput as RNTextInput, StyleSheet } from 'react-native';
 import { View } from '@/tw';
+import { useThemeColors } from '@/lib/theme';
 
 export type TextareaVariant = 'outline' | 'rounded' | 'underlined';
 export type TextareaSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -124,6 +125,7 @@ export const TextareaInput = forwardRef<TextareaInputRef, TextareaInputProps>(fu
     },
   }));
 
+  const t = useThemeColors();
   const editable = editableProp !== undefined ? editableProp : !ctx.isDisabled && !ctx.isReadOnly;
   const isUnderlined = ctx.variant === 'underlined';
   const minHeight = Math.max(96, rows * 24);
@@ -133,11 +135,12 @@ export const TextareaInput = forwardRef<TextareaInputRef, TextareaInputProps>(fu
     {
       minHeight,
       borderRadius: borderRadiusFor(ctx.variant),
-      backgroundColor: isUnderlined ? 'transparent' : focused ? '#ffffff' : '#faf5e8',
-      borderColor: ctx.isInvalid ? '#ef4444' : focused ? '#b8a4ed' : '#e5e5e5',
+      backgroundColor: isUnderlined ? 'transparent' : focused ? t.onPrimary : t.surfaceSoft,
+      borderColor: ctx.isInvalid ? '#ef4444' : focused ? '#b8a4ed' : t.hairline,
       borderWidth: isUnderlined ? 0 : 2,
       borderBottomWidth: isUnderlined ? 2 : undefined,
       opacity: ctx.isDisabled ? 0.5 : 1,
+      color: t.ink,
     },
   ];
 
@@ -150,7 +153,7 @@ export const TextareaInput = forwardRef<TextareaInputRef, TextareaInputProps>(fu
         onChangeText?.(text);
       }}
       placeholder={placeholder}
-      placeholderTextColor="#9a9a9a"
+      placeholderTextColor={t.mutedSoft}
       keyboardType={keyboardType}
       maxLength={maxLength}
       autoCapitalize={autoCapitalize}
@@ -163,7 +166,7 @@ export const TextareaInput = forwardRef<TextareaInputRef, TextareaInputProps>(fu
       textAlignVertical="top"
       testID={testID}
       accessibilityLabel={accessibilityLabel}
-      cursorColor="#0a0a0a"
+      cursorColor={t.ink}
       selectionColor="#b8a4ed"
       blurOnSubmit={false}
       onFocus={() => {
@@ -186,6 +189,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
-    color: '#0a0a0a',
   },
 });
