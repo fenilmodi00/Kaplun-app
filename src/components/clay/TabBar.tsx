@@ -10,12 +10,11 @@ import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 // ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
 // so minimize is a static no-op. This is accepted — the animation only runs on native.
 
-const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights' | 'profile'> = {
+const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights'> = {
   '(home)': 'home',
   '(automate)': 'automate',
   '(messages)': 'messages',
   '(insights)': 'insights',
-  '(profile)': 'profile',
 };
 
 const TABS = [
@@ -23,7 +22,6 @@ const TABS = [
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
   { name: '(insights)', label: 'Insights' },
-  { name: '(profile)', label: 'Profile' },
 ];
 
 function TabButton({
