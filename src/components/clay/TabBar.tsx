@@ -47,7 +47,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
       <View
         className="border border-hairline"
         style={{
-          marginHorizontal: 12,
+          alignSelf: 'center',
           marginBottom: insets.bottom + 8,
           borderRadius: 9999,
           boxShadow: '0 6px 20px rgba(10,10,10,0.08)',
@@ -66,8 +66,8 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
               return (
                 <Pressable
                   key={tab.name}
-                  className="flex-1 items-center justify-center"
-                  style={{ minHeight: 44 }}
+                  className="items-center justify-center"
+                  style={{ width: 48, minHeight: 44 }}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: isFocused }}
                   accessibilityLabel={tab.label}
