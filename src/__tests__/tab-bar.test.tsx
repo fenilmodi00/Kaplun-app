@@ -2,7 +2,7 @@
  * TabBar unit tests.
  *
  * Verifies:
- * - All 5 tabs render with accessibility labels
+ * - All 4 tabs render with accessibility labels
  * - Pressing a tab calls navigation.navigate with the correct route
  * - No navigation when already focused or event is prevented
  * - Hides on nested 'new' route
@@ -30,7 +30,6 @@ const TABS = [
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
   { name: '(insights)', label: 'Insights' },
-  { name: '(profile)', label: 'Profile' },
 ];
 
 function createMockProps(
@@ -77,7 +76,7 @@ function createMockProps(
 }
 
 describe('TabBar', () => {
-  it('renders all 5 tabs', async () => {
+  it('renders all 4 tabs', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
 
@@ -135,10 +134,10 @@ describe('TabBar', () => {
     expect(screen.toJSON()).toBeNull();
   });
 
-  it('all 5 Pressables expose the tab role', async () => {
+  it('all 4 Pressables expose the tab role', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
-    expect(screen.getAllByRole('tab')).toHaveLength(5);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
   });
 
   it('minimize smoke: active tab still renders after scroll', async () => {
