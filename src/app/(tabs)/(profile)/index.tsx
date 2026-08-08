@@ -10,6 +10,7 @@
 import React, { useEffect, useMemo } from 'react';
 import {
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,7 +32,7 @@ import { addLog } from '@/lib/logger';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
-import { useThemeColors, type ThemeColors } from '@/lib/theme';
+import { useThemeColors, useThemePreference, setThemePreference, type ThemeColors } from '@/lib/theme';
 
 const ACCENTS = {
   mint: '#a4d4c5',
@@ -71,6 +72,44 @@ type ProfileStyles = ReturnType<typeof buildStyles>;
 
 function SectionTitle({ children, styles }: { children: string; styles: ProfileStyles }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
+}
+
+function ThemeToggle({ styles }: { styles: ProfileStyles }) {
+  const preference = useThemePreference();
+  const options: Array<{ value: 'dark' | 'light'; label: string }> = [
+    { value: 'dark', label: 'Dark' },
+    { value: 'light', label: 'Light' },
+  ];
+
+  return (
+    <View style={styles.themeTrack}>
+      {options.map((option) => {
+        const selected = preference === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            accessibilityLabel={option.label}
+            onPress={() => setThemePreference(option.value)}
+            style={[
+              styles.themeOption,
+              selected && styles.themeOptionSelected,
+            ]}
+          >
+            <Text
+              style={[
+                styles.themeOptionLabel,
+                selected ? styles.themeOptionLabelSelected : styles.themeOptionLabelUnselected,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 function ErrorState({ error, onRetry, styles }: { error: string; onRetry: () => void; styles: ProfileStyles }) {
@@ -332,6 +371,12 @@ export default function ProfileScreen() {
         ) : (
           <Text style={styles.mutedText}>No active deals</Text>
         )}
+      </View>
+
+      {/* Theme */}
+      <View style={styles.section}>
+        <SectionTitle styles={styles}>Theme</SectionTitle>
+        <ThemeToggle styles={styles} />
       </View>
 
       {/* Action Buttons */}
@@ -652,6 +697,35 @@ function buildStyles(t: ThemeColors) {
     lineHeight: 16,
     color: t.onPrimary,
     includeFontPadding: false,
+  },
+
+  themeTrack: {
+    flexDirection: 'row',
+    backgroundColor: t.surfaceCard,
+    borderRadius: 999,
+    padding: 3,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  themeOptionSelected: {
+    backgroundColor: t.primary,
+  },
+  themeOptionLabel: {
+    fontFamily: FONT.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    includeFontPadding: false,
+  },
+  themeOptionLabelSelected: {
+    color: t.onPrimary,
+  },
+  themeOptionLabelUnselected: {
+    color: t.muted,
   },
 
   /* Actions */

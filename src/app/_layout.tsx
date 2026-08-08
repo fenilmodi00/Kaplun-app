@@ -10,10 +10,11 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
 import { useClayFonts } from '@/lib/fonts';
-import { useThemeColors } from '@/lib/theme';
+import { useThemeColors, useThemeScheme, hydrateThemePreference, cssVariablesForScheme } from '@/lib/theme';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 import { SessionProvider, useSession } from '@/lib/session-context';
+import { VariableContextProvider } from 'nativewind';
 
 async function applySystemChrome(canvas: string) {
   try {
@@ -21,6 +22,18 @@ async function applySystemChrome(canvas: string) {
   } catch {
     // ignore — unsupported on some hosts
   }
+}
+
+function ThemeVariablesProvider({ children }: { children: React.ReactNode }) {
+  const scheme = useThemeScheme();
+  if (process.env.EXPO_OS === 'web') {
+    return <>{children}</>;
+  }
+  return (
+    <VariableContextProvider value={cssVariablesForScheme(scheme)}>
+      {children}
+    </VariableContextProvider>
+  );
 }
 
 function RootNavigator() {
@@ -61,15 +74,24 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const theme = useThemeColors();
+  const scheme = useThemeScheme();
+
+  useEffect(() => {
+    void hydrateThemePreference();
+    // ponytail: stored-'light' users see a brief dark flash before hydration; acceptable, gate later if it matters.
+  }, []);
+
   return (
     <SafeAreaProvider>
       <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-        <StatusBar style="auto" />
-        <NavigationBar style="auto" />
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <SessionProvider>
             <BridgeProvider>
-              <RootNavigator />
+              <ThemeVariablesProvider>
+                <RootNavigator />
+              </ThemeVariablesProvider>
             </BridgeProvider>
           </SessionProvider>
         </PersistQueryClientProvider>

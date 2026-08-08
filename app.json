@@ -7,9 +7,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#000000",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fenilmodi00.kaplun"
+      "bundleIdentifier": "com.fenilmodi00.kaplun",
+      "backgroundColor": "#000000"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",

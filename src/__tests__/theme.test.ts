@@ -1,4 +1,14 @@
-import { colorsForScheme, lightColors, darkColors } from '@/lib/theme';
+import {
+  colorsForScheme,
+  lightColors,
+  darkColors,
+  resolveScheme,
+  getThemePreference,
+  setThemePreference,
+  subscribeThemePreference,
+  lightCssVariables,
+  darkCssVariables,
+} from '@/lib/theme';
 
 describe('theme palettes', () => {
   it('light palette matches current Clay tokens', () => {
@@ -28,6 +38,81 @@ describe('theme palettes', () => {
     for (const key of Object.keys(lightColors) as (keyof typeof lightColors)[]) {
       if (intentionalSame.includes(key)) continue;
       expect(darkColors[key]).not.toBe(lightColors[key]);
+    }
+  });
+});
+
+describe('resolveScheme', () => {
+  it('returns dark when preference is dark regardless of system', () => {
+    expect(resolveScheme('dark', null)).toBe('dark');
+    expect(resolveScheme('dark', 'light')).toBe('dark');
+    expect(resolveScheme('dark', 'dark')).toBe('dark');
+  });
+
+  it('returns light when preference is light regardless of system', () => {
+    expect(resolveScheme('light', null)).toBe('light');
+    expect(resolveScheme('light', 'dark')).toBe('light');
+    expect(resolveScheme('light', 'light')).toBe('light');
+  });
+});
+
+describe('theme preference store', () => {
+  afterEach(() => {
+    setThemePreference('dark');
+  });
+
+  it('defaults to dark', () => {
+    expect(getThemePreference()).toBe('dark');
+  });
+
+  it('setThemePreference updates value and notifies subscribers', () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeThemePreference(listener);
+
+    setThemePreference('light');
+    expect(getThemePreference()).toBe('light');
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    setThemePreference('dark');
+    expect(getThemePreference()).toBe('dark');
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    // Setting same value is a no-op
+    setThemePreference('dark');
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+  });
+
+  it('unsubscribe removes listener', () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeThemePreference(listener);
+    unsubscribe();
+
+    setThemePreference('light');
+    expect(listener).not.toHaveBeenCalled();
+    setThemePreference('dark');
+  });
+});
+
+describe('CSS variable maps', () => {
+  it('light and dark have identical keys', () => {
+    expect(Object.keys(lightCssVariables).sort()).toEqual(
+      Object.keys(darkCssVariables).sort(),
+    );
+  });
+
+  it('every key differs except the explicitly same list', () => {
+    const intentionalSame = [
+      '--color-surface-dark',
+      '--color-surface-dark-elevated',
+    ];
+    for (const key of Object.keys(lightCssVariables)) {
+      if (intentionalSame.includes(key)) {
+        expect(darkCssVariables[key]).toBe(lightCssVariables[key]);
+      } else {
+        expect(darkCssVariables[key]).not.toBe(lightCssVariables[key]);
+      }
     }
   });
 });

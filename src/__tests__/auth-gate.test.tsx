@@ -39,6 +39,9 @@ jest.mock('@/lib/theme', () => ({
     scrimEnd: 'rgba(255,250,240,0.92)',
     glassTint: '#fffaf0',
   }),
+  useThemeScheme: () => 'light',
+  cssVariablesForScheme: () => ({}),
+  hydrateThemePreference: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockUseSession = jest.fn();
