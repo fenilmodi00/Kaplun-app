@@ -156,6 +156,15 @@ jest.mock('expo-blur', () => {
   };
 });
 
+// Mock @sbaiahmed1/react-native-blur
+jest.mock('@sbaiahmed1/react-native-blur', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    LiquidGlassView: (props: any) => React.createElement(View, props, props.children),
+  };
+});
+
 // Mock @react-native-masked-view/masked-view
 jest.mock('@react-native-masked-view/masked-view', () => {
   const React = require('react');
