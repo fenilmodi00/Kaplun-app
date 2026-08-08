@@ -142,3 +142,20 @@
     --font-display: "Inter_500Medium", normal;
   }
 }
+
+/* ── Dark AMOLED spike verdict ──
+   Mechanism: media query (A) — chosen tentatively.
+   Automated verification (tsc --noEmit): PASS.
+   Manual QA: BLOCKED on both platforms.
+     Android: adb not found, ANDROID_HOME not set.
+     iOS: xcrun not found, Windows cannot build iOS locally.
+   Probe code kept in place for Task 2; remove once on-device verification completes.
+   ── */
+/* SPIKE PROBE — remove after Task 1 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #000000;
+    --color-ink: #f5f5f5;
+    --color-surface-card: #121212;
+  }
+}
