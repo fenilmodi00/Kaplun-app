@@ -1,5 +1,6 @@
 import { View, Pressable } from '@/tw';
 import { SymbolIcon } from '@/components/symbol-icon';
+import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { LiquidGlassView } from '@sbaiahmed1/react-native-blur';
@@ -9,6 +10,9 @@ import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 
 // ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
 // so minimize is a static no-op. This is accepted — the animation only runs on native.
+
+/** Approx pill height (padding + 44pt targets) for the bottom edge scrim. */
+const PILL_HEIGHT = 60;
 
 const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights'> = {
   '(home)': 'home',
@@ -111,6 +115,17 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
       }}
       pointerEvents="box-none"
     >
+      {/*
+        Cream gradient fade under the floating pill so scroll content softens
+        into the canvas. Kept as EdgeBlur (LinearGradient) — not native blur —
+        so remounting when the bar hides on `new` stays crash-safe.
+      */}
+      <EdgeBlur
+        position="bottom"
+        height={insets.bottom + 8 + PILL_HEIGHT}
+        intensity={100}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+      />
       <View
         className="border border-hairline"
         style={{
