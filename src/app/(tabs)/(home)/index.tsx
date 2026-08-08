@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
-import { useCSSVariable } from '@/tw';
+
 import { Image } from '@/tw/image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -380,8 +380,7 @@ export default function HomeScreen() {
   const [showPermissions, setShowPermissions] = useState(false);
   const [skipped, setSkipped] = useState(false);
 
-  // SPIKE PROBE — remove after Task 1
-  const probeInk = useCSSVariable('--color-ink') as string;
+  
 
   // Re-check on every focus so Profile → Disconnect immediately shows
   // the connect UI when the user returns to Home (tabs stay mounted).
@@ -519,9 +518,7 @@ export default function HomeScreen() {
 
   return (
     <ScreenShell>
-      {/* SPIKE PROBE — remove after Task 1 */}
-      <View className="bg-surface-card" style={{ height: 80, margin: 16 }} />
-      <Text style={{ color: probeInk }}>probe-text</Text>
+      
 
       {/* Header */}
       <Entrance delay={0}>
