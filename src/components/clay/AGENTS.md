@@ -6,7 +6,7 @@
 
 | Component | File | LOC | `@/tw`? | Reanimated? | `.web.tsx`? |
 |-----------|------|-----|---------|-------------|-------------|
-| `ClayTabBar` | `ClayTabBar.tsx` | 129 | Yes (View, Text, Pressable) | No — uses `SymbolIcon`, `hapticSelection`, `EdgeBlur` | No |
+| `TabBar` | `TabBar.tsx` | ~102 | Yes (View, Text, Pressable) | No — uses `SymbolIcon`, `hapticSelection`, `LiquidGlassView` | No |
 | `ClaySpinner` | `ClaySpinner.tsx` | 78 | No — raw RN | Yes (withRepeat) | Yes (`.web.tsx` → ActivityIndicator) |
 | `ClayFeatureCard` | `ClayFeatureCard.tsx` | 41 | Yes (View, Text) | Yes (useEntranceAnimation) | No |
 | `ClayAvatar` | `ClayAvatar.tsx` | 13 | Yes (`@/tw/image`) | No | No |
@@ -25,7 +25,7 @@
 
 ## CONVENTIONS
 
-- **`@/tw` vs raw RN split** — `@/tw`-based components (ClayTabBar, ClayFeatureCard, ClayAnimatedCard, ClayAvatar) use Tailwind classes → theme tokens resolve automatically. Raw-RN components (ClaySpinner, ClayAnimatedButton) use `StyleSheet.create()` + hardcoded hex — explicitly to avoid NativeWind `useCssElement` layout bugs on Android (see comment `ClayAnimatedButton.tsx:15`).
+- **`@/tw` vs raw RN split** — `@/tw`-based components (TabBar, ClayFeatureCard, ClayAnimatedCard, ClayAvatar) use Tailwind classes → theme tokens resolve automatically. Raw-RN components (ClaySpinner, ClayAnimatedButton) use `StyleSheet.create()` + hardcoded hex — explicitly to avoid NativeWind `useCssElement` layout bugs on Android (see comment `ClayAnimatedButton.tsx:15`).
 - **`.web.tsx` variants** — components with Reanimated animations get a `.web.tsx` variant that uses plain RN (no Reanimated). Metro resolves `.web.tsx` on web platform. Required for #8285.
 - **Compound utilities** — `clayInput`, `clayCard`, `clayFeatureCardBase`, `clayButtonBase` in `src/tw/cn.ts`. Use these instead of re-typing class strings.
 - **Animation hooks** — all Reanimated logic centralized in `src/hooks/useClayAnimations.ts`. Import from there, not from `react-native-reanimated` directly.

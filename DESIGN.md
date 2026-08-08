@@ -315,7 +315,7 @@ clayButtonBase      // 'h-11 py-3 rounded-md px-5 flex-row items-center justify-
 
 | Mobile Component | File | Primitives Path | Reanimated? | `.web.tsx`? | Role / Behavior |
 |---|---|---|---|---|---|
-| `ClayTabBar` | `ClayTabBar.tsx` | `@/tw` (View, Text) | Yes (`withSpring`) | No | Custom bottom tab bar with animated sliding indicator |
+| `TabBar` | `TabBar.tsx` | `@/tw` (View, Text, Pressable) | No | No | icon-only liquid-glass floating tab bar |
 | `ClayAnimatedButton` | `ClayAnimatedButton.tsx` | Raw RN (`StyleSheet`) | Yes (`usePressAnimation`) | Yes (`.web.tsx`) | 4 variants (`primary`, `secondary`, `on-color`, `text-link`), press scale animation |
 | `ClayAnimatedCard` | `ClayAnimatedCard.tsx` | `@/tw` (View, Pressable) | Yes (entrance + press) | No | Pressable card with entrance fade-in + press scale-down |
 | `ClayFeatureCard` | `ClayFeatureCard.tsx` | `@/tw` (View, Text) | Yes (`useEntranceAnimation`) | No | Saturated single-color card (`pink`, `teal`, `lavender`, `peach`, `ochre`, `cream`) |
@@ -341,7 +341,7 @@ When creating or updating screens in `src/app/(tabs)/`:
 5. **Feature Cards (Highlights):** `ClayFeatureCard` with `color="pink|teal|lavender|peach|ochre|cream"`. **Cycle colors** across lists — never repeat the same color twice sequentially.
 6. **Buttons:** `ClayAnimatedButton` with `variant="primary|secondary|on-color|text-link"`.
 7. **Inputs:** `clayInput` compound class on a `TextInput` from `@/tw`.
-8. **Navigation:** Use `ClayTabBar` — never default expo-router tab bar.
+8. **Navigation:** Use `TabBar` — never default expo-router tab bar.
 9. **Animations:** Import from `@/hooks/useClayAnimations` — NEVER import `react-native-reanimated` directly in screens.
 
 ---
