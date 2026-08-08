@@ -22,6 +22,7 @@ import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
+import { useThemeScheme } from '@/lib/theme';
 import type { Automation } from '@/lib/automations';
 
 function getTargetSummary(automation: Automation): string {
@@ -157,6 +158,7 @@ function AutomationRow({
   disabled?: boolean;
 }) {
   const isError = automation.status === 'error';
+  const scheme = useThemeScheme();
 
   return (
     <Pressable onPress={onPress} className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-2">
@@ -191,7 +193,7 @@ function AutomationRow({
             -- sent
           </Text>
         </View>
-        <Host matchContents colorScheme="light" seedColor="#22c55e">
+        <Host matchContents colorScheme={scheme} seedColor="#22c55e">
           <ExpoUISwitch
             testID="automation-switch"
             value={automation.status === 'active'}
