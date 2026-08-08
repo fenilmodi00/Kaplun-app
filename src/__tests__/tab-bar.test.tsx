@@ -146,7 +146,7 @@ describe('TabBar', () => {
     await render(<TabBar {...props} />);
 
     act(() => {
-      reportTabBarScroll(-20);
+      reportTabBarScroll(20);
     });
 
     expect(screen.getByLabelText('Home')).toBeTruthy();
