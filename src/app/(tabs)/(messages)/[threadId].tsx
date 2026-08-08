@@ -13,6 +13,7 @@ import { DATABASE_ID, TABLES } from '@/lib/constants';
 import type { DealThread, Message } from '@/lib/types';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useThemeColors } from '@/lib/theme';
 
 /** Status chip colors per DESIGN.md §3.3 & §5.4 */
 const STATUS_META: Record<string, { bg: string; text: string }> = {
@@ -120,6 +121,7 @@ export default function ThreadDetail() {
   const { threadId } = useLocalSearchParams<{ threadId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useThemeColors();
   const { messages, loading, error, sendMessage, markAsRead, refresh } = useMessages(threadId ?? '');
   const [thread, setThread] = useState<DealThread | null>(null);
   const [inputText, setInputText] = useState('');
@@ -222,7 +224,7 @@ export default function ThreadDetail() {
             accessibilityLabel="Back"
             style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
           >
-            <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
+            <Ionicons name="chevron-back" size={24} color={t.ink} />
           </TouchableOpacity>
           <View className="flex-1 gap-1">
             <Text className="text-title-md font-semibold text-ink" numberOfLines={1}>

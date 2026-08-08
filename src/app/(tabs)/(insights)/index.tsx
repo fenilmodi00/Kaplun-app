@@ -13,6 +13,7 @@ import { useInsights, type TopMediaItem } from '@/hooks/useInsights';
 import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
+import { useThemeColors } from '@/lib/theme';
 import type { InsightPoint } from '@/lib/instagram';
 
 type PeriodDays = 7 | 28;
@@ -55,7 +56,7 @@ function Entrance({ delay = 0, children }: { delay?: number; children: React.Rea
 function SkeletonBlock({ height, style }: { height: number; style?: object }) {
   return (
     <View
-      className="bg-white border border-hairline"
+      className="bg-surface-card border border-hairline"
       style={[{ height, borderRadius: 16 }, style]}
     />
   );
@@ -87,9 +88,10 @@ function PeriodToggle({
   days: PeriodDays;
   onChange: (d: PeriodDays) => void;
 }) {
+  const t = useThemeColors();
   return (
     <View
-      className="flex-row bg-white border border-hairline"
+      className="flex-row bg-surface-card border border-hairline"
       style={{ borderRadius: 9999, padding: 3 }}
     >
       {PERIOD_OPTIONS.map((option) => {
@@ -105,12 +107,12 @@ function PeriodToggle({
               paddingHorizontal: 16,
               minWidth: 48,
               alignItems: 'center',
-              backgroundColor: active ? '#0a0a0a' : 'transparent',
+              backgroundColor: active ? t.ink : 'transparent',
             }}
           >
             <Text
               className="font-semibold"
-              style={{ fontSize: 12.5, color: active ? '#ffffff' : '#6a6a6a' }}
+              style={{ fontSize: 12.5, color: active ? t.onPrimary : t.muted }}
             >
               {option}D
             </Text>
@@ -126,7 +128,7 @@ function PeriodToggle({
 function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <View
-      className="bg-white border border-hairline rounded-lg"
+      className="bg-surface-card border border-hairline rounded-lg"
       style={{ flexBasis: '48%', flexGrow: 1, padding: 14, gap: 2 }}
     >
       <Text
@@ -185,8 +187,9 @@ function ReachChartCard({
 
   const barRadius = windowDays <= 7 ? 6 : 3;
 
+  const t = useThemeColors();
   return (
-    <View className="bg-white border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
+    <View className="bg-surface-card border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
       <View className="flex-row items-end justify-between">
         <View style={{ gap: 2 }}>
           <Text
@@ -247,7 +250,7 @@ function ReachChartCard({
         </View>
       ) : (
         <View className="items-center" style={{ height: CHART_HEIGHT, justifyContent: 'center', gap: 6 }}>
-          <Ionicons name="stats-chart-outline" size={22} color="#9a9a9a" />
+          <Ionicons name="stats-chart-outline" size={22} color={t.mutedSoft} />
           <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
             No reach data yet — Meta can take up to 48h to report new insights.
           </Text>
@@ -358,6 +361,7 @@ function mediaTypeIcon(item: TopMediaItem): React.ComponentProps<typeof Ionicons
 
 function TopPostTile({ item }: { item: TopMediaItem }) {
   const typeIcon = mediaTypeIcon(item);
+  const t = useThemeColors();
   const open = useCallback(() => {
     if (item.permalink) {
       Linking.openURL(item.permalink).catch((err: unknown) =>
@@ -380,7 +384,7 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
           />
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Ionicons name="image-outline" size={22} color="#9a9a9a" />
+            <Ionicons name="image-outline" size={22} color={t.mutedSoft} />
           </View>
         )}
         {typeIcon && (
@@ -394,19 +398,19 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
               padding: 5,
             }}
           >
-            <Ionicons name={typeIcon} size={11} color="#ffffff" />
+            <Ionicons name={typeIcon} size={11} color={t.onPrimary} />
           </View>
         )}
       </View>
       <View className="flex-row items-center" style={{ gap: 12 }}>
         <View className="flex-row items-center" style={{ gap: 4 }}>
-          <Ionicons name="heart" size={12} color="#0a0a0a" />
+          <Ionicons name="heart" size={12} color={t.ink} />
           <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
             {formatCompact(item.like_count ?? 0)}
           </Text>
         </View>
         <View className="flex-row items-center" style={{ gap: 4 }}>
-          <Ionicons name="chatbubble" size={11} color="#0a0a0a" />
+          <Ionicons name="chatbubble" size={11} color={t.ink} />
           <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
             {formatCompact(item.comments_count ?? 0)}
           </Text>
@@ -417,8 +421,9 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
 }
 
 function TopPostsCard({ items }: { items: TopMediaItem[] }) {
+  const t = useThemeColors();
   return (
-    <View className="bg-white border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
+    <View className="bg-surface-card border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
       <View style={{ gap: 2 }}>
         <Text
           className="font-semibold uppercase text-muted"
@@ -438,7 +443,7 @@ function TopPostsCard({ items }: { items: TopMediaItem[] }) {
         </View>
       ) : (
         <View className="items-center" style={{ paddingVertical: 18, gap: 6 }}>
-          <Ionicons name="images-outline" size={22} color="#9a9a9a" />
+          <Ionicons name="images-outline" size={22} color={t.mutedSoft} />
           <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
             No posts yet — share a post on Instagram and its performance lands here.
           </Text>
@@ -459,6 +464,7 @@ function ReconnectCard({
   loading: boolean;
   onReconnect: () => void;
 }) {
+  const t = useThemeColors();
   const copy =
     variant === 'insights_permission'
       ? {
@@ -474,14 +480,14 @@ function ReconnectCard({
 
   return (
     <View
-      className="bg-white border border-hairline rounded-xl items-center"
+      className="bg-surface-card border border-hairline rounded-xl items-center"
       style={{ padding: 24, gap: 12 }}
     >
       <View
         className="bg-brand-lavender items-center justify-center"
         style={{ width: 52, height: 52, borderRadius: 26 }}
       >
-        <Ionicons name={copy.icon} size={24} color="#0a0a0a" />
+        <Ionicons name={copy.icon} size={24} color={t.ink} />
       </View>
       <Text
         className="font-semibold text-ink text-center"
@@ -494,7 +500,7 @@ function ReconnectCard({
       </Text>
       <ClayAnimatedButton variant="primary" fullWidth loading={loading} onPress={onReconnect} height={48}>
         <View className="flex-row items-center" style={{ gap: 8 }}>
-          <Ionicons name="logo-instagram" size={16} color="#ffffff" />
+          <Ionicons name="logo-instagram" size={16} color={t.onPrimary} />
           <Text className="font-semibold text-white" style={{ fontSize: 14.5 }}>
             {loading ? 'Waiting for Instagram…' : 'Reconnect Instagram'}
           </Text>
@@ -507,7 +513,7 @@ function ReconnectCard({
 function InlineErrorStrip({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <View
-      className="flex-row items-center bg-white border border-hairline rounded-lg"
+      className="flex-row items-center bg-surface-card border border-hairline rounded-lg"
       style={{ padding: 12, gap: 10 }}
     >
       <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />

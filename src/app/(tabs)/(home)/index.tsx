@@ -15,6 +15,7 @@ import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
+import { useThemeColors } from '@/lib/theme';
 import type { Creator } from '@/lib/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -84,6 +85,7 @@ function Entrance({ delay = 0, children }: { delay?: number; children: React.Rea
 
 function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
   const router = useRouter();
+  const t = useThemeColors();
   return (
     <Pressable
       onPress={() => router.push('/(tabs)/(profile)' as never)}
@@ -98,7 +100,7 @@ function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
           height: 38,
           borderRadius: 19,
           borderWidth: 1,
-          borderColor: '#e5e5e5',
+          borderColor: t.hairline,
           overflow: 'hidden',
         }}
       >
@@ -115,6 +117,7 @@ function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
 }
 
 function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }) {
+  const t = useThemeColors();
   return (
     <View className="flex-row items-center gap-[11px]">
       <View
@@ -126,7 +129,7 @@ function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicon
           backgroundColor: 'rgba(255,255,255,0.7)',
         }}
       >
-        <Ionicons name={icon} size={16} color="#0a0a0a" />
+        <Ionicons name={icon} size={16} color={t.ink} />
       </View>
       <Text className="font-medium text-ink" style={{ fontSize: 14.5, lineHeight: 20 }}>
         {text}
@@ -136,6 +139,7 @@ function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicon
 }
 
 function ErrorStrip({ message }: { message: string }) {
+  const t = useThemeColors();
   return (
     <ErrorShake>
       <View
@@ -150,8 +154,8 @@ function ErrorStrip({ message }: { message: string }) {
         }}
       >
         <Ionicons name="alert-circle-outline" size={15} color="#ef4444" style={{ marginTop: 1 }} />
-        <Text className="text-[13px] leading-[1.45]" style={{ color: '#1a1a1a', flex: 1 }}>
-          <Text className="font-semibold" style={{ color: '#1a1a1a' }}>
+        <Text className="text-[13px] leading-[1.45]" style={{ color: t.bodyStrong, flex: 1 }}>
+          <Text className="font-semibold" style={{ color: t.bodyStrong }}>
             Instagram connection failed.
           </Text>{' '}
           {message}
@@ -162,6 +166,7 @@ function ErrorStrip({ message }: { message: string }) {
 }
 
 function PermissionsPanel({ open }: { open: boolean }) {
+  const t = useThemeColors();
   if (!open) return null;
 
   const scopes = [
@@ -173,7 +178,7 @@ function PermissionsPanel({ open }: { open: boolean }) {
 
   return (
     <View
-      className="bg-white border border-hairline rounded-lg"
+      className="bg-surface-card border border-hairline rounded-lg"
       style={{ padding: 16, marginTop: 12 }}
     >
       <Text
@@ -190,14 +195,14 @@ function PermissionsPanel({ open }: { open: boolean }) {
               style={{ width: 7, height: 7, borderRadius: 3.5, marginTop: 5 }}
             />
             <View className="flex-1">
-              <Text className="text-[13.5px] leading-[1.4]" style={{ color: '#0a0a0a' }}>
+              <Text className="text-[13.5px] leading-[1.4]" style={{ color: t.ink }}>
                 {s.label}
               </Text>
               <Text
                 style={{
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                   fontSize: 11,
-                  color: '#6a6a6a',
+                  color: t.muted,
                   marginTop: 1,
                 }}
               >
@@ -208,14 +213,14 @@ function PermissionsPanel({ open }: { open: boolean }) {
         ))}
       </View>
       <View
-        style={{ borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 12 }}
+        style={{ borderTopWidth: 1, borderTopColor: t.hairline, paddingTop: 12 }}
       >
         <Text className="text-[12.5px] leading-[1.5] text-muted">
           Secure sign-in via Meta. Kaplun never sees your password. Disconnect anytime from Profile.
         </Text>
         <Text className="text-[12.5px] leading-[1.5] text-muted" style={{ marginTop: 8 }}>
           Requires an Instagram Business or Creator account.{" "}
-          <Text style={{ color: '#0a0a0a', fontWeight: '500' }}>How to switch</Text>
+          <Text style={{ color: t.ink, fontWeight: '500' }}>How to switch</Text>
         </Text>
       </View>
     </View>
@@ -223,9 +228,10 @@ function PermissionsPanel({ open }: { open: boolean }) {
 }
 
 function ConnectionChip({ profile }: { profile: InstagramProfileResponse }) {
+  const t = useThemeColors();
   return (
     <View
-      className="flex-row items-center gap-[11px] bg-white border border-hairline"
+      className="flex-row items-center gap-[11px] bg-surface-card border border-hairline"
       style={{
         borderRadius: 9999,
         padding: 8,
@@ -245,7 +251,7 @@ function ConnectionChip({ profile }: { profile: InstagramProfileResponse }) {
           justifyContent: 'center',
         }}
       >
-        <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+        <Ionicons name="logo-instagram" size={17} color={t.onPrimary} />
       </LinearGradient>
       <View className="flex-1" style={{ minWidth: 0 }}>
         <Text className="font-semibold text-ink" style={{ fontSize: 14.5, letterSpacing: -0.2 }}>
@@ -334,6 +340,7 @@ function Module({
 
 function QuickActions() {
   const router = useRouter();
+  const t = useThemeColors();
   const actions = [
     { label: 'Reply to DMs', icon: 'chatbubble-outline' as const, route: '/(tabs)/(messages)' },
     { label: 'View insights', icon: 'stats-chart-outline' as const, route: '/(tabs)/(insights)' },
@@ -345,10 +352,10 @@ function QuickActions() {
         <Pressable
           key={a.label}
           onPress={() => router.push(a.route as never)}
-          className="flex-1 items-center justify-center bg-white border border-hairline"
+          className="flex-1 items-center justify-center bg-surface-card border border-hairline"
           style={{ borderRadius: 12, minHeight: 64, gap: 6 }}
         >
-          <Ionicons name={a.icon} size={17} color="#0a0a0a" />
+          <Ionicons name={a.icon} size={17} color={t.ink} />
           <Text className="font-semibold text-ink" style={{ fontSize: 12 }}>
             {a.label}
           </Text>
@@ -364,6 +371,7 @@ export default function HomeScreen() {
   const { data: user } = useAppwriteUser();
   const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
+  const t = useThemeColors();
 
   const [profile, setProfile] = useState<InstagramProfileResponse | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
@@ -487,21 +495,21 @@ export default function HomeScreen() {
           </Text>
         </View>
         <View
-          className="bg-white/60 border border-hairline"
+          className="bg-surface-card/60 border border-hairline"
           style={{ height: 28, width: '55%', borderRadius: 8, marginBottom: 18 }}
         />
         <View
-          className="bg-white border border-hairline"
+          className="bg-surface-card border border-hairline"
           style={{ height: 120, borderRadius: 16, marginBottom: 14 }}
         />
         <View
-          className="bg-white border border-hairline"
+          className="bg-surface-card border border-hairline"
           style={{ height: 88, borderRadius: 16, marginBottom: 14 }}
         />
         <View className="flex-row" style={{ gap: 10 }}>
-          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
-          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
-          <View className="flex-1 bg-white border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
         </View>
       </ScreenShell>
     );
@@ -617,7 +625,7 @@ export default function HomeScreen() {
               height={50}
             >
               <View className="flex-row items-center gap-[9px]">
-                <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+                <Ionicons name="logo-instagram" size={17} color={t.onPrimary} />
                 <Text className="font-semibold text-white" style={{ fontSize: 15, letterSpacing: -0.2 }}>
                   {error ? 'Try again' : isConnecting ? 'Waiting for Instagram…' : 'Connect Instagram'}
                 </Text>

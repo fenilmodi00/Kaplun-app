@@ -22,7 +22,7 @@ import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
-import { useThemeScheme } from '@/lib/theme';
+import { useThemeColors, useThemeScheme } from '@/lib/theme';
 import type { Automation } from '@/lib/automations';
 
 function getTargetSummary(automation: Automation): string {
@@ -109,10 +109,11 @@ function ConnectionGate({
   onConnect: () => void;
   isConnecting: boolean;
 }) {
+  const t = useThemeColors();
   return (
     <View className="border border-brand-lavender rounded-[14px] bg-brand-lavender p-3.5 gap-3.5">
       <View className="items-center gap-2 py-3">
-        <Ionicons name="logo-instagram" size={32} color="#0a0a0a" />
+        <Ionicons name="logo-instagram" size={32} color={t.ink} />
         <Text className="text-center font-medium text-ink" style={{ fontSize: 16, lineHeight: 22 }}>
           Connect Instagram to enable automations
         </Text>
@@ -208,6 +209,7 @@ function AutomationRow({
 
 function Header({ onAdd }: { onAdd: () => void }) {
   const insets = useSafeAreaInsets();
+  const t = useThemeColors();
   return (
     <View className="flex-row items-start justify-between pb-2" style={{ paddingTop: insets.top + 12 }}>
       <View className="flex-1 gap-0.5">
@@ -223,16 +225,16 @@ function Header({ onAdd }: { onAdd: () => void }) {
         accessibilityLabel="Create automation"
         hitSlop={8}
         className="h-11 w-11 rounded-md items-center justify-center bg-ink/[0.06]"
-        style={({ pressed }) => ({ backgroundColor: pressed ? 'rgba(10,10,10,0.14)' : undefined })}
+        style={({ pressed }) => ({ backgroundColor: pressed ? `${t.ink}24` : undefined })}
       >
-        <Ionicons name="add" size={22} color="#0a0a0a" />
+        <Ionicons name="add" size={22} color={t.ink} />
       </Pressable>
     </View>
   );
 }
 
 function SkeletonRow() {
-  return <View className="h-[88px] rounded-[14px] border border-hairline bg-white" />;
+  return <View className="h-[88px] rounded-[14px] border border-hairline bg-surface-card" />;
 }
 
 export default function AutomateScreen() {

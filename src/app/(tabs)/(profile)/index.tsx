@@ -7,7 +7,7 @@
  * for the documented raw-RN escape hatch.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Image,
   ScrollView,
@@ -31,23 +31,15 @@ import { addLog } from '@/lib/logger';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
+import { useThemeColors, type ThemeColors } from '@/lib/theme';
 
-const COLORS = {
-  canvas: '#fffaf0',
-  ink: '#0a0a0a',
-  body: '#3a3a3a',
-  muted: '#6a6a6a',
-  mutedSoft: '#9a9a9a',
-  hairline: '#e5e5e5',
-  surfaceSoft: '#faf5e8',
-  surfaceCard: '#f5f0e0',
+const ACCENTS = {
   mint: '#a4d4c5',
   lavender: '#b8a4ed',
   peach: '#ffb084',
   teal: '#1a3a3a',
   ochre: '#e8b94a',
   error: '#ef4444',
-  white: '#ffffff',
 };
 
 const FONT = {
@@ -57,15 +49,17 @@ const FONT = {
 };
 
 /** Status chip colors (hex mirror of DESIGN.md §3.3) */
-const STATUS_META: Record<string, { bg: string; text: string }> = {
-  invited: { bg: COLORS.teal, text: COLORS.white },
-  negotiating: { bg: COLORS.ochre, text: COLORS.ink },
-  contracted: { bg: COLORS.mint, text: COLORS.ink },
-  content_pending: { bg: COLORS.lavender, text: COLORS.white },
-  live: { bg: COLORS.mint, text: COLORS.ink },
-  completed: { bg: COLORS.surfaceCard, text: COLORS.muted },
-  declined: { bg: COLORS.error, text: COLORS.white },
-};
+function statusMeta(t: ThemeColors): Record<string, { bg: string; text: string }> {
+  return {
+    invited: { bg: ACCENTS.teal, text: t.onPrimary },
+    negotiating: { bg: ACCENTS.ochre, text: t.ink },
+    contracted: { bg: ACCENTS.mint, text: t.ink },
+    content_pending: { bg: ACCENTS.lavender, text: t.onPrimary },
+    live: { bg: ACCENTS.mint, text: t.ink },
+    completed: { bg: t.surfaceCard, text: t.muted },
+    declined: { bg: ACCENTS.error, text: t.onPrimary },
+  };
+}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -73,11 +67,13 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function SectionTitle({ children }: { children: string }) {
+type ProfileStyles = ReturnType<typeof buildStyles>;
+
+function SectionTitle({ children, styles }: { children: string; styles: ProfileStyles }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
-function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
+function ErrorState({ error, onRetry, styles }: { error: string; onRetry: () => void; styles: ProfileStyles }) {
   const { shake, animatedStyle } = useShakeAnimation();
 
   useEffect(() => {
@@ -111,6 +107,8 @@ export default function ProfileScreen() {
     refresh,
   } = useCreatorProfile();
   const { loading: dashboardLoading } = useDashboard();
+  const t = useThemeColors();
+  const styles = useMemo(() => buildStyles(t), [t]);
 
   async function handleSignOut() {
     await signOut();
@@ -163,7 +161,7 @@ export default function ProfileScreen() {
 
   // Error state
   if (error) {
-    return <ErrorState error={error} onRetry={refresh} />;
+    return <ErrorState error={error} onRetry={refresh} styles={styles} />;
   }
 
   // Empty state — no creator connected
@@ -243,7 +241,7 @@ export default function ProfileScreen() {
 
       {/* Recent Reels */}
       <View style={styles.section}>
-        <SectionTitle>Recent Reels</SectionTitle>
+        <SectionTitle styles={styles}>Recent Reels</SectionTitle>
         {recentReels.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.reelsRow}>
@@ -271,7 +269,7 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         {insights?.data ? (
           <View style={styles.card}>
-            <SectionTitle>Insights</SectionTitle>
+            <SectionTitle styles={styles}>Insights</SectionTitle>
             <View style={styles.insightsList}>
               {insights.data.map((metric) => (
                 <View key={metric.name} style={styles.insightRow}>
@@ -287,7 +285,7 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <>
-            <SectionTitle>Insights</SectionTitle>
+            <SectionTitle styles={styles}>Insights</SectionTitle>
             <Text style={styles.mutedText}>
               Insights available for business accounts only
             </Text>
@@ -297,13 +295,13 @@ export default function ProfileScreen() {
 
       {/* Active Deals */}
       <View style={styles.section}>
-        <SectionTitle>Active Deals</SectionTitle>
+        <SectionTitle styles={styles}>Active Deals</SectionTitle>
         {dealThreads.length > 0 ? (
           <View style={styles.dealsList}>
             {dealThreads.map((thread) => {
-              const meta = STATUS_META[thread.status] ?? {
-                bg: COLORS.surfaceCard,
-                text: COLORS.muted,
+              const meta = statusMeta(t)[thread.status] ?? {
+                bg: t.surfaceCard,
+                text: t.muted,
               };
               return (
                 <View key={thread.$id ?? thread.thread_id} style={styles.card}>
@@ -349,10 +347,11 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(t: ThemeColors) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
   },
   scrollContent: {
     gap: 16,
@@ -363,7 +362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     padding: 16,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
   },
   stateInner: {
     maxWidth: 320,
@@ -375,14 +374,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 16,
     lineHeight: 24,
-    color: COLORS.error,
+    color: ACCENTS.error,
   },
   stateBody: {
     textAlign: 'center',
     fontFamily: FONT.regular,
     fontSize: 16,
     lineHeight: 24,
-    color: COLORS.body,
+    color: t.body,
   },
 
   /* Skeleton */
@@ -396,40 +395,40 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.white,
+    borderColor: t.hairline,
+    backgroundColor: t.surfaceCard,
   },
   skeletonLineWide: {
     height: 20,
     width: 140,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.white,
+    borderColor: t.hairline,
+    backgroundColor: t.surfaceCard,
   },
   skeletonLineNarrow: {
     height: 14,
     width: 100,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.white,
+    borderColor: t.hairline,
+    backgroundColor: t.surfaceCard,
     opacity: 0.6,
   },
   skeletonCard: {
     height: 96,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.white,
+    borderColor: t.hairline,
+    backgroundColor: t.surfaceCard,
   },
 
   /* Cards */
   card: {
     borderWidth: 1,
-    borderColor: COLORS.hairline,
+    borderColor: t.hairline,
     borderRadius: 14,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
     padding: 14,
     gap: 10,
   },
@@ -441,14 +440,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 25,
     letterSpacing: -0.3,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   mutedText: {
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
 
@@ -466,12 +465,12 @@ const styles = StyleSheet.create({
   avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.lavender,
+    backgroundColor: ACCENTS.lavender,
   },
   avatarFallbackText: {
     fontFamily: FONT.semibold,
     fontSize: 24,
-    color: COLORS.white,
+    color: t.onPrimary,
     includeFontPadding: false,
   },
   creatorInfo: {
@@ -483,14 +482,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 25,
     letterSpacing: -0.3,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   creatorHandle: {
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
   countPillsRow: {
@@ -501,13 +500,13 @@ const styles = StyleSheet.create({
   },
   countPill: {
     borderRadius: 999,
-    backgroundColor: COLORS.surfaceCard,
+    backgroundColor: t.surfaceCard,
     paddingHorizontal: 8,
     paddingVertical: 3,
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.body,
+    color: t.body,
     includeFontPadding: false,
     overflow: 'hidden',
   },
@@ -526,16 +525,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   badgeMint: {
-    backgroundColor: COLORS.mint,
-    color: COLORS.ink,
+    backgroundColor: ACCENTS.mint,
+    color: t.ink,
   },
   badgeLavender: {
-    backgroundColor: COLORS.lavender,
-    color: COLORS.white,
+    backgroundColor: ACCENTS.lavender,
+    color: t.onPrimary,
   },
   badgePeach: {
-    backgroundColor: COLORS.peach,
-    color: COLORS.ink,
+    backgroundColor: ACCENTS.peach,
+    color: t.ink,
   },
 
   /* Reels */
@@ -547,15 +546,15 @@ const styles = StyleSheet.create({
   reelCard: {
     width: 160,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
+    borderColor: t.hairline,
     borderRadius: 12,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
     overflow: 'hidden',
   },
   reelImage: {
     width: 160,
     height: 200,
-    backgroundColor: COLORS.surfaceSoft,
+    backgroundColor: t.surfaceSoft,
   },
   reelMeta: {
     padding: 8,
@@ -564,7 +563,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
 
@@ -581,14 +580,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.body,
+    color: t.body,
     textTransform: 'capitalize',
   },
   insightValue: {
     fontFamily: FONT.semibold,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
 
@@ -610,14 +609,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   dealAgent: {
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
   dealRight: {
@@ -644,14 +643,14 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.error,
+    backgroundColor: ACCENTS.error,
     paddingHorizontal: 6,
   },
   unreadBadgeText: {
     fontFamily: FONT.semibold,
     fontSize: 13,
     lineHeight: 16,
-    color: COLORS.white,
+    color: t.onPrimary,
     includeFontPadding: false,
   },
 
@@ -660,4 +659,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 12,
   },
-});
+  });
+}

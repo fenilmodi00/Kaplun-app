@@ -22,15 +22,9 @@ import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 import type { Automation, AutomationLog } from '@/lib/automations';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
+import { useThemeColors, type ThemeColors } from '@/lib/theme';
 
-const COLORS = {
-  canvas: '#fffaf0',
-  ink: '#0a0a0a',
-  muted: '#6a6a6a',
-  mutedSoft: '#9a9a9a',
-  hairline: '#e5e5e5',
-  surfaceCard: '#f5f0e0',
-  surfaceSoft: '#faf5e8',
+const ACCENTS = {
   teal: '#1a3a3a',
   ochre: '#e8b94a',
   pink: '#ff4d8b',
@@ -38,7 +32,6 @@ const COLORS = {
   mintTint: 'rgba(164, 212, 197, 0.25)',
   ochreTint: 'rgba(232, 185, 74, 0.20)',
   error: '#ef4444',
-  white: '#ffffff',
 };
 
 const FONT = {
@@ -48,24 +41,25 @@ const FONT = {
 };
 
 /** Action badge colors per DESIGN.md §3.3 */
-const ACTION_META: Record<
-  string,
-  { bg: string; text: string; label: string }
-> = {
-  dm_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
-  button_dm_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
-  reveal_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
-  reply_sent: { bg: COLORS.teal, text: COLORS.white, label: 'Sent' },
-  skipped: { bg: COLORS.ochre, text: COLORS.ink, label: 'Skipped' },
-  failed: { bg: COLORS.pink, text: COLORS.white, label: 'Failed' },
-  pending: { bg: COLORS.surfaceCard, text: COLORS.muted, label: 'Pending' },
-};
+function actionMeta(t: ThemeColors): Record<string, { bg: string; text: string; label: string }> {
+  return {
+    dm_sent: { bg: ACCENTS.teal, text: t.onPrimary, label: 'Sent' },
+    button_dm_sent: { bg: ACCENTS.teal, text: t.onPrimary, label: 'Sent' },
+    reveal_sent: { bg: ACCENTS.teal, text: t.onPrimary, label: 'Sent' },
+    reply_sent: { bg: ACCENTS.teal, text: t.onPrimary, label: 'Sent' },
+    skipped: { bg: ACCENTS.ochre, text: t.ink, label: 'Skipped' },
+    failed: { bg: ACCENTS.pink, text: t.onPrimary, label: 'Failed' },
+    pending: { bg: t.surfaceCard, text: t.muted, label: 'Pending' },
+  };
+}
 
-const STATUS_META: Record<string, { bg: string; text: string }> = {
-  active: { bg: COLORS.mint, text: COLORS.ink },
-  paused: { bg: COLORS.ochre, text: COLORS.ink },
-  error: { bg: COLORS.pink, text: COLORS.white },
-};
+function statusMeta(t: ThemeColors): Record<string, { bg: string; text: string }> {
+  return {
+    active: { bg: ACCENTS.mint, text: t.ink },
+    paused: { bg: ACCENTS.ochre, text: t.ink },
+    error: { bg: ACCENTS.pink, text: t.onPrimary },
+  };
+}
 
 function formatRelativeTime(iso: string): string {
   const date = new Date(iso);
@@ -112,7 +106,9 @@ function targetLabel(automation: Automation): string {
   }
 }
 
-function StatCell({ value, label }: { value: string; label: string }) {
+type AutomationStyles = ReturnType<typeof buildStyles>;
+
+function StatCell({ value, label, styles }: { value: string; label: string; styles: AutomationStyles }) {
   return (
     <View style={styles.statCell}>
       <Text style={styles.statValue}>{value}</Text>
@@ -121,8 +117,9 @@ function StatCell({ value, label }: { value: string; label: string }) {
   );
 }
 
-function LogRow({ log }: { log: AutomationLog }) {
-  const meta = ACTION_META[log.action] ?? ACTION_META.pending;
+function LogRow({ log, styles }: { log: AutomationLog; styles: AutomationStyles }) {
+  const t = useThemeColors();
+  const meta = actionMeta(t)[log.action] ?? actionMeta(t).pending;
 
   return (
     <View style={styles.logRow}>
@@ -157,6 +154,8 @@ export default function AutomationDetail() {
   const { automationId, created } = useLocalSearchParams<{ automationId: string; created?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useThemeColors();
+  const styles = useMemo(() => buildStyles(t), [t]);
   const { automations, toggleStatus, deleteAutomation } = useAutomations();
   const { logs, loading, error, refresh } = useAutomationLogs(automationId ?? '');
   const { stats: apiStats, loading: statsLoading } = useAutomationStats(automationId ?? '');
@@ -199,8 +198,8 @@ export default function AutomationDetail() {
   }, [automation, deleteAutomation]);
 
   const renderItem = useCallback(
-    ({ item }: { item: AutomationLog }) => <LogRow log={item} />,
-    [],
+    ({ item }: { item: AutomationLog }) => <LogRow log={item} styles={styles} />,
+    [styles],
   );
 
   const keyExtractor = useCallback(
@@ -208,9 +207,9 @@ export default function AutomationDetail() {
     [],
   );
 
-  const statusMeta = automation
-    ? (STATUS_META[automation.status] ?? { bg: COLORS.surfaceCard, text: COLORS.muted })
-    : { bg: COLORS.surfaceCard, text: COLORS.muted };
+  const statusMetaValue = automation
+    ? (statusMeta(t)[automation.status] ?? { bg: t.surfaceCard, text: t.muted })
+    : { bg: t.surfaceCard, text: t.muted };
 
   const isPaused = automation?.status === 'paused';
 
@@ -253,13 +252,13 @@ export default function AutomationDetail() {
           accessibilityLabel="Back"
           style={styles.backBtn}
         >
-          <Ionicons name="chevron-back" size={24} color={COLORS.ink} />
+          <Ionicons name="chevron-back" size={24} color={t.ink} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {automation.name}
         </Text>
-        <View style={[styles.statusBadge, { backgroundColor: statusMeta.bg }]}>
-          <Text style={[styles.statusBadgeText, { color: statusMeta.text }]}>
+        <View style={[styles.statusBadge, { backgroundColor: statusMetaValue.bg }]}>
+          <Text style={[styles.statusBadgeText, { color: statusMetaValue.text }]}>
             {automation.status}
           </Text>
         </View>
@@ -270,14 +269,17 @@ export default function AutomationDetail() {
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.sent ?? stats.sent)}
           label="Sent"
+          styles={styles}
         />
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.skipped ?? stats.skipped)}
           label="Skipped"
+          styles={styles}
         />
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.failed ?? stats.failed)}
           label="Failed"
+          styles={styles}
         />
       </View>
 
@@ -447,10 +449,11 @@ export default function AutomationDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(t: ThemeColors) {
+  return StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
   },
   centerState: {
     flex: 1,
@@ -458,21 +461,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     padding: 16,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
   },
   stateMuted: {
     textAlign: 'center',
     fontFamily: FONT.regular,
     fontSize: 15,
     lineHeight: 21,
-    color: COLORS.muted,
+    color: t.muted,
   },
   stateError: {
     textAlign: 'center',
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.error,
+    color: ACCENTS.error,
   },
 
   /* Header */
@@ -482,9 +485,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 8,
     paddingBottom: 12,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.hairline,
+    borderBottomColor: t.hairline,
   },
   backBtn: {
     width: 40,
@@ -497,7 +500,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 18,
     lineHeight: 25,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   statusBadge: {
@@ -521,9 +524,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.hairline,
+    borderBottomColor: t.hairline,
   },
   statCell: {
     alignItems: 'center',
@@ -533,14 +536,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 16,
     lineHeight: 22,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   statLabel: {
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
 
@@ -560,31 +563,31 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   noticeLive: {
-    backgroundColor: COLORS.mintTint,
-    borderColor: COLORS.mint,
+    backgroundColor: ACCENTS.mintTint,
+    borderColor: ACCENTS.mint,
   },
   noticePaused: {
-    backgroundColor: COLORS.ochreTint,
-    borderColor: COLORS.ochre,
+    backgroundColor: ACCENTS.ochreTint,
+    borderColor: ACCENTS.ochre,
   },
   noticeTitle: {
     fontFamily: FONT.semibold,
     fontSize: 16,
     lineHeight: 22,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   noticeBody: {
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.ink,
+    color: t.ink,
   },
   configCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.canvas,
+    borderColor: t.hairline,
+    backgroundColor: t.canvas,
     padding: 14,
     gap: 8,
   },
@@ -592,7 +595,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 16,
     lineHeight: 22,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   configRow: {
@@ -604,14 +607,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.muted,
+    color: t.muted,
   },
   configValue: {
     maxWidth: '60%',
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.ink,
+    color: t.ink,
   },
   capitalize: {
     textTransform: 'capitalize',
@@ -624,7 +627,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
   activityTitle: {
@@ -632,7 +635,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 16,
     lineHeight: 22,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
 
@@ -641,7 +644,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.hairline,
+    borderBottomColor: t.hairline,
   },
   logBody: {
     gap: 4,
@@ -657,21 +660,21 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semibold,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.ink,
+    color: t.ink,
     includeFontPadding: false,
   },
   logTime: {
     fontFamily: FONT.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: COLORS.mutedSoft,
+    color: t.mutedSoft,
     includeFontPadding: false,
   },
   logComment: {
     fontFamily: FONT.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.muted,
+    color: t.muted,
   },
   logBadgeRow: {
     marginTop: 2,
@@ -681,14 +684,14 @@ const styles = StyleSheet.create({
   },
   keywordChip: {
     borderRadius: 999,
-    backgroundColor: COLORS.surfaceCard,
+    backgroundColor: t.surfaceCard,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
   keywordChipText: {
     fontFamily: FONT.regular,
     fontSize: 13,
-    color: COLORS.muted,
+    color: t.muted,
     includeFontPadding: false,
   },
   actionBadge: {
@@ -714,11 +717,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 12,
-    backgroundColor: COLORS.canvas,
+    backgroundColor: t.canvas,
     borderTopWidth: 1,
-    borderTopColor: COLORS.hairline,
+    borderTopColor: t.hairline,
   },
   actionCell: {
     flex: 1,
   },
-});
+  });
+}

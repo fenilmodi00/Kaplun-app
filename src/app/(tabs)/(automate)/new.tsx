@@ -40,6 +40,7 @@ import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
+import { useThemeColors } from '@/lib/theme';
 import { fetchMedia, type InstagramMediaResponse } from '@/lib/instagram';
 import {
   validateAutomationDraft,
@@ -212,6 +213,7 @@ function MediaCarousel({
   selectedIds: string[];
   onToggle: (id: string) => void;
 }) {
+  const t = useThemeColors();
   return (
     <ScrollView
       horizontal
@@ -254,7 +256,7 @@ function MediaCarousel({
               <View className="absolute inset-0 items-center justify-center bg-brand-lavender/40">
                 <Pop>
                   <View className="h-7 w-7 items-center justify-center rounded-pill bg-brand-lavender shadow-sm">
-                    <Ionicons name="checkmark" size={18} color="#ffffff" />
+                    <Ionicons name="checkmark" size={18} color={t.onPrimary} />
                   </View>
                 </Pop>
               </View>
@@ -272,6 +274,7 @@ export default function NewAutomationScreen() {
   const queryClient = useQueryClient();
   const { createAutomation, creating } = useAutomations();
   const { connect: connectInstagram } = useAutomationGate();
+  const t = useThemeColors();
 
   // ── Form state ───────────────────────────────────────────────────────────
   const [name, setName] = useState('');
@@ -675,7 +678,7 @@ export default function NewAutomationScreen() {
           className="w-10 h-10 items-center justify-center"
           hitSlop={8}
         >
-          <Ionicons name="chevron-back" size={24} color="#0a0a0a" />
+          <Ionicons name="chevron-back" size={24} color={t.ink} />
         </PressableScale>
         <Text className="font-semibold text-ink" style={{ fontSize: 17, lineHeight: 22, letterSpacing: -0.2 }}>
           New Automation
@@ -757,7 +760,7 @@ export default function NewAutomationScreen() {
                   style={{ width: 132, minHeight: 72 }}
                   className={cn(
                     'rounded-xl border-2 px-4 py-3 justify-center',
-                    selectedTemplateSlug === null ? 'border-brand-lavender bg-brand-lavender' : 'border-hairline bg-white'
+                    selectedTemplateSlug === null ? 'border-brand-lavender bg-brand-lavender' : 'border-hairline bg-surface-card'
                   )}
                 >
                   <Text
@@ -777,7 +780,7 @@ export default function NewAutomationScreen() {
                       style={{ width: 132, minHeight: 72 }}
                       className={cn(
                         'rounded-xl border-2 px-4 py-3 justify-center',
-                        active ? `${palette.border} ${palette.bg}` : 'border-hairline bg-white'
+                        active ? `${palette.border} ${palette.bg}` : 'border-hairline bg-surface-card'
                       )}
                     >
                       <Text
@@ -839,7 +842,7 @@ export default function NewAutomationScreen() {
                     variant="outline"
                     size="md"
                     className={cn(
-                      'gap-3 bg-white border-2',
+                      'gap-3 bg-surface-card border-2',
                       targetType === opt.value ? 'border-brand-lavender bg-brand-lavender/15' : 'border-hairline'
                     )}
                   >
@@ -891,7 +894,7 @@ export default function NewAutomationScreen() {
                 value={dmTriggerEnabled}
                 onValueChange={setDmTriggerEnabled}
                 accessibilityLabel="Enable DM trigger"
-                className={cn('bg-white border-2', dmTriggerEnabled ? 'border-brand-lavender' : 'border-hairline')}
+                className={cn('bg-surface-card border-2', dmTriggerEnabled ? 'border-brand-lavender' : 'border-hairline')}
               />
             </View>
         </Reveal>
@@ -917,7 +920,7 @@ export default function NewAutomationScreen() {
                   variant="outline"
                   size="md"
                   className={cn(
-                    'gap-3 bg-white border-2',
+                    'gap-3 bg-surface-card border-2',
                     !matchAnyWord ? 'border-brand-lavender bg-brand-lavender/15' : 'border-hairline'
                   )}
                 >
@@ -970,7 +973,7 @@ export default function NewAutomationScreen() {
                   variant="outline"
                   size="md"
                   className={cn(
-                    'gap-3 bg-white border-2',
+                    'gap-3 bg-surface-card border-2',
                     matchAnyWord ? 'border-brand-lavender bg-brand-lavender/15' : 'border-hairline'
                   )}
                 >
@@ -1013,7 +1016,7 @@ export default function NewAutomationScreen() {
               <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 They will get
               </Text>
-              <Card variant="outline" size="md" className="gap-2.5 bg-white border-2 border-hairline">
+              <Card variant="outline" size="md" className="gap-2.5 bg-surface-card border-2 border-hairline">
                 <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
                   an opening DM
                 </Text>
@@ -1065,7 +1068,7 @@ export default function NewAutomationScreen() {
                 value={requireFollow}
                 onValueChange={setRequireFollow}
                 accessibilityLabel="Enable follow gate"
-                className={cn('bg-white border-2', requireFollow ? 'border-brand-lavender' : 'border-hairline')}
+                className={cn('bg-surface-card border-2', requireFollow ? 'border-brand-lavender' : 'border-hairline')}
               >
                 <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
                   Message shown to non-followers (we&apos;ll replace {'{username}'} with their name)
@@ -1100,7 +1103,7 @@ export default function NewAutomationScreen() {
                   <Text className="font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                     And then, they will get
                   </Text>
-                  <Card variant="outline" size="md" className="gap-2.5 bg-white border-2 border-hairline">
+                  <Card variant="outline" size="md" className="gap-2.5 bg-surface-card border-2 border-hairline">
                     <Text className="font-medium text-ink" style={{ fontSize: 15, lineHeight: 21 }}>
                       a DM with a link
                     </Text>
@@ -1136,7 +1139,7 @@ export default function NewAutomationScreen() {
                 value={publicReplyEnabled}
                 onValueChange={setPublicReplyEnabled}
                 accessibilityLabel="Enable public reply"
-                className={cn('bg-white border-2', publicReplyEnabled ? 'border-brand-lavender' : 'border-hairline')}
+                className={cn('bg-surface-card border-2', publicReplyEnabled ? 'border-brand-lavender' : 'border-hairline')}
               >
                 <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
                   We&apos;ll replace {'{username}'} with the commenter&apos;s name
@@ -1183,7 +1186,7 @@ export default function NewAutomationScreen() {
                 value={followUpEnabled}
                 onValueChange={setFollowUpEnabled}
                 accessibilityLabel="Enable follow-up message"
-                className={cn('bg-white border-2', followUpEnabled ? 'border-brand-lavender' : 'border-hairline')}
+                className={cn('bg-surface-card border-2', followUpEnabled ? 'border-brand-lavender' : 'border-hairline')}
               >
                 <Text className="text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
                   We&apos;ll replace {'{username}'} with the commenter&apos;s name
