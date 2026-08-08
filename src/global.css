@@ -25,6 +25,9 @@
     --color-surface-soft: #faf5e8;
     --color-surface-card: #f5f0e0;
     --color-surface-strong: #ebe6d6;
+    --color-surface-input: #fffaf0;
+    --color-surface-overlay: #fffaf0;
+    --color-hairline-strong: #d8d4cc;
     --color-surface-dark: #035d44;
     --color-surface-dark-elevated: #1a2a2a;
     --color-on-primary: #ffffff;
@@ -143,19 +146,47 @@
   }
 }
 
-/* ── Dark AMOLED spike verdict ──
-   Mechanism: media query (A) — chosen tentatively.
-   Automated verification (tsc --noEmit): PASS.
-   Manual QA: BLOCKED on both platforms.
-     Android: adb not found, ANDROID_HOME not set.
-     iOS: xcrun not found, Windows cannot build iOS locally.
-   Probe code kept in place for Task 2; remove once on-device verification completes.
-   ── */
-/* SPIKE PROBE — remove after Task 1 */
+/* ── Dark AMOLED overrides — mechanism: media query (Task 1 verdict) ── */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-canvas: #000000;
+    --color-canvas-alt: #0a0a0a;
+    --color-primary: #f5f5f5;
+    --color-primary-active: #d4d4d4;
+    --color-primary-disabled: #2a2a2a;
+    --color-button-secondary: #121212;
+    --color-button-secondary-hover: #1a1a1a;
     --color-ink: #f5f5f5;
+    --color-body-strong: #e5e5e5;
+    --color-body: #b8b8b8;
+    --color-muted: #8a8a8a;
+    --color-muted-soft: #666666;
+    --color-hairline: #2a2a2a;
+    --color-hairline-strong: #3d3d3d;
+    --color-border-subtle: rgba(255, 255, 255, 0.08);
+    --color-border-strong: rgba(255, 255, 255, 0.16);
+    --color-surface-soft: #0a0a0a;
     --color-surface-card: #121212;
+    --color-surface-strong: #222222;
+    --color-surface-input: #101010;
+    --color-surface-overlay: #181818;
+    --color-on-primary: #050505;
+    --color-on-dark: #f5f5f5;
+
+    /* Brand accents — brightened for dark. DEFINED BUT UNUSED by default */
+    --color-brand-pink: #ff5c96;
+    --color-brand-teal: #77d6c5;
+    --color-brand-lavender: #c7b7ff;
+    --color-brand-peach: #ffc09d;
+    --color-brand-ochre: #f2c65b;
+    --color-brand-mint: #9de0cb;
+    --color-brand-coral: #ff826f;
+
+    /* badge/band tints intentionally not overridden — unused in-app; if adopted later, light pastels need dark variants */
+
+    /* Semantic */
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-error: #fb7185;
   }
 }
