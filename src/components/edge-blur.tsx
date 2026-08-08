@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle, type View as RNView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useThemeColors } from '@/lib/theme';
 
 export interface EdgeBlurProps {
   position: 'top' | 'bottom';
@@ -14,10 +15,6 @@ export interface EdgeBlurProps {
   style?: ViewStyle;
 }
 
-const CANVAS_SCRIM_START = 'rgba(255,250,240,0)';
-const CANVAS_SCRIM_MID = 'rgba(255,250,240,0.45)';
-const CANVAS_SCRIM_END = 'rgba(255,250,240,0.92)';
-
 /**
  * Edge fade (formerly a real blur). Renders a plain canvas gradient scrim —
  * no MaskedView, no BlurView — so it can mount/unmount freely during
@@ -29,12 +26,13 @@ export function EdgeBlur({
   intensity = 32,
   style,
 }: EdgeBlurProps) {
+  const t = useThemeColors();
   const isTop = position === 'top';
   const isHeavy = intensity >= 80;
 
   const scrimColors = isHeavy
-    ? ([CANVAS_SCRIM_START, CANVAS_SCRIM_MID, CANVAS_SCRIM_END] as const)
-    : ([CANVAS_SCRIM_START, CANVAS_SCRIM_END] as const);
+    ? ([t.scrimStart, t.scrimMid, t.scrimEnd] as const)
+    : ([t.scrimStart, t.scrimEnd] as const);
   const scrimLocations = isHeavy ? ([0, 0.6, 1] as const) : undefined;
 
   return (

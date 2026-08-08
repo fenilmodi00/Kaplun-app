@@ -2,6 +2,7 @@ import { View, Pressable } from '@/tw';
 import { SymbolIcon } from '@/components/symbol-icon';
 import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
+import { useThemeColors } from '@/lib/theme';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { LiquidGlassView } from '@sbaiahmed1/react-native-blur';
 import { useEffect, useRef } from 'react';
@@ -39,6 +40,7 @@ function TabButton({
   minimize: ReturnType<typeof useSharedValue<number>>;
   onPress: () => void;
 }) {
+  const t = useThemeColors();
   const animatedStyle = useAnimatedStyle(() => {
     if (isFocused) {
       return { width: 48, opacity: 1 };
@@ -63,7 +65,7 @@ function TabButton({
           name={TAB_NAMES[tab.name]}
           active={isFocused}
           size={22}
-          color={isFocused ? '#0a0a0a' : '#9a9a9a'}
+          color={isFocused ? t.ink : t.mutedSoft}
         />
       </Pressable>
     </Animated.View>
@@ -71,6 +73,7 @@ function TabButton({
 }
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
+  const t = useThemeColors();
   const minimize = useSharedValue(0);
   const accumulator = useRef(0);
 
@@ -137,9 +140,9 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
       >
         <LiquidGlassView
           glassType="regular"
-          glassTintColor="#fffaf0"
+          glassTintColor={t.glassTint}
           glassOpacity={0.55}
-          reducedTransparencyFallbackColor="#fffaf0"
+          reducedTransparencyFallbackColor={t.glassTint}
           style={{ borderRadius: 9999 }}
         >
           <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
