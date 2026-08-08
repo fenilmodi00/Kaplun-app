@@ -4,7 +4,7 @@ import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
 import { useThemeColors } from '@/lib/theme';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { LiquidGlassView } from '@sbaiahmed1/react-native-blur';
+import { GlassSurface } from '@/components/ui/glass-surface';
 import { useEffect, useRef } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from '@/lib/reanimated-platform';
 import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
@@ -138,13 +138,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
           boxShadow: '0 6px 20px rgba(10,10,10,0.08)',
         }}
       >
-        <LiquidGlassView
-          glassType="regular"
-          glassTintColor={t.glassTint}
-          glassOpacity={0.55}
-          reducedTransparencyFallbackColor={t.glassTint}
-          style={{ borderRadius: 9999 }}
-        >
+        <GlassSurface borderRadius={9999}>
           <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
             {TABS.map((tab, index) => {
               const isFocused = state.index === index;
@@ -169,7 +163,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
               );
             })}
           </View>
-        </LiquidGlassView>
+        </GlassSurface>
       </View>
     </View>
   );
