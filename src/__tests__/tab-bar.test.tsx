@@ -20,8 +20,9 @@ jest.mock('@/components/symbol-icon', () => ({
 }));
 
 import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react-native';
+import { render, fireEvent, screen, act } from '@testing-library/react-native';
 import { TabBar } from '@/components/clay/TabBar';
+import { reportTabBarScroll, subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 
 const TABS = [
@@ -138,5 +139,44 @@ describe('TabBar', () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
     expect(screen.getAllByRole('tab')).toHaveLength(5);
+  });
+
+  it('minimize smoke: active tab still renders after scroll', async () => {
+    const props = createMockProps();
+    await render(<TabBar {...props} />);
+
+    act(() => {
+      reportTabBarScroll(-20);
+    });
+
+    expect(screen.getByLabelText('Home')).toBeTruthy();
+  });
+});
+
+describe('tab-bar-scroll', () => {
+  const unsubs: Array<() => void> = [];
+
+  afterEach(() => {
+    unsubs.forEach((u) => {
+      u();
+    });
+    unsubs.length = 0;
+  });
+
+  it('delivers dy to subscriber', () => {
+    const fn = jest.fn();
+    unsubs.push(subscribeTabBarScroll(fn));
+    reportTabBarScroll(12);
+    expect(fn).toHaveBeenCalledWith(12);
+  });
+
+  it('unsubscribe stops delivery', () => {
+    const fn = jest.fn();
+    const unsub = subscribeTabBarScroll(fn);
+    reportTabBarScroll(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+    unsub();
+    reportTabBarScroll(2);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

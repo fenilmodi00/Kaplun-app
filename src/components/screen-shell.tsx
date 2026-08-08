@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
+import { useRef } from 'react';
+import type { NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView } from '@/tw';
+import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
 
 /**
  * Scroll-content bottom padding — ensures the last item clears the tab bar.
@@ -57,6 +60,7 @@ export function ScreenShell({
   testID,
 }: ScreenShellProps): React.ReactElement {
   const padding = useScreenContentPadding();
+  const lastY = useRef(0);
 
   return (
     <ScrollView
@@ -68,6 +72,13 @@ export function ScreenShell({
         contentContainerStyle,
       ]}
       testID={testID}
+      scrollEventThrottle={16}
+      onScroll={(e: { nativeEvent: NativeScrollEvent }) => {
+        const y = e.nativeEvent.contentOffset.y;
+        const dy = y - lastY.current;
+        lastY.current = y;
+        reportTabBarScroll(dy);
+      }}
     >
       {children}
     </ScrollView>

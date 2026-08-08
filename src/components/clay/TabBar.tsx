@@ -3,6 +3,12 @@ import { SymbolIcon } from '@/components/symbol-icon';
 import { hapticSelection } from '@/lib/haptics';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { LiquidGlassView } from '@sbaiahmed1/react-native-blur';
+import { useEffect, useRef } from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from '@/lib/reanimated-platform';
+import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
+
+// ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
+// so minimize is a static no-op. This is accepted — the animation only runs on native.
 
 const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights' | 'profile'> = {
   '(home)': 'home',
@@ -20,7 +26,70 @@ const TABS = [
   { name: '(profile)', label: 'Profile' },
 ];
 
+function TabButton({
+  isFocused,
+  tab,
+  minimize,
+  onPress,
+}: {
+  isFocused: boolean;
+  tab: typeof TABS[number];
+  minimize: ReturnType<typeof useSharedValue<number>>;
+  onPress: () => void;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
+    if (isFocused) {
+      return { width: 48, opacity: 1 };
+    }
+    return {
+      width: 48 * (1 - minimize.value),
+      opacity: 1 - minimize.value,
+    };
+  });
+
+  return (
+    <Animated.View style={[{ overflow: 'hidden' }, animatedStyle]}>
+      <Pressable
+        className="items-center justify-center"
+        style={{ width: 48, minHeight: 44 }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isFocused }}
+        accessibilityLabel={tab.label}
+        onPress={onPress}
+      >
+        <SymbolIcon
+          name={TAB_NAMES[tab.name]}
+          active={isFocused}
+          size={22}
+          color={isFocused ? '#0a0a0a' : '#9a9a9a'}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
+  const minimize = useSharedValue(0);
+  const accumulator = useRef(0);
+
+  useEffect(() => {
+    const unsub = subscribeTabBarScroll((dy) => {
+      accumulator.current += dy;
+      if (accumulator.current > 8) {
+        minimize.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+        accumulator.current = 0;
+      } else if (accumulator.current < -8) {
+        minimize.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
+        accumulator.current = 0;
+      }
+    });
+    return unsub;
+  }, [minimize]);
+
+  useEffect(() => {
+    minimize.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
+  }, [state.index, minimize]);
+
   // Focused flows nested inside a tab (the automation builder) render
   // full-screen with their own pinned CTA — the floating pill would sit on
   // top of it and swallow the taps, so the bar stays hidden there.
@@ -64,13 +133,11 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
             {TABS.map((tab, index) => {
               const isFocused = state.index === index;
               return (
-                <Pressable
+                <TabButton
                   key={tab.name}
-                  className="items-center justify-center"
-                  style={{ width: 48, minHeight: 44 }}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: isFocused }}
-                  accessibilityLabel={tab.label}
+                  isFocused={isFocused}
+                  tab={tab}
+                  minimize={minimize}
                   onPress={() => {
                     hapticSelection();
                     const event = navigation.emit({
@@ -82,14 +149,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
                       navigation.navigate(tab.name);
                     }
                   }}
-                >
-                  <SymbolIcon
-                    name={TAB_NAMES[tab.name]}
-                    active={isFocused}
-                    size={22}
-                    color={isFocused ? '#0a0a0a' : '#9a9a9a'}
-                  />
-                </Pressable>
+                />
               );
             })}
           </View>

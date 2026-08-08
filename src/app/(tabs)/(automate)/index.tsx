@@ -8,8 +8,8 @@
  * suffered from a `useCssElement` layout bug (ballooned cards, floating text).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { FlatList } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { FlatList, type NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { AnimatedView } from '@/tw/animated';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
+import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
 import type { Automation } from '@/lib/automations';
 
 function getTargetSummary(automation: Automation): string {
@@ -237,6 +238,14 @@ export default function AutomateScreen() {
   const insets = useSafeAreaInsets();
   const { connected, loading: gateLoading, connect } = useAutomationGate();
   const [isConnecting, setIsConnecting] = useState(false);
+  const lastY = useRef(0);
+
+  const handleScroll = useCallback((e: { nativeEvent: NativeScrollEvent }) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const dy = y - lastY.current;
+    lastY.current = y;
+    reportTabBarScroll(dy);
+  }, []);
 
   const {
     automations,
@@ -300,7 +309,7 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={scrollContentStyle}>
+        <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
           <View className="gap-2.5 py-2">
             <SkeletonRow />
@@ -317,7 +326,7 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={scrollContentStyle}>
+        <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <ConnectionGate onConnect={handleConnect} isConnecting={isConnecting} />
         </ScrollView>
       </View>
@@ -329,7 +338,7 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={scrollContentStyle}>
+        <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
           <View className="gap-2.5 py-2">
             <SkeletonRow />
@@ -345,7 +354,7 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={scrollContentCenterStyle}>
+        <ScrollView contentContainerStyle={scrollContentCenterStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
           <ErrorState error={automationsError} onRetry={refresh} />
         </ScrollView>
@@ -357,7 +366,7 @@ export default function AutomateScreen() {
     return (
       <View className="flex-1 bg-canvas">
         <Header onAdd={handleAdd} />
-        <ScrollView contentContainerStyle={scrollContentCenterStyle}>
+        <ScrollView contentContainerStyle={scrollContentCenterStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
           <EmptyState />
         </ScrollView>
@@ -380,6 +389,8 @@ export default function AutomateScreen() {
         }
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: listBottomPadding, gap: 12 }}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       />
     </View>
   );
