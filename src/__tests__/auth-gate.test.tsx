@@ -16,7 +16,29 @@ jest.mock('expo-navigation-bar', () => ({
 }));
 
 jest.mock('@/lib/theme', () => ({
-  useThemeColors: () => ({ canvas: '#fffaf0' }),
+  useThemeColors: () => ({
+    canvas: '#fffaf0',
+    ink: '#0a0a0a',
+    primary: '#0a0a0a',
+    onPrimary: '#ffffff',
+    hairline: '#e5e5e5',
+    muted: '#6a6a6a',
+    mutedSoft: '#9a9a9a',
+    body: '#3a3a3a',
+    bodyStrong: '#1a1a1a',
+    surfaceSoft: '#faf5e8',
+    surfaceCard: '#f5f0e0',
+    surfaceStrong: '#ebe6d6',
+    primaryActive: '#1f1f1f',
+    buttonSecondary: '#f3f2ed',
+    borderSubtle: 'rgba(209, 205, 199, 0.45)',
+    error: '#ef4444',
+    brandTeal: '#1a3a3a',
+    scrimStart: 'rgba(255,250,240,0)',
+    scrimMid: 'rgba(255,250,240,0.45)',
+    scrimEnd: 'rgba(255,250,240,0.92)',
+    glassTint: '#fffaf0',
+  }),
 }));
 
 const mockUseSession = jest.fn();
