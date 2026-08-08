@@ -8,10 +8,15 @@ jest.mock('expo-system-ui', () => ({
   setBackgroundColorAsync: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('expo-navigation-bar', () => ({
+  NavigationBar: () => null,
   setBackgroundColorAsync: jest.fn().mockResolvedValue(undefined),
   setButtonStyleAsync: jest.fn().mockResolvedValue(undefined),
   setBorderColorAsync: jest.fn().mockResolvedValue(undefined),
   setStyle: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('@/lib/theme', () => ({
+  useThemeColors: () => ({ canvas: '#fffaf0' }),
 }));
 
 const mockUseSession = jest.fn();

@@ -1,35 +1,25 @@
 import '@/global.css';
 import '@/lib/polyfills';
 import { useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { NavigationBar } from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
-import * as NavigationBar from 'expo-navigation-bar';
 import { useClayFonts } from '@/lib/fonts';
+import { useThemeColors } from '@/lib/theme';
 import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 import { SessionProvider, useSession } from '@/lib/session-context';
 
-/** Clay canvas — matches auth screen & Android nav bar */
-const CANVAS = '#fffaf0';
-
-async function applyClaySystemChrome() {
+async function applySystemChrome(canvas: string) {
   try {
-    await SystemUI.setBackgroundColorAsync(CANVAS);
+    await SystemUI.setBackgroundColorAsync(canvas);
   } catch {
     // ignore — unsupported on some hosts
-  }
-
-  if (Platform.OS === 'android') {
-    try {
-      await NavigationBar.setStyle('dark');
-    } catch {
-      // Expo Go / older devices may not support every API
-    }
   }
 }
 
@@ -37,10 +27,11 @@ function RootNavigator() {
   const [fontsLoaded, fontsError] = useClayFonts();
   const { session, isLoading } = useSession();
   const { setStatus } = useBridge();
+  const theme = useThemeColors();
 
   useEffect(() => {
-    applyClaySystemChrome();
-  }, []);
+    applySystemChrome(theme.canvas);
+  }, [theme.canvas]);
 
   useEffect(() => {
     setStatus(isLoading ? 'bridging' : 'ready');
@@ -48,15 +39,15 @@ function RootNavigator() {
 
   if ((!fontsLoaded && !fontsError) || isLoading) {
     return (
-      <View style={styles.center}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.canvas, gap: 16, padding: 24 }}>
         <ClaySpinner size={40} label="Loading..." />
       </View>
     );
   }
 
   return (
-    <View style={styles.shell}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: CANVAS } }}>
+    <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.canvas } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>
@@ -69,10 +60,12 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  const theme = useThemeColors();
   return (
     <SafeAreaProvider>
-      <View style={styles.root}>
-        <StatusBar style="dark" />
+      <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+        <StatusBar style="auto" />
+        <NavigationBar style="auto" />
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <SessionProvider>
             <BridgeProvider>
@@ -84,22 +77,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: CANVAS,
-  },
-  shell: {
-    flex: 1,
-    backgroundColor: CANVAS,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: CANVAS,
-    gap: 16,
-    padding: 24,
-  },
-});
