@@ -10,35 +10,9 @@ import Animated from 'react-native-reanimated';
 import { CLAY_FONTS } from '@/lib/fonts';
 import { usePressAnimation } from '@/hooks/useClayAnimations';
 import { hapticImpactLight } from '@/lib/haptics';
+import { useThemeColors } from '@/lib/theme';
 
 type Variant = 'primary' | 'secondary' | 'on-color' | 'text-link';
-
-/** Clay colors via StyleSheet — avoids NativeWind useCssElement layout bugs on Android. */
-const COLORS = {
-  primary: '#0a0a0a',
-  canvas: '#fffaf0',
-  hairline: '#e5e5e5',
-  ink: '#0a0a0a',
-  onPrimary: '#ffffff',
-} as const;
-
-const VARIANT_BG: Record<Variant, object> = {
-  primary: { backgroundColor: COLORS.primary },
-  secondary: {
-    backgroundColor: COLORS.canvas,
-    borderWidth: 1,
-    borderColor: COLORS.hairline,
-  },
-  'on-color': { backgroundColor: COLORS.onPrimary },
-  'text-link': { backgroundColor: 'transparent' },
-};
-
-const VARIANT_TEXT: Record<Variant, string> = {
-  primary: COLORS.onPrimary,
-  secondary: COLORS.ink,
-  'on-color': COLORS.ink,
-  'text-link': COLORS.ink,
-};
 
 export function ClayAnimatedButton({
   children,
@@ -59,6 +33,24 @@ export function ClayAnimatedButton({
   maxWidth?: number;
   height?: number;
 }) {
+  const t = useThemeColors();
+  const VARIANT_BG: Record<Variant, object> = {
+    primary: { backgroundColor: t.primary },
+    secondary: {
+      backgroundColor: t.canvas,
+      borderWidth: 1,
+      borderColor: t.hairline,
+    },
+    'on-color': { backgroundColor: t.onPrimary },
+    'text-link': { backgroundColor: 'transparent' },
+  };
+  const VARIANT_TEXT: Record<Variant, string> = {
+    primary: t.onPrimary,
+    secondary: t.ink,
+    'on-color': t.ink,
+    'text-link': t.ink,
+  };
+
   const { onPressIn, onPressOut, animatedStyle } = usePressAnimation(0.96);
   const handlePress = useCallback(() => {
     if (!disabled && !loading) {

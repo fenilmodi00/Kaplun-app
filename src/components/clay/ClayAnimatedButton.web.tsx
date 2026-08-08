@@ -1,23 +1,11 @@
 import React, { useCallback } from 'react';
 import { Pressable, ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import { CLAY_FONTS } from '@/lib/fonts';
+import { useThemeColors } from '@/lib/theme';
 
 type Variant = 'primary' | 'secondary' | 'on-color' | 'text-link';
 
 /** Web: same Clay look, no Reanimated (metro stubs Worklets #8285). */
-const VARIANT_BG: Record<Variant, object> = {
-  primary: { backgroundColor: '#0a0a0a' },
-  secondary: { backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#e5e5e5' },
-  'on-color': { backgroundColor: '#ffffff' },
-  'text-link': { backgroundColor: 'transparent' },
-};
-const VARIANT_TEXT: Record<Variant, string> = {
-  primary: '#ffffff',
-  secondary: '#0a0a0a',
-  'on-color': '#0a0a0a',
-  'text-link': '#0a0a0a',
-};
-
 export function ClayAnimatedButton({
   children,
   onPress,
@@ -37,6 +25,20 @@ export function ClayAnimatedButton({
   maxWidth?: number;
   height?: number;
 }) {
+  const t = useThemeColors();
+  const VARIANT_BG: Record<Variant, object> = {
+    primary: { backgroundColor: t.primary },
+    secondary: { backgroundColor: t.canvas, borderWidth: 1, borderColor: t.hairline },
+    'on-color': { backgroundColor: t.onPrimary },
+    'text-link': { backgroundColor: 'transparent' },
+  };
+  const VARIANT_TEXT: Record<Variant, string> = {
+    primary: t.onPrimary,
+    secondary: t.ink,
+    'on-color': t.ink,
+    'text-link': t.ink,
+  };
+
   const handlePress = useCallback(() => {
     if (!disabled && !loading) onPress();
   }, [disabled, loading, onPress]);

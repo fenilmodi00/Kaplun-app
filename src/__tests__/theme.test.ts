@@ -23,7 +23,10 @@ describe('theme palettes', () => {
 
   // Dark-theme regression invariants — catch "forgot the dark value" and palette drift
   it('every dark value differs from its light counterpart', () => {
+    // These keys are intentionally identical in both palettes (semantic / brand constants)
+    const intentionalSame: (keyof typeof lightColors)[] = ['error', 'brandTeal'];
     for (const key of Object.keys(lightColors) as (keyof typeof lightColors)[]) {
+      if (intentionalSame.includes(key)) continue;
       expect(darkColors[key]).not.toBe(lightColors[key]);
     }
   });

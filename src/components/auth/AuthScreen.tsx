@@ -35,6 +35,7 @@ import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { useAuthFlow, AuthMode } from '@/hooks/useAuthFlow';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
 import { CLAY_FONTS } from '@/lib/fonts';
+import { useThemeColors } from '@/lib/theme';
 
 const TOGGLE_WIDTH = 280;
 const PILL_WIDTH = TOGGLE_WIDTH / 2 - 3;
@@ -48,29 +49,9 @@ type AuthScrollApi = {
 };
 const AuthScrollContext = createContext<AuthScrollApi>({ ensureVisible: () => {} });
 
-/**
- * Clay & Kaplun design tokens — StyleSheet only (no NativeWind on this screen per src/components/clay/AGENTS.md).
- * Synchronized with src/global.css and DESIGN.md §2.
- */
-const C = {
-  canvas: '#fffaf0', // --color-canvas
-  primary: '#0a0a0a', // --color-primary / --color-ink
-  primaryActive: '#1f1f1f', // --color-primary-active
-  surfaceCard: '#f5f0e0', // --color-surface-card
-  buttonSecondary: '#f3f2ed', // --color-button-secondary
-  hairline: '#e5e5e5', // --color-hairline
-  borderSubtle: 'rgba(209, 205, 199, 0.45)', // --color-border-subtle
-  ink: '#0a0a0a', // --color-ink
-  muted: '#6a6a6a', // --color-muted
-  mutedSoft: '#9a9a9a', // --color-muted-soft
-  bodyStrong: '#1a1a1a', // --color-body-strong
-  error: '#ef4444', // --color-error
-  brandTeal: '#1a3a3a', // --color-brand-teal
-  onPrimary: '#ffffff', // --color-on-primary
-} as const;
-
 // ─── Capsule Toggle ───
 function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthMode) => void }) {
+  const t = useThemeColors();
   const translateX = useSharedValue(mode === 'login' ? 0 : PILL_WIDTH);
 
   useEffect(() => {
@@ -85,8 +66,8 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
   }));
 
   return (
-    <View style={styles.toggleTrack}>
-      <Animated.View style={[styles.togglePill, pillStyle]} />
+    <View style={[styles.toggleTrack, { backgroundColor: t.surfaceCard }]}>
+      <Animated.View style={[styles.togglePill, pillStyle, { backgroundColor: t.primary }]} />
       {(['login', 'signup'] as AuthMode[]).map((m) => (
         <Pressable
           key={m}
@@ -95,7 +76,7 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
           accessibilityRole="button"
           accessibilityState={{ selected: mode === m }}
         >
-          <Text style={[styles.toggleLabel, mode === m && styles.toggleLabelActive]}>
+          <Text style={[styles.toggleLabel, { color: mode === m ? t.onPrimary : t.bodyStrong }]}>
             {m === 'login' ? 'Log In' : 'Sign Up'}
           </Text>
         </Pressable>
@@ -106,6 +87,7 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
 
 // ─── Email Input ───
 function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
+  const t = useThemeColors();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   const { ensureVisible } = useContext(AuthScrollContext);
@@ -120,8 +102,12 @@ function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: 
       keyboardType="email-address"
       autoComplete="email"
       textContentType="emailAddress"
-      placeholderTextColor={C.mutedSoft}
-      style={[styles.input, focused && styles.inputFocused]}
+      placeholderTextColor={t.mutedSoft}
+      style={[
+        styles.input,
+        { backgroundColor: t.canvas, borderColor: t.hairline, color: t.ink },
+        focused && [styles.inputFocused, { borderColor: t.ink }],
+      ]}
       onFocus={() => {
         setFocused(true);
         ensureVisible(inputRef.current);
@@ -133,6 +119,7 @@ function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: 
 
 // ─── Password Input ───
 function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
+  const t = useThemeColors();
   const [visible, setVisible] = useState(false);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -149,8 +136,13 @@ function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (
         autoCapitalize="none"
         autoComplete="new-password"
         textContentType="newPassword"
-        placeholderTextColor={C.mutedSoft}
-        style={[styles.input, styles.passwordInput, focused && styles.inputFocused]}
+        placeholderTextColor={t.mutedSoft}
+        style={[
+          styles.input,
+          styles.passwordInput,
+          { backgroundColor: t.canvas, borderColor: t.hairline, color: t.ink },
+          focused && [styles.inputFocused, { borderColor: t.ink }],
+        ]}
         onFocus={() => {
           setFocused(true);
           ensureVisible(inputRef.current);
@@ -162,7 +154,7 @@ function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (
         style={styles.eyeButton}
         accessibilityLabel={visible ? 'Hide password' : 'Show password'}
       >
-        <Ionicons name={visible ? 'eye-off' : 'eye'} size={20} color={C.muted} />
+        <Ionicons name={visible ? 'eye-off' : 'eye'} size={20} color={t.muted} />
       </Pressable>
     </View>
   );
@@ -178,6 +170,7 @@ function OTPInput({
   onChange: (c: string) => void;
   disabled: boolean;
 }) {
+  const t = useThemeColors();
   const inputs = useRef<(TextInput | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const { ensureVisible } = useContext(AuthScrollContext);
@@ -206,8 +199,9 @@ function OTPInput({
           key={index}
           style={[
             styles.otpCell,
-            digit ? styles.otpCellFilled : null,
-            focusedIndex === index ? styles.otpCellFocused : null,
+            { borderColor: t.hairline, backgroundColor: t.canvas },
+            digit && { borderColor: t.primary },
+            focusedIndex === index && { borderColor: t.primary, borderWidth: 2 },
           ]}
         >
           <TextInput
@@ -226,7 +220,7 @@ function OTPInput({
             maxLength={1}
             editable={!disabled}
             selectTextOnFocus
-            style={styles.otpInput}
+            style={[styles.otpInput, { color: t.ink }]}
           />
         </View>
       ))}
@@ -248,6 +242,7 @@ function AuthShell({
   compact: boolean;
   safeTop: number;
 }) {
+  const t = useThemeColors();
   const scrollRef = useRef<ScrollView>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -309,7 +304,7 @@ function AuthShell({
   return (
     <AuthScrollContext.Provider value={{ ensureVisible }}>
       <KeyboardAvoidingView
-        style={styles.root}
+        style={[styles.root, { backgroundColor: t.canvas }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? safeTop : 0}
       >
@@ -323,7 +318,7 @@ function AuthShell({
               paddingBottom: bottomPad + keyboardHeight,
               paddingHorizontal: compact ? 20 : 28,
               justifyContent: 'center',
-              backgroundColor: C.canvas,
+              backgroundColor: t.canvas,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -358,6 +353,7 @@ export default function AuthScreen() {
     resendOTP,
   } = useAuthFlow();
 
+  const t = useThemeColors();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [email, setEmail] = useState('');
@@ -458,17 +454,17 @@ export default function AuthScreen() {
         compact={isCompact}
         safeTop={insets.top}
       >
-        <Text style={[styles.title, isCompact && styles.titleCompact]}>Verify your email</Text>
-        <Text style={[styles.subtitle, styles.mb20]}>
+        <Text style={[styles.title, isCompact && styles.titleCompact, { color: t.ink }]}>Verify your email</Text>
+        <Text style={[styles.subtitle, styles.mb20, { color: t.muted }]}>
           Enter the 6-digit code sent to{' '}
-          <Text style={styles.subtitleStrong}>{otpEmail || 'your email'}</Text>
+          <Text style={[styles.subtitleStrong, { color: t.bodyStrong }]}>{otpEmail || 'your email'}</Text>
         </Text>
 
         <Animated.View style={[styles.formWidth, styles.mb20, shakeStyle]}>
           <OTPInput value={otpCode} onChange={setOtpCode} disabled={isLoading} />
         </Animated.View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: t.error }]}>{error}</Text> : null}
 
         <View style={[styles.formWidth, styles.mb20]}>
           <ClayAnimatedButton
@@ -482,12 +478,12 @@ export default function AuthScreen() {
           </ClayAnimatedButton>
         </View>
 
-        <Text style={styles.helper}>Didn't receive the code?</Text>
+        <Text style={[styles.helper, { color: t.muted }]}>Didn't receive the code?</Text>
         {resendTimer > 0 ? (
-          <Text style={[styles.helperMuted, styles.mb16]}>Resend in {resendTimer}s</Text>
+          <Text style={[styles.helperMuted, styles.mb16, { color: t.mutedSoft }]}>Resend in {resendTimer}s</Text>
         ) : (
           <Pressable onPress={handleResend} style={styles.mb16}>
-            <Text style={styles.resend}>Resend code</Text>
+            <Text style={[styles.resend, { color: t.brandTeal }]}>Resend code</Text>
           </Pressable>
         )}
 
@@ -497,7 +493,7 @@ export default function AuthScreen() {
             setMode(mode);
           }}
         >
-          <Text style={styles.helper}>← Change email</Text>
+          <Text style={[styles.helper, { color: t.muted }]}>← Change email</Text>
         </Pressable>
       </AuthShell>
     );
@@ -511,14 +507,14 @@ export default function AuthScreen() {
       compact={isCompact}
       safeTop={insets.top}
     >
-      <Text style={[styles.brand, isCompact && styles.brandCompact]}>Kaplun</Text>
+      <Text style={[styles.brand, isCompact && styles.brandCompact, { color: t.ink }]}>Kaplun</Text>
 
       <View style={styles.subtitleSlot}>
         <Animated.View style={[styles.absoluteCenter, loginFadeStyle]}>
-          <Text style={styles.subtitle}>Welcome back! Sign in to continue.</Text>
+          <Text style={[styles.subtitle, { color: t.muted }]}>Welcome back! Sign in to continue.</Text>
         </Animated.View>
         <Animated.View style={[styles.absoluteCenter, signupFadeStyle]}>
-          <Text style={styles.subtitle}>Create your account to get started.</Text>
+          <Text style={[styles.subtitle, { color: t.muted }]}>Create your account to get started.</Text>
         </Animated.View>
       </View>
 
@@ -541,22 +537,22 @@ export default function AuthScreen() {
           <PasswordInput value={password} onChangeText={setPassword} />
         </Animated.View>
 
-        {error ? <Text style={[styles.error, styles.mt12]}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, styles.mt12, { color: t.error }]}>{error}</Text> : null}
 
         <Pressable
           onPress={handleContinue}
           disabled={!canSubmit}
-          style={[styles.submitButton, !canSubmit && styles.submitDisabled]}
+          style={[styles.submitButton, { backgroundColor: t.primary }, !canSubmit && styles.submitDisabled]}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color={C.onPrimary} />
+            <ActivityIndicator size="small" color={t.onPrimary} />
           ) : (
             <View style={styles.submitLabelSlot}>
               <Animated.View style={[styles.absoluteCenter, loginFadeStyle]}>
-                <Text style={styles.submitLabel}>Continue with Email</Text>
+                <Text style={[styles.submitLabel, { color: t.onPrimary }]}>Continue with Email</Text>
               </Animated.View>
               <Animated.View style={[styles.absoluteCenter, signupFadeStyle]}>
-                <Text style={styles.submitLabel}>Create Account</Text>
+                <Text style={[styles.submitLabel, { color: t.onPrimary }]}>Create Account</Text>
               </Animated.View>
             </View>
           )}
@@ -564,9 +560,9 @@ export default function AuthScreen() {
       </View>
 
       <View style={styles.dividerRow}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or</Text>
-        <View style={styles.dividerLine} />
+        <View style={[styles.dividerLine, { backgroundColor: t.hairline }]} />
+        <Text style={[styles.dividerText, { color: t.mutedSoft }]}>or</Text>
+        <View style={[styles.dividerLine, { backgroundColor: t.hairline }]} />
       </View>
 
       <View style={[styles.formWidth, styles.mb20]}>
@@ -583,10 +579,10 @@ export default function AuthScreen() {
 
       <View style={styles.helperSlot}>
         <Animated.View style={[styles.absoluteCenter, { paddingHorizontal: 24 }, loginFadeStyle]}>
-          <Text style={styles.helperMuted}>We'll send you a verification code to sign in.</Text>
+          <Text style={[styles.helperMuted, { color: t.mutedSoft }]}>We'll send you a verification code to sign in.</Text>
         </Animated.View>
         <Animated.View style={[styles.absoluteCenter, { paddingHorizontal: 24 }, signupFadeStyle]}>
-          <Text style={styles.helperMuted}>
+          <Text style={[styles.helperMuted, { color: t.mutedSoft }]}>
             By signing up, you agree to our Terms and Privacy Policy.
           </Text>
         </Animated.View>
@@ -598,7 +594,6 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.canvas,
   },
   scrollContent: {
     flexGrow: 1,
@@ -634,7 +629,6 @@ const styles = StyleSheet.create({
     fontSize: 36,
     lineHeight: 40,
     letterSpacing: -1,
-    color: C.ink,
     textAlign: 'center',
     marginBottom: 10,
   },
@@ -647,7 +641,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     letterSpacing: -0.3,
-    color: C.ink,
     textAlign: 'center',
     marginBottom: 10,
   },
@@ -659,13 +652,11 @@ const styles = StyleSheet.create({
     fontFamily: CLAY_FONTS.regular,
     fontSize: 16,
     lineHeight: 25,
-    color: C.muted,
     textAlign: 'center',
     paddingHorizontal: 8,
   },
   subtitleStrong: {
     fontFamily: CLAY_FONTS.semibold,
-    color: C.bodyStrong,
   },
   subtitleSlot: {
     height: 52,
@@ -681,7 +672,6 @@ const styles = StyleSheet.create({
   toggleTrack: {
     width: TOGGLE_WIDTH,
     height: 44,
-    backgroundColor: C.surfaceCard,
     borderRadius: 9999,
     flexDirection: 'row',
     alignItems: 'center',
@@ -693,7 +683,6 @@ const styles = StyleSheet.create({
     left: 3,
     width: PILL_WIDTH,
     height: 38,
-    backgroundColor: C.primary,
     borderRadius: 9999,
   },
   toggleTab: {
@@ -707,26 +696,18 @@ const styles = StyleSheet.create({
     fontFamily: CLAY_FONTS.semibold,
     fontSize: 14,
     letterSpacing: -0.14,
-    color: C.bodyStrong,
-  },
-  toggleLabelActive: {
-    color: C.onPrimary,
   },
   input: {
     width: '100%',
     height: INPUT_HEIGHT,
-    backgroundColor: C.canvas,
     borderWidth: 1,
-    borderColor: C.hairline,
     borderRadius: 12,
     borderCurve: 'continuous',
     paddingHorizontal: 16,
     fontFamily: CLAY_FONTS.regular,
     fontSize: 16,
-    color: C.ink,
   },
   inputFocused: {
-    borderColor: C.ink,
     borderWidth: 1.5,
   },
   passwordWrap: {
@@ -752,7 +733,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderCurve: 'continuous',
-    backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -771,7 +751,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: -0.14,
     includeFontPadding: false,
-    color: C.onPrimary,
   },
   dividerRow: {
     width: '100%',
@@ -784,12 +763,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: C.hairline,
   },
   dividerText: {
     fontFamily: CLAY_FONTS.regular,
     fontSize: 13,
-    color: C.mutedSoft,
     marginHorizontal: 16,
   },
   helperSlot: {
@@ -802,27 +779,23 @@ const styles = StyleSheet.create({
     fontFamily: CLAY_FONTS.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: C.muted,
     textAlign: 'center',
   },
   helperMuted: {
     fontFamily: CLAY_FONTS.regular,
     fontSize: 13,
     lineHeight: 18,
-    color: C.mutedSoft,
     textAlign: 'center',
   },
   resend: {
     fontFamily: CLAY_FONTS.semibold,
     fontSize: 13,
-    color: C.brandTeal,
     marginTop: 8,
   },
   error: {
     fontFamily: CLAY_FONTS.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: C.error,
     textAlign: 'center',
   },
   otpRow: {
@@ -835,18 +808,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderCurve: 'continuous',
     borderWidth: 1.5,
-    borderColor: C.hairline,
-    backgroundColor: C.canvas,
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 4,
-  },
-  otpCellFilled: {
-    borderColor: C.primary,
-  },
-  otpCellFocused: {
-    borderColor: C.primary,
-    borderWidth: 2,
   },
   otpInput: {
     width: 44,
@@ -854,6 +818,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 22,
     fontFamily: CLAY_FONTS.semibold,
-    color: C.ink,
   },
 });

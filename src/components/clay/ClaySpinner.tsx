@@ -8,11 +8,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { CLAY_FONTS } from '@/lib/fonts';
-
-const CLAY_COLORS = {
-  primary: '#0a0a0a',
-  muted: '#6a6a6a',
-} as const;
+import { useThemeColors } from '@/lib/theme';
 
 export function ClaySpinner({
   size = 40,
@@ -21,13 +17,15 @@ export function ClaySpinner({
   labelColor = 'muted',
 }: {
   size?: number;
-  color?: keyof typeof CLAY_COLORS;
+  color?: 'primary' | 'muted';
   label?: string;
-  labelColor?: keyof typeof CLAY_COLORS;
+  labelColor?: 'primary' | 'muted';
 }) {
+  const t = useThemeColors();
+  const palette = { primary: t.primary, muted: t.muted } as const;
   const rotation = useSharedValue(0);
-  const resolvedColor = CLAY_COLORS[color];
-  const resolvedLabelColor = CLAY_COLORS[labelColor];
+  const resolvedColor = palette[color];
+  const resolvedLabelColor = palette[labelColor];
 
   useEffect(() => {
     rotation.value = withRepeat(
