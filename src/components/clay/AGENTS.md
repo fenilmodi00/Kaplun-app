@@ -6,7 +6,7 @@
 
 | Component | File | LOC | `@/tw`? | Reanimated? | `.web.tsx`? |
 |-----------|------|-----|---------|-------------|-------------|
-| `TabBar` | `TabBar.tsx` | ~102 | Yes (View, Text, Pressable) | No — uses `SymbolIcon`, `hapticSelection`, `LiquidGlassView` | No |
+| `TabBar` | `TabBar.tsx` | ~162 | Yes (View, Pressable) | Yes — via `@/lib/reanimated-platform` (minimize-on-scroll); also `SymbolIcon`, `hapticSelection`, `LiquidGlassView` | No (web = static no-op via platform fallback) |
 | `ClaySpinner` | `ClaySpinner.tsx` | 78 | No — raw RN | Yes (withRepeat) | Yes (`.web.tsx` → ActivityIndicator) |
 | `ClayFeatureCard` | `ClayFeatureCard.tsx` | 41 | Yes (View, Text) | Yes (useEntranceAnimation) | No |
 | `ClayAvatar` | `ClayAvatar.tsx` | 13 | Yes (`@/tw/image`) | No | No |

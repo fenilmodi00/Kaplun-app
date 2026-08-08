@@ -315,7 +315,7 @@ clayButtonBase      // 'h-11 py-3 rounded-md px-5 flex-row items-center justify-
 
 | Mobile Component | File | Primitives Path | Reanimated? | `.web.tsx`? | Role / Behavior |
 |---|---|---|---|---|---|
-| `TabBar` | `TabBar.tsx` | `@/tw` (View, Pressable) | No | No | icon-only liquid-glass floating tab bar |
+| `TabBar` | `TabBar.tsx` | `@/tw` (View, Pressable) | Yes (via `@/lib/reanimated-platform`) | No | icon-only liquid-glass floating tab bar, minimizes on scroll |
 | `ClayAnimatedButton` | `ClayAnimatedButton.tsx` | Raw RN (`StyleSheet`) | Yes (`usePressAnimation`) | Yes (`.web.tsx`) | 4 variants (`primary`, `secondary`, `on-color`, `text-link`), press scale animation |
 | `ClayAnimatedCard` | `ClayAnimatedCard.tsx` | `@/tw` (View, Pressable) | Yes (entrance + press) | No | Pressable card with entrance fade-in + press scale-down |
 | `ClayFeatureCard` | `ClayFeatureCard.tsx` | `@/tw` (View, Text) | Yes (`useEntranceAnimation`) | No | Saturated single-color card (`pink`, `teal`, `lavender`, `peach`, `ochre`, `cream`) |
