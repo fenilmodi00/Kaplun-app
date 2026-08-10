@@ -1,12 +1,13 @@
 # src/hooks/ — Data Layer
 
-9 hooks: the app's data-fetching layer. All use `@tanstack/react-query` (useQuery/useMutation/useQueries) against `@/lib/repository` for Appwrite CRUD and `@/lib/instagram` for Instagram operations.
+10 hooks: the app's data-fetching layer. All use `@tanstack/react-query` (useQuery/useMutation/useQueries) against `@/lib/repository` for Appwrite CRUD and `@/lib/instagram` for Instagram operations.
 
 ## STRUCTURE
 
 | Hook | File | Backend | React Query | Realtime? | Returns |
 |------|------|---------|-------------|-----------|---------|
-| `useAuthFlow` | `useAuthFlow.ts` | Appwrite | No | No | Auth state machine (signIn/signUp/OTP/Google) |
+| `useAuthFlow` | `useAuthFlow.ts` | Appwrite | No | No | Auth state machine (signIn/signUp/OTP/Google); the ONLY place `account.createSession()` runs |
+| `useAppwriteUser` | `useAppwriteUser.ts` | Appwrite `account` | `useQuery` (`appwrite-user` key; never persisted) | No | `{ data: user }` — the source of `appwriteUserId` consumed by all data hooks |
 | `useDashboard` | `useDashboard.ts` | Appwrite via `@/lib/repository` | `useQuery` | No | `{ data: {creator, threads, deals}, loading, error, refresh }` |
 | `useThreads` | `useThreads.ts` | Appwrite via `@/lib/repository` | `useQuery` | Yes (`deal_threads`) | `{ threads: ThreadWithPreview[], loading, error, refresh }` |
 | `useMessages` | `useMessages.ts` | Appwrite via `@/lib/repository` | `useQuery` + `useMutation` | Yes (`messages` create) | `{ messages, loading, error, sendMessage, markAsRead, refresh }` |

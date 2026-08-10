@@ -29,6 +29,7 @@
 - **`.web.tsx` for Reanimated safety** — `animated.tsx` (native: Reanimated) + `animated.web.tsx` (web: plain View). Metro resolves `.web.tsx` on web platform.
 - **Compound utilities in `cn.ts`** — `clayInput`, `clayCard`, `clayFeatureCardBase`, `clayButtonBase` are pre-built class strings. Use these instead of re-typing.
 - **`@/tw` is the import path** — `@/tw` resolves to `src/tw/index.tsx`. `@/tw/cn`, `@/tw/image`, `@/tw/animated` are explicit subpaths.
+- **Theming is automatic** — `className` components re-theme at runtime via the `VariableContextProvider` in `src/app/_layout.tsx` (fed by `cssVariablesForScheme()` from `@/lib/theme`). Never call `useThemeColors()` in an `@/tw` component; that hook is reserved for raw-RN islands (StyleSheet components, system chrome, gradient scrims).
 
 ## ANTI-PATTERNS
 
@@ -36,3 +37,5 @@
 - **NO `StyleSheet.create()` in screens** — use Tailwind `className` via `@/tw` primitives. `StyleSheet.create()` bypasses the CSS runtime and breaks theming.
 - **NO `expo-image` or RN `Image` direct imports** — use `@/tw/image` for className support.
 - **NO `react-native-reanimated` direct import for `AnimatedView`** — use `@/tw/animated` (platform-specific).
+- **NO `useThemeColors()` in `@/tw` components** — tokens resolve through the CSS runtime; hardcoding or hook-reading colors here double-sources the theme.
+- **Documented raw-RN escape hatches** — `ui/input.tsx`/`ui/textarea.tsx` (Android font metrics), `ClayAnimatedButton`, `ClaySpinner`, `AuthScreen`, `(automate)/[automationId].tsx`, `(profile)/index.tsx`. These use `StyleSheet.create()` + `useThemeColors()`; everything else must stay on `className`.

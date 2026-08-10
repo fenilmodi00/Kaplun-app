@@ -140,7 +140,7 @@ describe('TabBar', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(4);
   });
 
-  it('minimize smoke: active tab still renders after scroll', async () => {
+  it('scale smoke: all tabs still render after scroll down', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
 
@@ -148,7 +148,9 @@ describe('TabBar', () => {
       reportTabBarScroll(20);
     });
 
-    expect(screen.getByLabelText('Home')).toBeTruthy();
+    TABS.forEach((tab) => {
+      expect(screen.getByLabelText(tab.label)).toBeTruthy();
+    });
   });
 });
 

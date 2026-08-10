@@ -162,6 +162,7 @@ jest.mock('@sbaiahmed1/react-native-blur', () => {
   const { View } = require('react-native');
   return {
     LiquidGlassView: (props: any) => React.createElement(View, props, props.children),
+    BlurView: (props: any) => React.createElement(View, props, props.children),
   };
 });
 

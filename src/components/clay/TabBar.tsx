@@ -2,7 +2,7 @@ import { View, Pressable } from '@/tw';
 import { SymbolIcon } from '@/components/symbol-icon';
 import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
-import { useThemeColors } from '@/lib/theme';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { useEffect, useRef } from 'react';
@@ -10,10 +10,10 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from '
 import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 
 // ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
-// so minimize is a static no-op. This is accepted — the animation only runs on native.
+// so the pill stays at scale 1.1 (a static no-op). This is accepted — the animation only runs on native.
 
-/** Approx pill height (padding + 44pt targets) for the bottom edge scrim. */
-const PILL_HEIGHT = 60;
+/** Approx pill height (padding + 44pt targets) at the 1.1x resting scale, for the bottom edge scrim. */
+const PILL_HEIGHT = 66;
 
 const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights'> = {
   '(home)': 'home',
@@ -29,51 +29,75 @@ const TABS = [
   { name: '(insights)', label: 'Insights' },
 ];
 
+const ICON_LAYER = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+} as const;
+
 function TabButton({
   isFocused,
   tab,
-  minimize,
   onPress,
 }: {
   isFocused: boolean;
   tab: typeof TABS[number];
-  minimize: ReturnType<typeof useSharedValue<number>>;
   onPress: () => void;
 }) {
-  const t = useThemeColors();
-  const animatedStyle = useAnimatedStyle(() => {
-    if (isFocused) {
-      return { width: 48, opacity: 1 };
-    }
-    return {
-      width: 48 * (1 - minimize.value),
-      opacity: 1 - minimize.value,
-    };
-  });
+  const focus = useSharedValue(isFocused ? 1 : 0);
+
+  useEffect(() => {
+    focus.value = withTiming(isFocused ? 1 : 0, {
+      duration: 300,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [isFocused, focus]);
+
+  // Stacked muted/white glyph pairs scale+fade swap via `focus`.
+  const activeIconStyle = useAnimatedStyle(() => ({
+    opacity: focus.value,
+    transform: [{ scale: focus.value }],
+  }));
+  const inactiveIconStyle = useAnimatedStyle(() => ({
+    opacity: 1 - focus.value,
+    transform: [{ scale: 1 - focus.value }],
+  }));
 
   return (
-    <Animated.View style={[{ overflow: 'hidden' }, animatedStyle]}>
-      <Pressable
-        className="items-center justify-center"
-        style={{ width: 48, minHeight: 44 }}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isFocused }}
-        accessibilityLabel={tab.label}
-        onPress={onPress}
-      >
-        <SymbolIcon
-          name={TAB_NAMES[tab.name]}
-          active={isFocused}
-          size={22}
-          color={isFocused ? t.ink : t.mutedSoft}
-        />
-      </Pressable>
-    </Animated.View>
+    <Pressable
+      className="items-center justify-center"
+      style={{ width: 48, minHeight: 44 }}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isFocused }}
+      accessibilityLabel={tab.label}
+      onPress={onPress}
+    >
+      <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View style={[ICON_LAYER, inactiveIconStyle]}>
+          <SymbolIcon
+            name={TAB_NAMES[tab.name]}
+            size={22}
+            color="rgba(255,255,255,0.38)"
+          />
+        </Animated.View>
+        <Animated.View style={[ICON_LAYER, activeIconStyle]}>
+          <SymbolIcon
+            name={TAB_NAMES[tab.name]}
+            active
+            size={22}
+            color="#ffffff"
+          />
+        </Animated.View>
+      </View>
+    </Pressable>
   );
 }
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
-  const t = useThemeColors();
   const minimize = useSharedValue(0);
   const accumulator = useRef(0);
 
@@ -94,6 +118,13 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
   useEffect(() => {
     minimize.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
   }, [state.index, minimize]);
+
+  // Instagram-style whole-pill scale: 1.1 at rest, 0.9 on scroll down, anchored
+  // bottom-center so the pill sinks toward the bottom edge. All tabs stay visible.
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1.1 - minimize.value * 0.2 }],
+    transformOrigin: '50% 100%',
+  }));
 
   // Focused flows nested inside a tab (the automation builder) render
   // full-screen with their own pinned CTA — the floating pill would sit on
@@ -129,42 +160,62 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
         intensity={100}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
       />
-      <View
-        className="border border-hairline"
-        style={{
-          alignSelf: 'center',
-          marginBottom: insets.bottom + 8,
-          borderRadius: 9999,
-          boxShadow: '0 6px 20px rgba(10,10,10,0.08)',
-        }}
+      {/*
+        Specular rim (1px padding): tiny metallic glints at the TL / BR
+        corners only — mid-edge stays invisible, not a continuous fade.
+      */}
+      <Animated.View
+        style={[
+          { alignSelf: 'center', marginBottom: insets.bottom + 8 },
+          scaleStyle,
+        ]}
       >
-        <GlassSurface borderRadius={9999}>
-          <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
-            {TABS.map((tab, index) => {
-              const isFocused = state.index === index;
-              return (
-                <TabButton
-                  key={tab.name}
-                  isFocused={isFocused}
-                  tab={tab}
-                  minimize={minimize}
-                  onPress={() => {
-                    hapticSelection();
-                    const event = navigation.emit({
-                      type: 'tabPress',
-                      target: state.routes[index].key,
-                      canPreventDefault: true,
-                    });
-                    if (!isFocused && !event.defaultPrevented) {
-                      navigation.navigate(tab.name);
-                    }
-                  }}
-                />
-              );
-            })}
-          </View>
-        </GlassSurface>
-      </View>
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0.55)',
+            'rgba(255,255,255,0.12)',
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.10)',
+            'rgba(255,255,255,0.38)',
+          ]}
+          locations={[0, 0.1, 0.22, 0.78, 0.9, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            borderRadius: 9999,
+            padding: 1,
+            boxShadow: '0 14px 28px rgba(0,0,0,0.48), 0 3px 8px rgba(0,0,0,0.35)',
+            elevation: 18,
+          }}
+        >
+          <GlassSurface borderRadius={9999}>
+            <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
+              {TABS.map((tab, index) => {
+                const isFocused = state.index === index;
+                return (
+                  <TabButton
+                    key={tab.name}
+                    isFocused={isFocused}
+                    tab={tab}
+                    onPress={() => {
+                      hapticSelection();
+                      const event = navigation.emit({
+                        type: 'tabPress',
+                        target: state.routes[index].key,
+                        canPreventDefault: true,
+                      });
+                      if (!isFocused && !event.defaultPrevented) {
+                        navigation.navigate(tab.name);
+                      }
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </GlassSurface>
+        </LinearGradient>
+      </Animated.View>
     </View>
   );
 }

@@ -18,10 +18,41 @@ go test ./internal/services/automations  # one package
 - `internal/router` — Gin engine, route registration
 - `internal/middleware` — RequestID, Recovery, CORS, Appwrite JWT auth, `X-Cron-Secret`
 - `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth)
-- `internal/services` — business logic (bridge, automations, oauth, reconcile, templates, keywords, ratelimit)
-- `internal/store` — Appwrite persistence (automations, jobs, logs, reconcile)
-- `internal/platform` — external clients: `appwrite`, `clerk` (JWT verify), `meta` (Graph API + webhook HMAC), `cloudflare` (tunnel)
-- `internal/worker` — job pool, sweeper, comment_runner (process_comment / send_reveal jobs)
+- `internal/services` — business logic (automations, insights, keywords, oauth, ratelimit, reconcile, templates). There is NO `bridge` package — the auth bridge is `handlers/ensure_profile.go` + `platform/appwrite` client methods
+- `internal/store` — Appwrite persistence (automations, jobs, logs, reconcile, insights)
+- `internal/platform` — external clients: `appwrite` (TablesDB REST + profile bootstrap), `meta` (Graph API client + DM sender), `webhooks` (HMAC `x-hub-signature-256` verify + event parsers), `cloudflare` (tunnel). There is NO `clerk` package — Appwrite JWTs are verified by calling Appwrite `/account`
+- `internal/worker` — job pool, sweeper, comment_runner (4 job types: `process_comment`, `send_reveal`, `send_followup`, `process_message`)
+
+## ROUTES
+
+Registered conditionally on non-nil `router.Dependencies`; `/health` always answers.
+
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/health` | none |
+| POST | `/auth/ensure-profile` | Appwrite JWT Bearer |
+| GET | `/automations/templates` | **none** (registered before the authed group — static presets) |
+| GET/POST | `/automations`, `/automations/stats/overview` | Appwrite JWT Bearer |
+| GET/PATCH/DELETE | `/automations/:id` | Appwrite JWT Bearer |
+| GET | `/automations/:id/logs`, `/automations/:id/stats` | Appwrite JWT Bearer |
+| GET | `/webhooks/instagram` | none (`verify_token` query) |
+| POST | `/webhooks/instagram` | Meta HMAC `x-hub-signature-256` |
+| POST | `/cron/refresh-tokens`, `/cron/reconcile`, `/cron/retain-logs`, `/cron/sync-insights` | `X-Cron-Secret` |
+| GET | `/cron/health` | `X-Cron-Secret` |
+| GET | `/instagram/callback` | none |
+
+## IN-PROCESS LOOPS
+
+All started from `buildDependencies` (`cmd/server/adapters.go`); no external scheduler.
+
+| Loop | Env gate | Interval | Role |
+|------|----------|----------|------|
+| Worker pool + sweeper | `AUTOMATION_SWEEPER_ENABLED` (default true) | 1 min | Retry due/stale automation jobs |
+| Reconcile poller | `AUTOMATION_SWEEPER_ENABLED` | `COMMENT_POLL_INTERVAL_MS` (default 5 min) | `ReconcileOnce` + `ReconcilePostbacksOnce` + `AttachNextReels` — catches comments/postbacks webhooks miss |
+| Token refresh | `AUTOMATION_SWEEPER_ENABLED` (same loop ctx) | 24h (first tick 1 min after boot) | Refresh creator long-lived tokens expiring within 10 days |
+| Insights sync | `INSIGHTS_SYNC_ENABLED` (default false) | boot backfill + 24h sweep | First-party insights: media, insight days, demographics, online followers, mentioned media |
+
+Cleanup is LIFO: `sweeper.Stop` → pool cancel → `pool.Shutdown`.
 - `internal/models` — request/response types; `ErrorResponse{error, message}` is the standard error shape
 
 ## CONVENTIONS
@@ -43,4 +74,8 @@ go test ./internal/services/automations  # one package
 
 - `server.exe` / `tools/*.log` are gitignored build/runtime artifacts — don't commit.
 - Creator tokens are stored **plaintext by design** — the Expo app reads `access_token` directly and calls graph.instagram.com (see `plaintextTokenDecryptor` in `cmd/server/adapters.go`).
-- `AUTOMATION_SWEEPER_ENABLED=true` starts the sweeper loop that retries pending jobs — required for comment automations to actually send. The same flag also starts the in-process reconcile poller (`startReconcileLoop`), the safety net for comments webhooks miss — no external scheduler needed.
+- `AUTOMATION_SWEEPER_ENABLED=true` starts the sweeper loop that retries pending jobs — required for comment automations to actually send. The same flag also starts the in-process reconcile poller (`startReconcileLoop`) and the daily token-refresh loop — no external scheduler needed.
+- Never write `ig_session_json` to the creators table — the column does not exist (enforced in `oauth/service_test.go`).
+- `store/insights_store.go` per-media upserts must not zero out previously stored metrics when a newer fetch lacks them.
+- `GIN_MODE`, `FACEBOOK_APP_ID`, `APPWRITE_TRACKED_LINKS_TABLE_ID`, `APPWRITE_LINK_CLICKS_TABLE_ID`, and `APPWRITE_WEBHOOK_EVENTS_TABLE_ID` appear in `.env.example` but are never read by `config.go` — template placeholders, not real config.
+- `APPWRITE_JWT_KEY` is not read anywhere; JWT verification calls Appwrite `/account` with endpoint + project ID.

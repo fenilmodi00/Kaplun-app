@@ -1,6 +1,11 @@
 import '@/global.css';
 import '@/lib/polyfills';
 import { useEffect } from 'react';
+
+export const unstable_settings = {
+  // After sign-in the authenticated shell should start on the tabs navigator.
+  anchor: '(tabs)',
+};
 import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

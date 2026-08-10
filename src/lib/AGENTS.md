@@ -1,6 +1,6 @@
 # src/lib/ — Infrastructure Layer
 
-18 TypeScript modules + 2 JS web stubs: Appwrite client, typed repository, direct Instagram Graph client, automations engine client, React Query client/persister, resilience utilities, Realtime, fonts, polyfills, haptics, Reanimated web stubs.
+21 TypeScript modules + 2 JS web stubs: Appwrite client, typed repository, direct Instagram Graph client, automations engine client, React Query client/persister, resilience utilities, Realtime, theme system, session context/persistence, fonts, polyfills, haptics, Reanimated web stubs.
 
 ## STRUCTURE
 
@@ -10,8 +10,12 @@
 | `repository.ts` | `getCreatorByClerkId`, `listThreads`, `listMessages`, `sendMessage`, `batchMarkAsRead`, `listDeals`, `listPosts`, `getLastMessagePreviews` | Typed access layer over Appwrite TablesDB. Every call wrapped in `executeWithRetryAndTimeout()` (3 attempts, backoff + jitter, 15s timeout). |
 | `resilient.ts` | `executeWithRetry()`, `executeWithTimeout()`, `executeWithRetryAndTimeout()` | Retry with exponential backoff + jitter, timeout wrapper, combined retry+timeout. Retries: network errors, HTTP 429/5xx, Appwrite code ≥ 500. Never retries 4xx auth/validation. |
 | `bridge-context.tsx` | `BridgeProvider`, `useBridge` | Appwrite session readiness. AuthGate mounts shell instantly; data hooks wait on `isReady`. Soft Retry on failure. |
+| `session-context.tsx` | `SessionProvider`, `useSession` | Appwrite session provider. Restores the session on launch via `auth-session`, exposes `signIn`/`signOut`, fire-and-forget calls Gin `POST /auth/ensure-profile` on restore/sign-in. |
+| `auth-session.ts` | `restoreSession()`, `persistSession()`, `clearStoredSession()`, `getAppwriteJWT()`, `extractSessionSecret()` | The only session-persistence utilities (expo-secure-store). |
+| `theme.ts` | `lightColors`/`darkColors`, `lightCssVariables`/`darkCssVariables`, `useThemeColors()`, `useThemeScheme()`, `useThemePreference()`, `setThemePreference()`, `hydrateThemePreference()`, `cssVariablesForScheme()` | Dual-scheme theme system. Module-level preference store (default `dark`, AsyncStorage key `@kaplun/theme-preference`) via `useSyncExternalStore` — NOT React context. `lightColors`/`darkColors` serve raw-RN islands; the CSS-var maps feed the root `VariableContextProvider`. `resolveScheme` ignores the OS scheme; web is always light. Keep all four token representations in sync with `global.css`. |
+| `tab-bar-scroll.ts` | scroll pub/sub | Screens report scroll offset; `TabBar` subscribes to minimize on scroll. |
 | `query-client.ts` | `queryClient`, `persistOptions`, `shouldPersistQuery`, `PERSIST_MAX_AGE`, `PERSIST_BUSTER` | React Query singleton + AsyncStorage persister (24h maxAge, success-only dehydration). Global defaults `staleTime: 30_000`, `gcTime: 24h`, `retry: false`; hooks override `gcTime` to 5 min. |
-| `automations.ts` | `createAutomation`, `listAutomations`, `updateAutomation`, `deleteAutomation`, `listAutomationLogs`, `listCampaignTemplates`, stats fns + `Automation`/`AutomationLog` types | Comment-automation engine client. Clerk Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` (Gin api-go). 401/missing token → `session_expired`. |
+| `automations.ts` | `createAutomation`, `listAutomations`, `updateAutomation`, `deleteAutomation`, `listAutomationLogs`, `listCampaignTemplates`, stats fns + `Automation`/`AutomationLog` types | Comment-automation engine client. Appwrite JWT Bearer to `EXPO_PUBLIC_IG_API_BASE_URL` (Gin api-go). 401/missing token → `session_expired`. |
 | `automation-validation.ts` | `validateAutomationDraft(draft)`, `AutomationDraft` | Pure draft validation returning error strings; exported for unit tests without rendering. |
 | `instagram.ts` | `fetchProfile`, `fetchMedia`, `fetchInsights`, `fetchAccountInsights`, `disconnectInstagram` + types (`InstagramProfileResponse`, `InstagramMediaResponse`, `InstagramInsightsResponse`, `InstagramAccountInsights`, `InsightPoint`) | Direct Instagram Graph API client (pinned **v26.0** — latest Graph API; Instagram-Login account insights require v22.0+, satisfied). Reads the per-user long-lived token from the `creators` row; on Meta error 190 runs `ig_refresh_token` and persists via `updateCreatorToken`. Throws `Error('session_expired')` when no usable token, `Error('insights_permission')` when the token predates the insights scope. 15s timeout. |
 | `instagram-oauth.ts` | `startInstagramOAuth(clerkUserId, appwriteUserId)` | Instagram OAuth flow. Returns success/failure. Called from home screen's connect flow. |
@@ -47,6 +51,7 @@
 - **`session_expired` error convention** — Instagram token missing/unusable → `throw new Error('session_expired')` from `@/lib/instagram`. Hooks surface this as `error: 'session_expired'` for re-login UI.
 - **Auth session lives in `auth-session.ts`** — `restoreSession()`, `persistSession()`, `clearStoredSession()`, and `getAppwriteJWT()` are the only session utilities. The app restores the Appwrite session on launch, then talks to Appwrite directly.
 - **Reanimated imports** — always use `@/lib/reanimated-platform` (NOT `react-native-reanimated` directly) for web safety.
+- **Theme tokens live in four synced representations** — `global.css` `@theme` block ↔ `global.css` dark `@media` override ↔ `lightColors`/`darkColors` ↔ `lightCssVariables`/`darkCssVariables`. `theme.test.ts` enforces palette parity; update all four when adding a token.
 - **Token cache** — uses `expo-secure-store` for Appwrite session secret persistence. The old `@/lib/tokenCache` no longer exists.
 - **`cancelledRef`** — used in home screen for unmount safety alongside React Query.
 

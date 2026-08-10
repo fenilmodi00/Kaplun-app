@@ -33,6 +33,7 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+opencode-rag.json
 
 # typescript
 *.tsbuildinfo
@@ -44,6 +45,7 @@ yarn-error.*
 # agent metadata
 .omo/
 .worktrees/
+.opencode/ponytail/
 
 # Python
 __pycache__/
