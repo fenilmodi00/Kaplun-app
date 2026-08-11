@@ -28,7 +28,7 @@ Key architectural decisions:
 | Language | TypeScript 5.9 | Strict mode enabled (`tsconfig.json`). |
 | Package manager | Bun 1.3+ | `bun.lock` is the lockfile. `expo install` excludes TypeScript. |
 | Styling | NativeWind v5, Tailwind CSS v4, `react-native-css` | `useCssElement` bridge in `src/tw/`. |
-| Theming | `src/lib/theme.ts` + `global.css` | Dark default; `useThemeColors()` for raw-RN islands; `VariableContextProvider` runtime override; web is light-only. |
+| Theming | `src/lib/theme.ts` + `src/global.css` | Dark default; `useThemeColors()` for raw-RN islands; `VariableContextProvider` runtime override; web is light-only. |
 | Animations | React Native Reanimated 4.5.0 | Imported only via `@/lib/reanimated-platform` or `@/tw/animated`. Web uses no-op stubs. |
 | State / data | TanStack React Query 5 | Persisted to AsyncStorage for 24h. |
 | Auth | Appwrite (`appwrite`) | Appwrite account + JWT verified by Go backend. |
@@ -37,11 +37,6 @@ Key architectural decisions:
 | Instagram | Meta Graph API v26.0 | Direct from app and backend. |
 | Testing | jest-expo, Go `testing` package | Frontend tests in `src/__tests__/`. |
 | Lint | `tsc --noEmit` | No ESLint/Prettier/Biome config. |
-
-Legacy files still in the repo:
-
-- `ig_client.py` — old instagrapi Python wrapper. **Dead code**; do not use or extend.
-- `db/schema.sql` — old SQLite schema for a Python-era feature. Not used by the current app.
 
 ## REPOSITORY STRUCTURE
 
@@ -61,7 +56,7 @@ Legacy files still in the repo:
 │   ├── .env.example        # Backend env template
 │   └── README.md           # Backend-specific run/test guide
 ├── src/
-│   ├── app/(tabs)/         # Expo Router screens; 4 tabs: home, automate, messages, insights
+│   ├── app/(tabs)/         # Expo Router routes (1-line re-exports to @/screens/*); 4 tabs
 │   │   ├── (home)/         # Home / dashboard (owns the only navigation to profile)
 │   │   ├── (automate)/     # Automations list, detail, create
 │   │   ├── (messages)/     # Threads + thread detail
@@ -73,14 +68,16 @@ Legacy files still in the repo:
 │   │   └── auth/           # AuthScreen
 │   ├── hooks/              # React Query data hooks
 │   ├── lib/                # Infrastructure (Appwrite, repository, session, theme, Instagram, etc.)
+│   ├── screens/            # Screen implementations (routes re-export from here)
+│   ├── testing/            # Integration + auth-gate test harness
 │   ├── tw/                 # className-enabled RN primitives
 │   ├── types/              # Global TypeScript types
-│   └── __tests__/          # Jest test suites
+│   ├── __tests__/          # Jest test suites
+│   └── global.css          # Tailwind theme tokens (Clay design system)
 ├── __mocks__/              # Jest manual mocks (@expo/ui)
 ├── assets/                 # App icons + splash
 ├── docs/                   # Architecture/design docs and migration plans
-├── db/schema.sql           # Legacy SQLite schema (unused)
-├── ig_client.py            # Legacy instagrapi wrapper (unused)
+├── scripts/                # Repo checks (check-structure.mjs)
 ├── package.json            # Bun/Expo dependencies and scripts
 ├── app.json                # Expo app config
 ├── tsconfig.json           # TypeScript config (strict, `@/*` alias)
@@ -89,7 +86,6 @@ Legacy files still in the repo:
 ├── metro.config.js         # NativeWind + Reanimated/Worklets web aliases
 ├── babel.config.js         # babel-preset-expo + reanimated plugin
 ├── postcss.config.mjs      # Tailwind v4 PostCSS
-├── global.css              # Tailwind theme tokens (Clay design system)
 ├── .env.example            # App env template
 └── AGENTS.md               # This file
 ```
@@ -104,6 +100,24 @@ Subdirectory guides (read these before editing the relevant area):
 - `src/components/clay/AGENTS.md` — Clay design system, `.web.tsx` variants, raw-RN exceptions.
 - `src/tw/AGENTS.md` — styling primitives and `useCssElement` bridge.
 - `src/__tests__/AGENTS.md` — jest-expo conventions, mock boundary, render flavors, known failures.
+
+### Route tree
+
+Every route file is a 1-line re-export to `@/screens/*`. Full details in `src/app/AGENTS.md`.
+
+```
+src/app/_layout.tsx                              ROOT — provider stack, auth gate
+src/app/sign-in.tsx                             /sign-in
+src/app/(tabs)/_layout.tsx                      4-tab layout (home, automate, messages, insights)
+src/app/(tabs)/(home)/index.tsx                 → @/screens/home
+src/app/(tabs)/(automate)/list.tsx              → @/screens/automate
+src/app/(tabs)/(automate)/new.tsx               → @/screens/automate/new
+src/app/(tabs)/(automate)/[automationId].tsx     → @/screens/automate/detail
+src/app/(tabs)/(messages)/threads.tsx           → @/screens/messages
+src/app/(tabs)/(messages)/[threadId].tsx        → @/screens/messages/thread
+src/app/(tabs)/(insights)/dashboard.tsx        → @/screens/insights
+src/app/(tabs)/(profile)/view.tsx              → @/screens/profile (NOT a tab — pushed from home avatar)
+```
 
 ## BUILD, RUN, AND TEST COMMANDS
 
@@ -271,7 +285,6 @@ Auth bridge:
 | `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/session-context.tsx`, `lib/automations.ts` | Gin api-go base URL |
 | `EXPO_PUBLIC_IG_APP_ID` | `lib/instagram-oauth.ts` | Instagram OAuth app ID |
 | `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` | `lib/instagram-oauth.ts` | Instagram OAuth redirect URI |
-| `EXPO_PUBLIC_IG_API_PROXY_URL` | legacy/dead | Do not use |
 
 ### Backend (`/api-go/.env`)
 
@@ -312,14 +325,13 @@ Auth bridge:
 
 ## NOTES AND GOTCHAS
 
-- **Large-file hotspots** (prefer targeted edits): `src/app/(tabs)/(automate)/new.tsx` (~1270 lines), `AuthScreen.tsx` (~760 lines), `(profile)/index.tsx` (~700), `(automate)/[automationId].tsx` (~690), home/insights screens (~645–665 lines), `api-go/internal/worker/comment_runner.go` (~1247 lines).
+- **Large-file hotspots** (prefer targeted edits): `src/components/auth/AuthScreen.tsx` (~761 lines), `api-go/internal/worker/comment_runner.go` (~1247 lines), `src/screens/automate/new/index.tsx` (~1112 lines, largest screen file). Route files are all 1-line re-exports now (≤5 lines each).
 - **`jest.setup.ts` is ~315 lines of global mocks** — check it before adding per-file mocks; conventions live in `src/__tests__/AGENTS.md`.
 - **`EdgeBlur` is not a blur** — it renders a plain `LinearGradient` canvas scrim because the real `expo-blur` layer crashed Android on screen transitions. The `blurTarget`/`intensity` props are kept only for call-site compatibility.
 - **api-go in-process loops** — sweeper, reconcile poller, token refresh, and insights sync all run inside the server process. No external scheduler is required.
 - **Reanimated web crash (#8285)** — `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to no-op stubs on web. `metro.config.js` also keeps `inlineRequires` lazy imports for worklets (#9445) — do not remove.
-- **Theme system** — four token representations must stay in sync: `global.css` `@theme` ↔ `global.css` dark `@media` block ↔ `lightColors`/`darkColors` ↔ `lightCssVariables`/`darkCssVariables` (both pairs in `src/lib/theme.ts`). `GlassSurface` is intentionally always dark charcoal in both schemes. `(profile)` is not a tab — it is pushed from the home avatar via `router.push('/(tabs)/(profile)' as never)`.
-- **`EXPO_PUBLIC_IG_API_PROXY_URL` config drift** — the var is dead but still present in `.env`, `.env.example`, and `jest.setup.ts`; safe to delete those three lines, do not wire new code to it.
-- **Rule exceptions found in code** — `src/components/ui/input.tsx`/`textarea.tsx` use `StyleSheet.create()` (Android font-metric stability, intentional); `(profile)/index.tsx` and `(automate)/[automationId].tsx` use `StyleSheet.create()` as documented escape hatches; `(messages)/[threadId].tsx` calls `tablesDB.getRow()` directly and casts `Reanimated.SlideInUp as any` (known smells, fix or consciously preserve).
+- **Theme system** — four token representations must stay in sync: `src/global.css` `@theme` ↔ `src/global.css` dark `@media` block ↔ `lightColors`/`darkColors` ↔ `lightCssVariables`/`darkCssVariables` (both pairs in `src/lib/theme.ts`). `GlassSurface` is intentionally always dark charcoal in both schemes. `(profile)` is not a tab — it is pushed from the home avatar via `router.push('/(tabs)/(profile)' as never)`.
+- **Rule exceptions found in code** — `src/components/ui/input.tsx`/`textarea.tsx` use `StyleSheet.create()` (Android font-metric stability, intentional); `src/screens/profile/index.tsx` and `src/screens/automate/detail/index.tsx` use `StyleSheet.create()` as documented escape hatches; `src/screens/messages/thread.tsx` calls `tablesDB.getRow()` directly and casts `Reanimated.SlideInUp as any` (known smells, fix or consciously preserve).
 - **SplashLogger** — use `addLog()` + `SplashLogger` from `@/lib/logger` to debug startup crashes; it renders an on-screen terminal-like log.
 - **`lightningcss` pinned to 1.30.1** in `package.json` `resolutions`.
 - **OpenCode RAG** — this project uses `.opencode/rag_db` for semantic code search. Configuration is in `opencode-rag.json`. Do not commit API keys or the RAG database.
