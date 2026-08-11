@@ -79,6 +79,7 @@ export function ScreenShell({
         lastY.current = y;
         reportTabBarScroll(dy);
       }}
+      showsVerticalScrollIndicator={false}
     >
       {children}
     </ScrollView>
