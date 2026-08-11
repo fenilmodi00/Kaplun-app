@@ -1,6 +1,6 @@
-# src/screens/ — Screen Module Extraction Spec
+# src/screens/ — Screen Modules
 
-Extraction target for wave-2/3: move screen bodies out of `src/app/` route files into `src/screens/` modules, leaving thin re-export routes behind. This doc defines the contract every extracted screen follows.
+Target state for extracted screen bodies. Route files in `src/app/` become thin re-exports; the actual screen logic lives here. See `src/app/AGENTS.md` for the route tree and `src/tw/AGENTS.md` for styling primitives.
 
 ## ROUTE RE-EXPORT CONTRACT
 
@@ -10,19 +10,40 @@ After extraction, each changed route file in `src/app/` becomes a single line:
 export { default } from '@/screens/<path>';
 ```
 
-This preserves the default-export import contract that 9 existing test suites rely on. Screens that need route params keep calling `useLocalSearchParams` internally. No prop drilling from the route file.
+This preserves the default-export import contract that 9 existing test suites rely on. Screens that need route params keep calling `useLocalSearchParams` internally, exactly as the route body does today. No prop drilling from the route file.
+
+Route-to-screen mapping (target):
+
+| Route file | Screen module |
+|------------|---------------|
+| `(tabs)/(home)/index.tsx` | `@/screens/home` |
+| `(tabs)/(automate)/list.tsx` | `@/screens/automate` |
+| `(tabs)/(automate)/new.tsx` | `@/screens/automate/new` |
+| `(tabs)/(automate)/[automationId].tsx` | `@/screens/automate/detail` |
+| `(tabs)/(messages)/threads.tsx` | `@/screens/messages` |
+| `(tabs)/(messages)/[threadId].tsx` | `@/screens/messages/thread` |
+| `(tabs)/(insights)/dashboard.tsx` | `@/screens/insights` |
+| `(tabs)/(profile)/view.tsx` | `@/screens/profile` |
 
 ## SCREEN MODULE CONVENTIONS
 
-- **Default export:** every screen module exports a default function: `export default function HomeScreen() {...}`. Route files re-export it as `export { default } from '@/screens/...'`.
-- **Folder-per-non-trivial-screen:** `index.tsx` + colocated `components.tsx` / `hooks.ts` / `utils.ts` + `*.test.*`. Simple screens can be a single `index.tsx`.
-- **`@/tw`-only styling:** use `@/tw` primitives with Tailwind `className`. Documented raw-RN exceptions (`StyleSheet.create()` + `useThemeColors()`) follow their moved files from `src/app/` into `src/screens/`. See `src/tw/AGENTS.md` for the escape-hatch list.
-- **No test files under `src/app/`:** Expo Router scans the route directory; test files pollute the route tree. Colocate tests in `src/screens/<name>/`.
+- **Default export** — every screen module exports its screen as `export default function HomeScreen() {...}`. The route re-export relies on this.
+- **Folder-per-non-trivial-screen** — `index.tsx` holds the screen; `components.tsx` / `hooks.ts` / `utils.ts` hold private helpers split out when the screen grows. Colocated `*.test.*` files sit beside the code they test.
+- **Private helpers stay private** — formatters, sub-components, and hooks used by only one screen live in that screen's folder (`utils.ts`, `components.tsx`, `hooks.ts`), not in `src/components/` or `src/hooks/`. Promote to the shared layers only when a second consumer appears.
+- **Params stay internal** — `useLocalSearchParams<{...}>()` is called inside the screen module, not the route file. The route file passes nothing.
+
+## STYLING RULES
+
+- **`@/tw` primitives only** — `View`, `Text`, `Pressable` from `@/tw` with Tailwind `className`. Full primitive list and `cn()` utilities in `src/tw/AGENTS.md`.
+- **Raw-RN exceptions follow their files** — screens that use `StyleSheet.create()` today (`[automationId].tsx`, `(profile)/view.tsx`) keep that exception when moved. `src/tw/AGENTS.md` tracks the escape-hatch list under "Documented raw-RN escape hatches"; update both docs when a screen's regime changes.
+- **Theme tokens, not hex** — colors via `className` tokens or `useThemeColors()` in raw-RN islands. See root `AGENTS.md` anti-patterns.
+- **Reanimated via `@/lib/reanimated-platform` or `@/tw/animated` only** — see root `AGENTS.md`.
 
 ## ROUTE THINNESS
 
-- **Hard cap: 150 non-empty lines** for any `src/app/**/*.tsx` route file.
-- **Extraction target: 5 lines or fewer** for extracted routes (one-line re-export + imports).
+- **≤150 non-empty lines** hard cap for any `src/app/**/*.tsx` route file.
+- **≤5 lines** target for extracted routes — the one-line re-export plus imports if needed.
+- **No test files under `src/app/`** — Expo Router treats every file as a route. Colocated tests live in `src/screens/` beside their screen module.
 
 ## FOLDER STRUCTURE
 
@@ -30,36 +51,35 @@ This preserves the default-export import contract that 9 existing test suites re
 src/screens/
 ├── home/
 │   ├── index.tsx          # default export HomeScreen
-│   ├── utils.ts           # pure helpers
-│   ├── utils.test.ts      # colocated tests
-│   └── components.tsx     # screen-private components
+│   ├── utils.ts            # pure helpers
+│   ├── utils.test.ts       # colocated tests
+│   └── components.tsx       # private sub-components
 ├── messages/
-│   ├── index.tsx          # default export MessagesScreen
-│   └── thread.tsx         # default export ThreadScreen
+│   ├── index.tsx           # default export MessagesScreen
+│   └── thread.tsx          # default export ThreadScreen
 ├── automate/
-│   ├── index.tsx          # default export AutomationsScreen
+│   ├── index.tsx           # default export AutomationsScreen
 │   ├── detail/
-│   │   ├── index.tsx
+│   │   ├── index.tsx       # default export AutomationDetailScreen
 │   │   ├── utils.ts
+│   │   ├── utils.test.ts
 │   │   └── components.tsx
 │   └── new/
-│       ├── index.tsx
+│       ├── index.tsx       # default export AutomationNewScreen
 │       ├── hooks.ts
 │       └── components.tsx
 ├── insights/
-│   ├── index.tsx
+│   ├── index.tsx           # default export InsightsScreen
 │   ├── utils.ts
+│   ├── utils.test.ts
 │   └── components.tsx
 └── profile/
-    ├── index.tsx
-    └── utils.ts
+    ├── index.tsx           # default export ProfileScreen
+    ├── utils.ts
+    └── utils.test.ts
 ```
 
-## ANTI-PATTERNS
+## GOTCHAS
 
-- **NO test files under `src/app/`** — Expo Router route pollution. Colocate tests in `src/screens/`.
-- **NO screen body code in route files** — route files are re-exports only.
-- **NO direct `react-native` imports in screens** — use `@/tw` primitives. Allowed set: `Platform`, `Dimensions`, `FlatList`, `KeyboardAvoidingView`. Documented exceptions follow moved files.
-- **NO `StyleSheet.create()` in screens** — use Tailwind `className` via `@/tw`. Documented exceptions follow moved files.
-- **NO `as any` / `@ts-ignore` / `@ts-expect-error`** — prefer `unknown` + type guards.
-- **NO `tablesDB` imports outside `src/lib/repository.ts`** — all Appwrite queries go through typed repository functions.
+- The `as never` cast for profile navigation stays in the route file, not the screen.
+- `validateAutomationDraft` in the new-automation screen stays as-is (already from `@/lib/automation-validation`).
