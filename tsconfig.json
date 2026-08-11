@@ -20,7 +20,6 @@
     "nativewind-env.d.ts"
   ],
   "exclude": [
-    "_routes-backup",
     "node_modules"
   ]
 }
