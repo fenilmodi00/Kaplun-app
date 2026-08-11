@@ -51,6 +51,11 @@ type Config struct {
 	CloudflareTunnelToken   string // Zero Trust install token (optional)
 	CloudflareTunnelName    string // CLI tunnel name, e.g. kaplun-api (uses ~/.cloudflared credentials)
 	CloudflareTunnelURL     string // known public URL for named tunnels
+
+	// Worker pool tuning (defaults match the previously hardcoded values)
+	WorkerPoolSize     int // concurrent job workers (bulkhead against Meta/Appwrite rate limits)
+	WorkerQueueSize   int // buffered job queue depth before ErrPoolFull
+	SweeperIntervalMS int // sweeper tick interval in milliseconds
 }
 
 // Load reads configuration from the process environment.
@@ -133,6 +138,24 @@ func FromMap(values map[string]string) (Config, error) {
 	cfg.CloudflareTunnelName = strings.TrimSpace(values["CLOUDFLARE_TUNNEL_NAME"])
 	cfg.CloudflareTunnelURL = strings.TrimSpace(values["CLOUDFLARE_TUNNEL_URL"])
 
+	poolSize, err := parseIntDefault(values["WORKER_POOL_SIZE"], 4)
+	if err != nil {
+		return Config{}, fmt.Errorf("WORKER_POOL_SIZE: %w", err)
+	}
+	cfg.WorkerPoolSize = poolSize
+
+	queueSize, err := parseIntDefault(values["WORKER_QUEUE_SIZE"], 64)
+	if err != nil {
+		return Config{}, fmt.Errorf("WORKER_QUEUE_SIZE: %w", err)
+	}
+	cfg.WorkerQueueSize = queueSize
+
+	sweeperMS, err := parseIntDefault(values["SWEEPER_INTERVAL_MS"], 60000)
+	if err != nil {
+		return Config{}, fmt.Errorf("SWEEPER_INTERVAL_MS: %w", err)
+	}
+	cfg.SweeperIntervalMS = sweeperMS
+
 	return cfg, nil
 }
 
@@ -193,6 +216,9 @@ func envMap() map[string]string {
 		"CLOUDFLARE_TUNNEL_TOKEN",
 		"CLOUDFLARE_TUNNEL_NAME",
 		"CLOUDFLARE_TUNNEL_URL",
+		"WORKER_POOL_SIZE",
+		"WORKER_QUEUE_SIZE",
+		"SWEEPER_INTERVAL_MS",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {
@@ -225,6 +251,18 @@ func parseBoolDefault(raw string, defaultValue bool) (bool, error) {
 	v, err := strconv.ParseBool(trimmed)
 	if err != nil {
 		return false, err
+	}
+	return v, nil
+}
+
+func parseIntDefault(raw string, defaultValue int) (int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return defaultValue, nil
+	}
+	v, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0, err
 	}
 	return v, nil
 }

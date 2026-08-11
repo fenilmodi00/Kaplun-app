@@ -111,8 +111,9 @@ export function useAutomationLogs(automationId: string) {
   );
 
   useRealtimeSubscription(logsChannel.toString(), (event) => {
-    const newLog = event.payload as unknown as AutomationLog;
-    if (newLog.automation_id === automationId) {
+    const newLog = event.payload as AutomationLog | undefined;
+    // Synthetic events (subscribe success / app foreground) carry no payload — refetch.
+    if (!newLog || newLog.automation_id === automationId) {
       queryClient.invalidateQueries({ queryKey: ['automationLogs', automationId] });
     }
   });

@@ -235,19 +235,23 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	// Worker pool + sweeper first so reconcile can enqueue jobs immediately.
 	var pool *worker.Pool
 	if cfg.AutomationSweeperEnabled && autoStore != nil {
-		pool = worker.NewPool(4, 64)
+		pool = worker.NewPool(cfg.WorkerPoolSize, cfg.WorkerQueueSize)
 		poolCtx, poolCancel := context.WithCancel(context.Background())
 		pool.SetContext(poolCtx)
 		// Cleanup order is LIFO: sweeper.Stop -> poolCancel -> pool.Shutdown, so
 		// submissions stop first, then in-flight jobs cancel, then the pool drains.
 		cleanups = append(cleanups, pool.Shutdown)
 		cleanups = append(cleanups, poolCancel)
-		sweeper := worker.NewSweeper(autoStore, commentRunner, time.Minute)
+		sweeper := worker.NewSweeper(autoStore, commentRunner, time.Duration(cfg.SweeperIntervalMS)*time.Millisecond)
 		sweeper.Log = logger
 		sweeper.Pool = pool
 		sweeper.Start()
 		cleanups = append(cleanups, sweeper.Stop)
-		logger.Info("automation sweeper started")
+		logger.Info("automation sweeper started",
+			"workers", cfg.WorkerPoolSize,
+			"queue", cfg.WorkerQueueSize,
+			"sweeper_interval_ms", cfg.SweeperIntervalMS,
+		)
 	} else if cfg.AutomationSweeperEnabled {
 		logger.Warn("automation sweeper skipped: store unavailable")
 	}

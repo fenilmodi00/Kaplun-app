@@ -47,7 +47,7 @@ All started from `buildDependencies` (`cmd/server/adapters.go`); no external sch
 
 | Loop | Env gate | Interval | Role |
 |------|----------|----------|------|
-| Worker pool + sweeper | `AUTOMATION_SWEEPER_ENABLED` (default true) | 1 min | Retry due/stale automation jobs |
+| Worker pool + sweeper | `AUTOMATION_SWEEPER_ENABLED` (default true) | `SWEEPER_INTERVAL_MS` (default 60000 = 1 min) | Retry due/stale automation jobs. Pool size: `WORKER_POOL_SIZE` (default 4), queue: `WORKER_QUEUE_SIZE` (default 64) |
 | Reconcile poller | `AUTOMATION_SWEEPER_ENABLED` | `COMMENT_POLL_INTERVAL_MS` (default 5 min) | `ReconcileOnce` + `ReconcilePostbacksOnce` + `AttachNextReels` — catches comments/postbacks webhooks miss |
 | Token refresh | `AUTOMATION_SWEEPER_ENABLED` (same loop ctx) | 24h (first tick 1 min after boot) | Refresh creator long-lived tokens expiring within 10 days |
 | Insights sync | `INSIGHTS_SYNC_ENABLED` (default false) | boot backfill + 24h sweep | First-party insights: media, insight days, demographics, online followers, mentioned media |
@@ -77,5 +77,4 @@ Cleanup is LIFO: `sweeper.Stop` → pool cancel → `pool.Shutdown`.
 - `AUTOMATION_SWEEPER_ENABLED=true` starts the sweeper loop that retries pending jobs — required for comment automations to actually send. The same flag also starts the in-process reconcile poller (`startReconcileLoop`) and the daily token-refresh loop — no external scheduler needed.
 - Never write `ig_session_json` to the creators table — the column does not exist (enforced in `oauth/service_test.go`).
 - `store/insights_store.go` per-media upserts must not zero out previously stored metrics when a newer fetch lacks them.
-- `GIN_MODE`, `FACEBOOK_APP_ID`, `APPWRITE_TRACKED_LINKS_TABLE_ID`, `APPWRITE_LINK_CLICKS_TABLE_ID`, and `APPWRITE_WEBHOOK_EVENTS_TABLE_ID` appear in `.env.example` but are never read by `config.go` — template placeholders, not real config.
-- `APPWRITE_JWT_KEY` is not read anywhere; JWT verification calls Appwrite `/account` with endpoint + project ID.
+- `APPWRITE_JWT_KEY` is not read anywhere; JWT verification calls Appwrite `/account` with endpoint + project ID. Do not add it to `.env.example` — there is no server-side JWT signing key.

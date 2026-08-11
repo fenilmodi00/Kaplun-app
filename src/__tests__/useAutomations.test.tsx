@@ -18,8 +18,9 @@ jest.mock('@/hooks/useAppwriteUser', () => ({
 }));
 
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useAutomations, useAutomationLogs } from '@/hooks/useAutomations';
+import { useRealtimeSubscription } from '@/lib/realtime';
 import * as automations from '@/lib/automations';
 import { createQueryClientWrapper } from './test-utils';
 import type { Automation, AutomationLog } from '@/lib/automations';
@@ -27,6 +28,7 @@ import type { Automation, AutomationLog } from '@/lib/automations';
 const mockListAutomations = automations.listAutomations as jest.Mock;
 const mockUpdateAutomation = automations.updateAutomation as jest.Mock;
 const mockListAutomationLogs = automations.listAutomationLogs as jest.Mock;
+const mockUseRealtimeSubscription = useRealtimeSubscription as jest.Mock;
 
 const mockAutomation: Automation = {
   $id: 'auto_1',
@@ -260,5 +262,46 @@ describe('useAutomationLogs', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.logs).toEqual([]);
     expect(mockListAutomationLogs).not.toHaveBeenCalled();
+  });
+
+  it('handles realtime events: ignores foreign logs, refetches on synthetic no-payload events', async () => {
+    mockListAutomationLogs.mockResolvedValue([mockLog]);
+
+    const { result, unmount } = await renderHook(() => useAutomationLogs('auto_1'), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(mockListAutomationLogs).toHaveBeenCalledTimes(1);
+
+    const calls = mockUseRealtimeSubscription.mock.calls;
+    const callback = calls[calls.length - 1]?.[1] as ((event: unknown) => void) | undefined;
+    expect(callback).toBeDefined();
+
+    act(() => {
+      callback!({
+        events: ['tablesdb.db.tables.automation_logs.rows.*.create'],
+        channels: ['tablesdb.db.tables.automation_logs.rows.create'],
+        timestamp: '',
+        payload: { ...mockLog, automation_id: 'other_auto' },
+      });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(mockListAutomationLogs).toHaveBeenCalledTimes(1);
+
+    // Synthetic payload-less event (subscribe success / app foreground, e.g.
+    // returning from Instagram OAuth) must not crash and must refetch.
+    act(() => {
+      callback!({ events: ['*'], channels: ['tablesdb.db.tables.automation_logs.rows.create'], timestamp: '' });
+    });
+    await waitFor(() => {
+      expect(mockListAutomationLogs).toHaveBeenCalledTimes(2);
+    });
+
+    await unmount();
   });
 });

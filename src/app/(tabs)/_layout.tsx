@@ -1,21 +1,32 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { View } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBar } from '@/components/clay/TabBar';
 import { EdgeBlur } from '@/components/edge-blur';
 
 export const unstable_settings = {
-  // Each tab is a Stack group, so the route key is `(home)/index` rather than `(home)`.
-  anchor: '(home)/index',
+  anchor: '(home)',
 };
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const pathname = usePathname();
+  const initialChecked = useRef(false);
+
+  useLayoutEffect(() => {
+    if (initialChecked.current) return;
+    initialChecked.current = true;
+    if (pathname === '/' || pathname === '') {
+      router.replace('/(tabs)/(home)' as never);
+    }
+  }, [pathname, router]);
 
   return (
     <View style={{ flex: 1 }}>
       <Tabs
+        initialRouteName="(home)"
         tabBar={(props) => <TabBar {...props} />}
         screenOptions={{
           headerShown: false,

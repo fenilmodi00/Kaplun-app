@@ -45,7 +45,6 @@ opencode-rag.json
 # agent metadata
 .omo/
 .worktrees/
-.opencode/ponytail/
 
 # Python
 __pycache__/

@@ -89,7 +89,12 @@ export function useMessages(threadId: string): UseMessagesResult {
     .create();
 
   useRealtimeSubscription(messagesChannel.toString(), (event) => {
-    const newMessage = event.payload as unknown as Message;
+    const newMessage = event.payload as Message | undefined;
+    // Synthetic events (subscribe success / app foreground) carry no payload — refetch.
+    if (!newMessage) {
+      queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+      return;
+    }
     if (newMessage.thread_id === threadId) {
       queryClient.setQueryData<Message[]>(['messages', threadId], (prev = []) =>
         prev.some((m) => m.$id === newMessage.$id) ? prev : [...prev, newMessage],

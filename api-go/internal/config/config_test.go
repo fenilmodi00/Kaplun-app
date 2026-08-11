@@ -113,6 +113,10 @@ func TestFromMapDefaultsAppwriteAndSweeper(t *testing.T) {
 	if cfg.HasAppwriteCore() || cfg.HasAutomationTables() {
 		t.Fatal("expected capability helpers false without secrets")
 	}
+	if cfg.WorkerPoolSize != 4 || cfg.WorkerQueueSize != 64 || cfg.SweeperIntervalMS != 60000 {
+		t.Fatalf("expected worker defaults 4/64/60000, got %d/%d/%d",
+			cfg.WorkerPoolSize, cfg.WorkerQueueSize, cfg.SweeperIntervalMS)
+	}
 }
 
 func TestFromMapRejectsInvalidSweeperBool(t *testing.T) {
