@@ -21,10 +21,3 @@ export function createQueryClientWrapper() {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
   };
 }
-
-// Dummy test so jest doesn't complain about an empty test suite
-describe('test-utils', () => {
-  it('exports createQueryClientWrapper', () => {
-    expect(typeof createQueryClientWrapper).toBe('function');
-  });
-});

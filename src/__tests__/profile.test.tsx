@@ -30,7 +30,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import ProfileScreen from '@/app/(tabs)/(profile)/view';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
-import { createQueryClientWrapper } from './test-utils';
+import { createQueryClientWrapper } from '@/testing/test-utils';
 
 const mockUseCreatorProfile = useCreatorProfile as jest.Mock;
 

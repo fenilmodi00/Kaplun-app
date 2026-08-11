@@ -13,7 +13,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useMessages } from '@/hooks/useMessages';
 import { useRealtimeSubscription } from '@/lib/realtime';
 import * as repository from '@/lib/repository';
-import { createQueryClientWrapper } from './test-utils';
+import { createQueryClientWrapper } from '@/testing/test-utils';
 import type { Message } from '@/lib/types';
 
 const mockListMessages = repository.listMessages as jest.Mock;

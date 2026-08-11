@@ -33,7 +33,7 @@ import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia } from '@/lib/instagram';
 import { validateAutomationDraft } from '@/lib/automation-validation';
 import type { AutomationDraft } from '@/lib/automation-validation';
-import { createQueryClientWrapper } from './test-utils';
+import { createQueryClientWrapper } from '@/testing/test-utils';
 
 const mockUseAutomations = useAutomations as jest.Mock;
 const mockUseAutomationGate = useAutomationGate as jest.Mock;

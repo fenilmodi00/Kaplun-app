@@ -22,7 +22,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useAutomations, useAutomationLogs } from '@/hooks/useAutomations';
 import { useRealtimeSubscription } from '@/lib/realtime';
 import * as automations from '@/lib/automations';
-import { createQueryClientWrapper } from './test-utils';
+import { createQueryClientWrapper } from '@/testing/test-utils';
 import type { Automation, AutomationLog } from '@/lib/automations';
 
 const mockListAutomations = automations.listAutomations as jest.Mock;

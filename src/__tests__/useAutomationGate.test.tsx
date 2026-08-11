@@ -21,7 +21,7 @@ import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { getCreatorByClerkId } from '@/lib/repository';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
-import { createQueryClientWrapper } from './test-utils';
+import { createQueryClientWrapper } from '@/testing/test-utils';
 
 const mockGetCreatorByClerkId = getCreatorByClerkId as jest.Mock;
 const mockStartInstagramOAuth = startInstagramOAuth as jest.Mock;
