@@ -133,6 +133,15 @@ npx jest --testPathIgnorePatterns=integration
 
 A known pre-existing failure exists in `src/__tests__/ui-components.test.tsx` (two `Input` style assertions fail because the mocked CSS runtime flattens style arrays differently). All other suites pass.
 
+### Native dependencies
+
+Direct native deps (custom dev client, not Expo Go): `@react-native-community/netinfo`, `react-native-gesture-handler`, `react-native-pager-view`, `@shopify/react-native-skia`.
+
+- **Rule:** adding any new native package requires a new EAS `development` build before device testing. JS-only work can ship via Metro until then.
+- Root wiring lives in `src/app/_layout.tsx`: `GestureHandlerRootView`, React Query `onlineManager` (NetInfo) + `focusManager` (AppState). Offline-first session/auth fixes stay in the `offline-first-p0` plan — do not duplicate NetInfo install/wiring there.
+- PagerView and Skia are installed but unused in UI; import the packages directly when building features (no wrapper until needed).
+- PanelUI / Uniwind are **not** adopted; NativeWind + Clay stay.
+
 ### Backend (api-go)
 
 ```bash

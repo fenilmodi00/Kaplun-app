@@ -22,7 +22,7 @@ No `+not-found.tsx`, no modals, no catch-alls.
 
 ## ROOT LAYOUT (`_layout.tsx`)
 
-Provider stack, outer → inner: `SafeAreaProvider` → `PersistQueryClientProvider` (`queryClient` + `persistOptions`) → `SessionProvider` → `BridgeProvider` → `ThemeVariablesProvider` (NativeWind `VariableContextProvider` fed by `cssVariablesForScheme()`; no-op on web) → `RootNavigator`.
+Provider stack, outer → inner: `GestureHandlerRootView` → `SafeAreaProvider` → `PersistQueryClientProvider` (`queryClient` + `persistOptions`) → `SessionProvider` → `BridgeProvider` → `ThemeVariablesProvider` (NativeWind `VariableContextProvider` fed by `cssVariablesForScheme()`; no-op on web) → `RootNavigator`. Module-level React Query `onlineManager` (NetInfo) + `focusManager` (AppState) live at the top of `_layout.tsx`.
 
 - **Auth gate** — `Stack.Protected guard={!!session}` for `(tabs)`, `guard={!session}` for `sign-in`. No imperative `<Redirect>` logic.
 - **Splash** — while fonts/session load, renders a centered `ClaySpinner` on the canvas color. No `expo-splash-screen` native control.
