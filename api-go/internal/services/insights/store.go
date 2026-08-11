@@ -44,4 +44,20 @@ type Store interface {
 	// GetCreatorByIGUserID returns the creator row matching the given
 	// Instagram professional user id, or an empty CreatorRow when none exists.
 	GetCreatorByIGUserID(ctx context.Context, igUserID string) (*CreatorRow, error)
+
+	// ListCreatorMedia returns the stored media rows (with insights when
+	// available) for one creator, newest first by posted_at.
+	ListCreatorMedia(ctx context.Context, creatorRowID string) ([]MediaItemWithInsights, error)
+
+	// ListInsightDays returns the persisted day-series rows for one creator,
+	// ordered by date ascending.
+	ListInsightDays(ctx context.Context, creatorRowID string) ([]InsightDay, error)
+
+	// ListOnlineFollowers returns the online-followers hour distribution
+	// for one creator, ordered by hour_bucket ascending.
+	ListOnlineFollowers(ctx context.Context, creatorRowID string) ([]OnlineFollowers, error)
+
+	// GetCreatorDerived reads the creator row (derived columns + profile
+	// fields) as a raw map. The caller extracts the keys it needs.
+	GetCreatorDerived(ctx context.Context, creatorRowID string) (map[string]any, error)
 }

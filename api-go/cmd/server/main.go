@@ -25,6 +25,7 @@ import (
 	"kaplun/api-go/internal/services/automations"
 	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/services/oauth"
+	"kaplun/api-go/internal/services/profilescore"
 	"kaplun/api-go/internal/services/reconcile"
 	"kaplun/api-go/internal/store"
 	"kaplun/api-go/internal/worker"
@@ -293,6 +294,35 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 	if autoStore != nil && deps.AppwriteAuth != nil {
 		deps.Automations = handlers.NewAutomationsHandler(automations.NewService(autoStore))
 		logger.Info("route enabled", "path", "/automations/*")
+	}
+
+	if awClient != nil && insightsStore != nil && cfg.AppwriteProfileReportsTableID != "" && deps.AppwriteAuth != nil {
+		var llmClient profilescore.LLMClient
+		if cfg.LLMAPIKey != "" {
+			llmClient = profilescore.NewOpenAIClient(profilescore.OpenAIConfig{
+				BaseURL: cfg.LLMBaseURL,
+				APIKey:  cfg.LLMAPIKey,
+				Model:   cfg.LLMModel,
+				Timeout: time.Duration(cfg.LLMTimeoutSeconds) * time.Second,
+			})
+		}
+		reportStore := newProfileReportStore(awClient, cfg.AppwriteProfileReportsTableID)
+		lookup := &creatorLookupAdapter{client: awClient, creatorsTableID: cfg.AppwriteCreatorsTableID}
+		reportSvc := profilescore.NewReportService(profilescore.ReportServiceDeps{
+			Insights: insightsStore,
+			LLM:      llmClient,
+			Store:    reportStore,
+			Lookup:   lookup,
+			Log:      logger,
+		})
+		deps.Reports = handlers.NewReportsHandler(reportSvc)
+		if llmClient != nil {
+			logger.Info("route enabled", "path", "/reports/profile/* (LLM wired)")
+		} else {
+			logger.Warn("route enabled", "path", "/reports/profile/* (LLM not configured — set LLM_API_KEY)")
+		}
+	} else if awClient != nil && cfg.AppwriteProfileReportsTableID == "" {
+		logger.Warn("reports disabled: set APPWRITE_PROFILE_REPORTS_TABLE_ID")
 	}
 
 	if cfg.WebhookVerifyToken != "" {

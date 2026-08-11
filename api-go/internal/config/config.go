@@ -56,6 +56,13 @@ type Config struct {
 	WorkerPoolSize     int // concurrent job workers (bulkhead against Meta/Appwrite rate limits)
 	WorkerQueueSize   int // buffered job queue depth before ErrPoolFull
 	SweeperIntervalMS int // sweeper tick interval in milliseconds
+
+	// Profile Score reports — LLM + cache table
+	LLMBaseURL                  string
+	LLMModel                    string
+	LLMAPIKey                   string
+	LLMTimeoutSeconds           int
+	AppwriteProfileReportsTableID string
 }
 
 // Load reads configuration from the process environment.
@@ -156,6 +163,17 @@ func FromMap(values map[string]string) (Config, error) {
 	}
 	cfg.SweeperIntervalMS = sweeperMS
 
+	cfg.LLMBaseURL = strings.TrimSpace(values["LLM_BASE_URL"])
+	cfg.LLMModel = strings.TrimSpace(values["LLM_MODEL"])
+	cfg.LLMAPIKey = strings.TrimSpace(values["LLM_API_KEY"])
+	cfg.AppwriteProfileReportsTableID = strings.TrimSpace(values["APPWRITE_PROFILE_REPORTS_TABLE_ID"])
+
+	llmTimeout, err := parseIntDefault(values["LLM_TIMEOUT_SECONDS"], 30)
+	if err != nil {
+		return Config{}, fmt.Errorf("LLM_TIMEOUT_SECONDS: %w", err)
+	}
+	cfg.LLMTimeoutSeconds = llmTimeout
+
 	return cfg, nil
 }
 
@@ -219,6 +237,11 @@ func envMap() map[string]string {
 		"WORKER_POOL_SIZE",
 		"WORKER_QUEUE_SIZE",
 		"SWEEPER_INTERVAL_MS",
+		"LLM_BASE_URL",
+		"LLM_MODEL",
+		"LLM_API_KEY",
+		"LLM_TIMEOUT_SECONDS",
+		"APPWRITE_PROFILE_REPORTS_TABLE_ID",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {

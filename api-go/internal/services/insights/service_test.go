@@ -314,6 +314,22 @@ func (f *fakeStore) GetCreatorByIGUserID(_ context.Context, igUserID string) (*i
 	return f.creatorsByIGUserID[igUserID], nil
 }
 
+func (f *fakeStore) ListCreatorMedia(_ context.Context, _ string) ([]insights.MediaItemWithInsights, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) ListInsightDays(_ context.Context, _ string) ([]insights.InsightDay, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) ListOnlineFollowers(_ context.Context, _ string) ([]insights.OnlineFollowers, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetCreatorDerived(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -370,11 +386,15 @@ func insightDaysFor(offsets ...int) []insights.InsightDay {
 }
 
 // happyFixture returns a 200-follower creator with one REELS and one FEED
-// media item, both with insights, a 4-entry day series (today + 3 complete
+// media item, both with insights, a 31-entry day series (today + 30 complete
 // days), window totals, and one breakdown per demographics metric.
 func happyFixture() (*fakeGraphClient, *fakeStore) {
 	ts := func(daysAgo int) string {
 		return time.Now().UTC().AddDate(0, 0, -daysAgo).Format(time.RFC3339)
+	}
+	dayOffsets := make([]int, 0, 31)
+	for i := 0; i >= -30; i-- {
+		dayOffsets = append(dayOffsets, i)
 	}
 	client := &fakeGraphClient{
 		profile: &insights.CreatorProfile{
@@ -392,8 +412,8 @@ func happyFixture() (*fakeGraphClient, *fakeStore) {
 			"m-reel": {Views: 1000, Reach: 900, Shares: 5},
 			"m-feed": {Views: 300, Reach: 250, Saved: 7},
 		},
-		daySeries: insightDaysFor(0, -1, -2, -3),
-		totals:    map[string]int64{"reach": 5000, "total_interactions": 250},
+		daySeries: insightDaysFor(dayOffsets...),
+		totals:    map[string]int64{"reach": 5000, "total_interactions": 250, "profile_views": 1200, "profile_links_taps": 45},
 		demographics: map[string][]insights.DemographicBreakdown{
 			"follower_demographics": {
 				{Metric: "follower_demographics", Breakdown: "age", DimensionValue: "25-34", Value: 120, Timeframe: insights.DemographicsTimeframe},
@@ -430,7 +450,7 @@ func TestSyncCreator_HappyPath(t *testing.T) {
 	if res.MediaUpserted != 2 {
 		t.Errorf("MediaUpserted = %d, want 2", res.MediaUpserted)
 	}
-	// Day series holds today + 3 complete days; only the 3 complete days upsert.
+	// Day series holds today + 30 complete days; only the 30 complete days upsert.
 	if res.InsightDaysUpserted != insights.InsightDayUpsertWindow {
 		t.Errorf("InsightDaysUpserted = %d, want %d", res.InsightDaysUpserted, insights.InsightDayUpsertWindow)
 	}
@@ -449,8 +469,8 @@ func TestSyncCreator_HappyPath(t *testing.T) {
 	if countCalls(client.calls, "GetDemographics") != 3 {
 		t.Errorf("GetDemographics calls = %d, want 3", countCalls(client.calls, "GetDemographics"))
 	}
-	if got := len(store.insightDays); got != 3 {
-		t.Errorf("upserted insight days = %d, want 3", got)
+	if got := len(store.insightDays); got != insights.InsightDayUpsertWindow {
+		t.Errorf("upserted insight days = %d, want %d", got, insights.InsightDayUpsertWindow)
 	}
 	if got := len(store.demographics); got != 3 {
 		t.Errorf("upserted demographics = %d, want 3", got)
@@ -490,6 +510,12 @@ func TestSyncCreator_HappyPath(t *testing.T) {
 	}
 	if got := st.derived["reels_count_7_days"]; got != 1 {
 		t.Errorf("derived[reels_count_7_days] = %v, want 1", got)
+	}
+	if got := st.derived["profile_views_window"]; got != int64(1200) {
+		t.Errorf("derived[profile_views_window] = %v (%T), want int64(1200)", got, got)
+	}
+	if got := st.derived["profile_link_taps_window"]; got != int64(45) {
+		t.Errorf("derived[profile_link_taps_window] = %v (%T), want int64(45)", got, got)
 	}
 }
 

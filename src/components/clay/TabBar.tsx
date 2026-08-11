@@ -1,5 +1,5 @@
 import { View, Pressable } from '@/tw';
-import { SymbolIcon } from '@/components/symbol-icon';
+import { SymbolIcon, type SymbolName } from '@/components/symbol-icon';
 import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,11 +15,12 @@ import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 /** Approx pill height (padding + 44pt targets) at the 1.1x resting scale, for the bottom edge scrim. */
 const PILL_HEIGHT = 66;
 
-const TAB_NAMES: Record<string, 'home' | 'automate' | 'messages' | 'insights'> = {
+const TAB_NAMES: Record<string, SymbolName> = {
   '(home)': 'home',
   '(automate)': 'automate',
   '(messages)': 'messages',
   '(insights)': 'insights',
+  '(score)': 'score',
 };
 
 const TABS = [
@@ -27,6 +28,7 @@ const TABS = [
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
   { name: '(insights)', label: 'Insights' },
+  { name: '(score)', label: 'Score' },
 ];
 
 const ICON_LAYER = {

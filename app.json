@@ -40,7 +40,8 @@
           "enforceContrast": false
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

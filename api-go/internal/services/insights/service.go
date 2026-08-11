@@ -16,7 +16,7 @@ import (
 
 const (
 	// MediaSyncLimit is how many recent media objects each sync refreshes.
-	MediaSyncLimit = 10
+	MediaSyncLimit = 25
 	// maxInsightRetries caps how many times we retry a single media's insights
 	// after discovering new unsupported metrics. Prevents infinite loops on
 	// pathological Meta errors.
@@ -27,7 +27,7 @@ const (
 	// sync re-upserts. Meta revises day metrics for a couple of days after
 	// the day closes, so the fixed trailing window overwrites stale figures
 	// without rewriting the whole series.
-	InsightDayUpsertWindow = 3
+	InsightDayUpsertWindow = 30
 	// MinFollowersForDemographics is Meta's threshold — the audience
 	// demographics endpoints error below 100 followers.
 	MinFollowersForDemographics = 100
@@ -467,6 +467,9 @@ func computeDerived(items []MediaItemWithInsights, totals map[string]int64, now 
 		engagementRate = float64(totals["total_interactions"]) / float64(reach)
 	}
 	derived["engagement_rate"] = engagementRate
+
+	derived["profile_views_window"] = totals["profile_views"]
+	derived["profile_link_taps_window"] = totals["profile_links_taps"]
 
 	return derived
 }

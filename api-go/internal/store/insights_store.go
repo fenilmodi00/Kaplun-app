@@ -56,6 +56,8 @@ var derivedCreatorColumns = []string{
 	"avg_comments",
 	"max_likes",
 	"engagement_rate",
+	"profile_views_window",
+	"profile_link_taps_window",
 	"last_post_at",
 	"top_cities",
 	"top_age_groups",
@@ -309,6 +311,156 @@ func (s *InsightsStore) UpsertMentionedMedia(ctx context.Context, creatorRowID s
 		}
 	})
 	return err
+}
+
+func (s *InsightsStore) ListCreatorMedia(ctx context.Context, creatorRowID string) ([]insights.MediaItemWithInsights, error) {
+	out := []insights.MediaItemWithInsights{}
+	for offset := 0; ; offset += insightsPageSize {
+		result, err := s.client.ListRows(ctx, s.tables.CreatorMedia, []string{
+			appwrite.QueryEqual("creator_row_id", creatorRowID),
+			appwrite.QueryOrderDesc("posted_at"),
+			appwrite.QueryLimit(insightsPageSize),
+			appwrite.QueryOffset(offset),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range result.Rows {
+			out = append(out, decodeMediaItem(row))
+		}
+		if len(result.Rows) < insightsPageSize {
+			return out, nil
+		}
+	}
+}
+
+func (s *InsightsStore) ListInsightDays(ctx context.Context, creatorRowID string) ([]insights.InsightDay, error) {
+	out := []insights.InsightDay{}
+	for offset := 0; ; offset += insightsPageSize {
+		result, err := s.client.ListRows(ctx, s.tables.CreatorInsightDays, []string{
+			appwrite.QueryEqual("creator_row_id", creatorRowID),
+			appwrite.QueryOrderAsc("date"),
+			appwrite.QueryLimit(insightsPageSize),
+			appwrite.QueryOffset(offset),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range result.Rows {
+			out = append(out, insights.InsightDay{
+				Date:          stringField(row, "date"),
+				Reach:         optIntPtr(row["reach"]),
+				FollowerCount: optIntPtr(row["follower_count"]),
+				Views:         optIntPtr(row["views"]),
+			})
+		}
+		if len(result.Rows) < insightsPageSize {
+			return out, nil
+		}
+	}
+}
+
+func (s *InsightsStore) ListOnlineFollowers(ctx context.Context, creatorRowID string) ([]insights.OnlineFollowers, error) {
+	result, err := s.client.ListRows(ctx, s.tables.CreatorOnlineFollowers, []string{
+		appwrite.QueryEqual("creator_row_id", creatorRowID),
+		appwrite.QueryOrderAsc("hour_bucket"),
+		appwrite.QueryLimit(24),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]insights.OnlineFollowers, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		out = append(out, insights.OnlineFollowers{
+			Hour:  int(int64Field(row, "hour_bucket")),
+			Value: int64Field(row, "value"),
+		})
+	}
+	return out, nil
+}
+
+func (s *InsightsStore) GetCreatorDerived(ctx context.Context, creatorRowID string) (map[string]any, error) {
+	row, err := s.client.GetRow(ctx, s.tables.Creators, creatorRowID)
+	if err != nil {
+		return nil, err
+	}
+	return row, nil
+}
+
+func decodeMediaItem(row map[string]any) insights.MediaItemWithInsights {
+	var item insights.MediaItemWithInsights
+	item.Media.ID = stringField(row, "ig_media_id")
+	item.Media.Caption = stringField(row, "caption")
+	item.Media.MediaType = stringField(row, "media_type")
+	item.Media.MediaProductType = stringField(row, "media_product_type")
+	item.Media.MediaURL = stringField(row, "media_url")
+	item.Media.ThumbnailURL = stringField(row, "thumbnail_url")
+	item.Media.Timestamp = stringField(row, "posted_at")
+	item.Media.Permalink = stringField(row, "permalink")
+	item.Media.LikeCount = int64Field(row, "like_count")
+	item.Media.CommentsCount = int64Field(row, "comments_count")
+
+	if reach, ok := row["reach"]; ok && reach != nil {
+		ins := &insights.MediaInsights{
+			Views:                     int64Field(row, "views"),
+			Reach:                     int64Field(row, "reach"),
+			Saved:                     int64Field(row, "saved"),
+			Shares:                    int64Field(row, "shares"),
+			Reposts:                   int64Field(row, "reposts"),
+			TotalInteractions:         int64Field(row, "total_interactions"),
+			Follows:                   int64Field(row, "follows"),
+			ProfileVisits:             int64Field(row, "profile_visits"),
+			ReelsAvgWatchTimeMs:       int64Field(row, "reels_avg_watch_time_ms"),
+			ReelsVideoViewTotalTimeMs: int64Field(row, "reels_video_view_total_time_ms"),
+			ReelsSkipRate:             float64Field(row, "reels_skip_rate"),
+		}
+		if v := optIntPtr(row["facebook_views"]); v != nil {
+			ins.FacebookViews = v
+		}
+		if v := optIntPtr(row["crossposted_views"]); v != nil {
+			ins.CrosspostedViews = v
+		}
+		item.Insights = ins
+	}
+	return item
+}
+
+func int64Field(row map[string]any, key string) int64 {
+	switch v := row[key].(type) {
+	case float64:
+		return int64(v)
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	}
+	return 0
+}
+
+func float64Field(row map[string]any, key string) float64 {
+	switch v := row[key].(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	}
+	return 0
+}
+
+func optIntPtr(v any) *int64 {
+	switch n := v.(type) {
+	case float64:
+		i := int64(n)
+		return &i
+	case int:
+		i := int64(n)
+		return &i
+	case int64:
+		return &n
+	}
+	return nil
 }
 
 // findRowID returns the $id of the first row matching queries, or "" when no

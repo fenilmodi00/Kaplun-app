@@ -106,7 +106,9 @@ To make growth + format sections non-starved:
 
 ---
 
-## 5. How AI is used
+## 5. How AI is used (hybrid)
+
+**Locked (brainstorm 2026-08-11):** Market as “AI Profile Score.” Internals are **hybrid** — Go owns the number; one LLM call owns coach copy only.
 
 ### Rule: one LLM call, server-side only
 
@@ -114,19 +116,21 @@ To make growth + format sections non-starved:
 OAuth creator
   → ensure insights fresh (inline sync if needed)
   → Go builds compact Metrics Payload (~400 tokens of numbers)
-  → ONE OpenAI-compatible chat completion (JSON object)
-  → Validate + cache in Appwrite profile_reports
+  → Go computes overall_score (0–100, deterministic bands)
+  → ONE OpenAI-compatible chat completion (narrative JSON only)
+  → Merge Go score + LLM fields → validate + cache in Appwrite profile_reports
   → App renders score ceremony
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Go (free)** | Aggregate metrics, language detect, cache, schema validation, clamp strings |
-| **LLM (paid)** | Score + label + summary + strengths/weaknesses + 3 actions in plain English |
+| **Go (free)** | Aggregate metrics, language detect, **overall_score**, cache, schema validation, clamp strings |
+| **LLM (paid)** | `score_label` + summary + strengths/weaknesses + 3 actions in plain English — **not** the number |
 | **App** | Ceremony UI, share image — **never** holds LLM keys |
 
 ### What the LLM must NOT do
 
+- Set or nudge `overall_score` (Go already computed it; prompt may receive the score as input for tone)
 - Call tools / agent loops
 - Invent numbers for `available=false` sections
 - Cite metrics not present in the payload
@@ -134,7 +138,7 @@ OAuth creator
 
 ### Prompt posture
 
-“Instagram growth coach for Indian micro-influencers. Return ONLY JSON. Be specific and encouraging. Tailor when-to-post to the payload window. Every number you cite must appear in the payload.”
+“Instagram growth coach for Indian micro-influencers. Return ONLY JSON for label/summary/strengths/weaknesses/actions. Be specific and encouraging. Tailor when-to-post to the payload window. Every number you cite must appear in the payload. Do not output overall_score.”
 
 ### Config
 
@@ -182,7 +186,13 @@ OAuth creator
 }
 ```
 
-Exactly 3 `action_plan` items preferred. Dropped vs original long report: `content_ideas`, `brand_readiness`, `growth_tip_30d`, `posting_time_advice` as separate essay (fold into `when_to_post` on actions).
+`overall_score` is written by **Go** at merge time (not trusted from the model). Exactly 3 `action_plan` items preferred. Dropped vs original long report: `content_ideas`, `brand_readiness`, `growth_tip_30d`, `posting_time_advice` as separate essay (fold into `when_to_post` on actions).
+
+### UX / surface locks (2026-08-11)
+
+- Fifth tab **Score**; empty state + **Generate my score** CTA (no auto-generate).
+- Full ceremony on generate/refresh; skip ring on cached reopen.
+- Cache 7 days + manual Refresh always regenerates.
 
 ---
 

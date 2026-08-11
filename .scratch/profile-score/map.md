@@ -2,32 +2,37 @@
 
 ## Destination
 
-A locked, implementable design for **Profile Score**: OAuth-gated in-app scorecard (data contracts, AI role, premium ceremony UX, performance/cost) ready to hand to an implementation plan — not the build itself.
+Ship **Profile Score** as an OAuth-gated acquisition + retention gimmick: hybrid scorecard (Go owns 0–100, one LLM owns English coach copy), fifth **Score** tab, premium ceremony, share card — implementable via the ready-for-agent tickets below.
 
 ## Notes
 
 - **Domain:** Instagram creator growth inside Kaplun (Expo + api-go + Appwrite). Glossary: root `CONTEXT.md`.
-- **Standing brief:** [product-brief.md](./product-brief.md) — data inventory, AI usage, UX ceremony, business performance.
-- **Skills:** `/grilling`, `/domain-modeling`, `/research`; after the map clears → `/to-spec` then writing-plans / implement.
+- **Standing brief:** [product-brief.md](./product-brief.md)
 - **Tracker:** local markdown under `.scratch/profile-score/` (see `docs/agents/issue-tracker.md`).
-- **Locked preferences from grilling (2026-08-08…11):**
-  - Dual job: retention + acquisition gimmick; **OAuth-only** unlock (no username teaser).
-  - Approach **1 — Scorecard** (not long report): score + 3 actions + strengths/weaknesses.
-  - Surface: **new bottom tab**, English only for v1.
-  - Premium reveal preferred: Analysis Theater → Score Ring → staggered actions → share card.
-  - Stack: reuse insights pipeline + one server-side OpenAI-compatible LLM call + 7-day Appwrite cache.
-  - No Python, no LLM keys in app, no agent loops, no new Meta scopes.
+- **Approach:** Hybrid scorecard (Approach 1) — market as “AI Profile Score”; model is coach, not judge.
 
 ## Decisions so far
 
-- [What insights data already exists vs Profile Score gaps](./issues/01-insights-data-inventory.md) — Pipeline has derived stats, last-10 media insights, demos/online_followers (≥100); funnel totals fetched but not persisted; day upsert only 3 days; need sync window/media limit bumps + language/funnel persistence.
+- [Insights data inventory](./issues/01-insights-data-inventory.md) — resolved research (gaps + sync upgrades needed).
+- **Marketing:** ads/App Store may say “AI Profile Score”; internals are hybrid rules + one LLM narrative call.
+- **Score composition:** Go deterministic `overall_score`; LLM writes label/summary/strengths/weaknesses/3 actions only.
+- **UX:** full Analysis Theater → Score Ring → staggered cards → Share; Generate via explicit CTA (no auto-start); skip ring on cache reopen.
+- **Surface:** fifth bottom tab **Score** after Insights; English only v1.
+- **Cache:** 7-day report cache; manual Refresh always regenerates.
+- **Sync upgrades:** persist funnel windows; day upsert 3→30; media limit 10→25.
+- **Schema:** slim scorecard JSON; score field owned by Go at merge time.
+- **Non-goals:** public username teaser, fake-follower ML, paywall, Indic languages in v1, agent loops, LLM keys in app.
 
-## Not yet specified
+## Frontier
 
-- Exact share-card visual layout (Stories 9:16 vs square) once UX + schema lock.
-- Whether score **improves** trigger a second celebration (Duolingo milestone style) vs only first generate.
-- Post-v1 Indic language wave and marketing landing page (out of this destination until redrawn).
-- How Home/onboarding copy mentions Score without a public analyzer.
+Work tickets whose blockers are done, in number order:
+
+1. [02 — Insights sync upgrades](./issues/02-insights-sync-upgrades.md)
+2. [03 — Metrics payload + deterministic score](./issues/03-metrics-payload-and-score.md)
+3. [04 — Generate / latest API + hybrid cache](./issues/04-generate-latest-api-hybrid-cache.md)
+4. [05 — Score tab shell + Generate CTA](./issues/05-score-tab-shell-generate-cta.md)
+5. [06 — Premium ceremony](./issues/06-premium-ceremony.md)
+6. [07 — Share score card](./issues/07-share-score-card.md)
 
 ## Out of scope
 
@@ -37,3 +42,4 @@ A locked, implementable design for **Profile Score**: OAuth-gated in-app scoreca
 - Replacing the Insights charts tab.
 - Gujarati/Hinglish report generation in this effort.
 - Multi-agent LLM tool loops.
+- Pure-LLM scoring (drift risk) or rules-only v1 (deferred; hybrid is locked).

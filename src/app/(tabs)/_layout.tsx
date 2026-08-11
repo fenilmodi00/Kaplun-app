@@ -21,6 +21,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="(automate)" options={{ title: 'Automate' }} />
         <Tabs.Screen name="(messages)" options={{ title: 'Messages' }} />
         <Tabs.Screen name="(insights)" options={{ title: 'Insights' }} />
+        <Tabs.Screen name="(score)" options={{ title: 'Score' }} />
       </Tabs>
       <EdgeBlur
         position="top"

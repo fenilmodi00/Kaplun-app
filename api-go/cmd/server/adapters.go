@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"kaplun/api-go/internal/handlers"
+	"kaplun/api-go/internal/platform/appwrite"
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/services/insights"
 	"kaplun/api-go/internal/services/keywords"
+	"kaplun/api-go/internal/services/profilescore"
 	"kaplun/api-go/internal/services/reconcile"
 )
 
@@ -268,4 +270,102 @@ func startInsightsSyncLoop(ctx context.Context, svc *insights.Service, logger *s
 		}
 	}()
 	logger.Info("insights sync loop started", "interval", "24h")
+}
+
+// profileReportStore implements profilescore.ReportStore over Appwrite TablesDB.
+type profileReportStore struct {
+	client  *appwrite.Client
+	tableID string
+	now     func() time.Time
+}
+
+func newProfileReportStore(client *appwrite.Client, tableID string) *profileReportStore {
+	return &profileReportStore{
+		client:  client,
+		tableID: tableID,
+		now:     func() time.Time { return time.Now().UTC() },
+	}
+}
+
+func (s *profileReportStore) CacheReport(ctx context.Context, creatorRowID string, report profilescore.Report, model string, tokens int) error {
+	reportJSON, err := profilescore.MarshalReport(report)
+	if err != nil {
+		return fmt.Errorf("marshal report: %w", err)
+	}
+	nowISO := s.now().Format(time.RFC3339Nano)
+	_, err = s.client.CreateRow(ctx, s.tableID, appwrite.UniqueID, map[string]any{
+		"creator_row_id": creatorRowID,
+		"language":       "en",
+		"report_json":    reportJSON,
+		"overall_score":  report.OverallScore,
+		"score_label":    report.ScoreLabel,
+		"llm_model":      model,
+		"tokens_used":    tokens,
+		"created_at":     nowISO,
+	}, nil)
+	return err
+}
+
+func (s *profileReportStore) GetLatestReport(ctx context.Context, creatorRowID string) (*profilescore.CachedReport, error) {
+	result, err := s.client.ListRows(ctx, s.tableID, []string{
+		appwrite.QueryEqual("creator_row_id", creatorRowID),
+		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Rows) == 0 {
+		return nil, nil
+	}
+	row := result.Rows[0]
+	reportJSON, _ := row["report_json"].(string)
+	report, err := profilescore.UnmarshalReport(reportJSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode cached report: %w", err)
+	}
+	createdAt, _ := row["created_at"].(string)
+	model, _ := row["llm_model"].(string)
+	tokens := int(rowToInt64(row, "tokens_used"))
+	return &profilescore.CachedReport{
+		Report:    report,
+		CreatedAt: createdAt,
+		Model:     model,
+		Tokens:    tokens,
+	}, nil
+}
+
+// creatorLookupAdapter implements profilescore.CreatorLookup by querying the
+// creators table by clerk_user_id (Appwrite auth user $id).
+type creatorLookupAdapter struct {
+	client          *appwrite.Client
+	creatorsTableID string
+}
+
+func (a *creatorLookupAdapter) GetCreatorRowID(ctx context.Context, clerkUserID string) (string, error) {
+	result, err := a.client.ListRows(ctx, a.creatorsTableID, []string{
+		appwrite.QueryEqual("clerk_user_id", clerkUserID),
+		appwrite.QueryLimit(1),
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(result.Rows) == 0 {
+		return "", nil
+	}
+	id, _ := result.Rows[0]["$id"].(string)
+	return id, nil
+}
+
+// rowToInt64 extracts an int64 from an Appwrite row map (numbers arrive as float64).
+func rowToInt64(row map[string]any, key string) int64 {
+	switch v := row[key].(type) {
+	case float64:
+		return int64(v)
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	}
+	return 0
 }

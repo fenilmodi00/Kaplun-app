@@ -474,3 +474,15 @@ func (f *fakeMentionStore) UpsertDemographics(context.Context, string, []insight
 func (f *fakeMentionStore) UpsertOnlineFollowers(context.Context, string, []insights.OnlineFollowers) error {
 	return nil
 }
+func (f *fakeMentionStore) ListCreatorMedia(context.Context, string) ([]insights.MediaItemWithInsights, error) {
+	return nil, nil
+}
+func (f *fakeMentionStore) ListInsightDays(context.Context, string) ([]insights.InsightDay, error) {
+	return nil, nil
+}
+func (f *fakeMentionStore) ListOnlineFollowers(context.Context, string) ([]insights.OnlineFollowers, error) {
+	return nil, nil
+}
+func (f *fakeMentionStore) GetCreatorDerived(context.Context, string) (map[string]any, error) {
+	return nil, nil
+}

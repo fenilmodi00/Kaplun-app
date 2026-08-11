@@ -7,6 +7,7 @@ export type SymbolName =
   | 'automate'
   | 'messages'
   | 'insights'
+  | 'score'
   | 'profile';
 
 const SF_SYMBOLS: Record<SymbolName, { inactive: string; active: string }> = {
@@ -14,6 +15,7 @@ const SF_SYMBOLS: Record<SymbolName, { inactive: string; active: string }> = {
   automate: { inactive: 'bolt', active: 'bolt.fill' },
   messages: { inactive: 'bubble.left', active: 'bubble.left.fill' },
   insights: { inactive: 'chart.bar', active: 'chart.bar.fill' },
+  score: { inactive: 'gauge.with.dots.needle.33percent', active: 'gauge.with.dots.needle.67percent' },
   profile: { inactive: 'person', active: 'person.fill' },
 };
 
@@ -25,6 +27,7 @@ const IONICONS_MAP: Record<
   automate: { inactive: 'flash-outline', active: 'flash' },
   messages: { inactive: 'chatbubble-outline', active: 'chatbubble' },
   insights: { inactive: 'stats-chart-outline', active: 'stats-chart' },
+  score: { inactive: 'speedometer-outline', active: 'speedometer' },
   profile: { inactive: 'person-outline', active: 'person' },
 };
 
