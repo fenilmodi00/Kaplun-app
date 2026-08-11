@@ -44,7 +44,7 @@ function MessageBubble({ message }: { message: Message }) {
   }
 
   return (
-      <Reanimated.View entering={Reanimated.SlideInUp}>
+    <Reanimated.View entering={Reanimated.SlideInUp}>
       <View
         className={cn(
           'my-1 px-4',
