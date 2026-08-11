@@ -125,6 +125,24 @@ export async function listThreads(
   return result.rows as unknown as DealThread[];
 }
 
+/**
+ * Fetch a single deal thread by row ID.
+ * Rejects when the row is missing — callers treat thread details as best-effort.
+ */
+export async function getThreadById(threadId: string): Promise<DealThread> {
+  const result = await executeWithRetryAndTimeout(
+    () =>
+      tablesDB.getRow({
+        databaseId: DATABASE_ID,
+        tableId: TABLES.DEAL_THREADS,
+        rowId: threadId,
+      }),
+    DEFAULT_TIMEOUT_MS,
+  );
+
+  return result as unknown as DealThread;
+}
+
 // ── Messages ─────────────────────────────────────────────────────────────
 
 /**

@@ -8,8 +8,7 @@ import { cn, clayInput } from '@/tw/cn';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ErrorState } from '@/components/ui/error-state';
 import { useMessages } from '@/hooks/useMessages';
-import { tablesDB } from '@/lib/appwrite';
-import { DATABASE_ID, TABLES } from '@/lib/constants';
+import { getThreadById } from '@/lib/repository';
 import { formatRelativeTime } from '@/lib/format-time';
 import type { DealThread, Message } from '@/lib/types';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
@@ -45,7 +44,7 @@ function MessageBubble({ message }: { message: Message }) {
   }
 
   return (
-    <Reanimated.View entering={Reanimated.SlideInUp as any}>
+      <Reanimated.View entering={Reanimated.SlideInUp}>
       <View
         className={cn(
           'my-1 px-4',
@@ -96,12 +95,7 @@ export default function ThreadScreen() {
     if (!threadId) return;
     (async () => {
       try {
-        const result = await tablesDB.getRow({
-          databaseId: DATABASE_ID,
-          tableId: TABLES.DEAL_THREADS,
-          rowId: threadId,
-        });
-        setThread(result as unknown as DealThread);
+        setThread(await getThreadById(threadId));
       } catch {
         // Thread details are not critical for rendering messages
       }
