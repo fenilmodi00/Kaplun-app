@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 
 export const unstable_settings = {
-  anchor: 'index',
+  anchor: 'dashboard',
 };
 
 export default function InsightsLayout() {

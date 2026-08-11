@@ -11,7 +11,7 @@ jest.mock('@/hooks/useThreads', () => ({
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import MessagesScreen from '@/app/(tabs)/(messages)/index';
+import MessagesScreen from '@/app/(tabs)/(messages)/threads';
 import { useThreads } from '@/hooks/useThreads';
 
 const mockUseThreads = useThreads as jest.Mock;

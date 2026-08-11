@@ -28,7 +28,7 @@ jest.mock('@/lib/instagram', () => ({
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import ProfileScreen from '@/app/(tabs)/(profile)/index';
+import ProfileScreen from '@/app/(tabs)/(profile)/view';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 import { createQueryClientWrapper } from './test-utils';
 

@@ -9,13 +9,13 @@ _layout.tsx                  ROOT: provider stack + auth gate + splash
 sign-in.tsx                  /sign-in — thin wrapper around @/components/auth/AuthScreen
 (tabs)/_layout.tsx           4 tabs ONLY: (home), (automate), (messages), (insights)
 (tabs)/(home)/index.tsx      dashboard, 667 lines — owns the ONLY navigation to profile
-(tabs)/(automate)/index.tsx  automations list, 368
+(tabs)/(automate)/list.tsx    automations list, 368
 (tabs)/(automate)/new.tsx    creation form, 1272 — largest screen in the repo
 (tabs)/(automate)/[automationId].tsx  detail, 690 — raw-RN StyleSheet exception
-(tabs)/(messages)/index.tsx  threads list, 192
+(tabs)/(messages)/threads.tsx  threads list, 192
 (tabs)/(messages)/[threadId].tsx      chat, 264 — @/tw + inverted FlatList
-(tabs)/(insights)/index.tsx  Instagram insights, 646
-(tabs)/(profile)/index.tsx   profile + theme toggle, 701 — NOT a tab
+(tabs)/(insights)/dashboard.tsx  Instagram insights, 646
+(tabs)/(profile)/view.tsx    profile + theme toggle, 701 — NOT a tab
 ```
 
 No `+not-found.tsx`, no modals, no catch-alls.
@@ -31,11 +31,11 @@ Provider stack, outer → inner: `GestureHandlerRootView` → `SafeAreaProvider`
 ## CONVENTIONS
 
 - **Profile is a hidden route** — `(profile)` is not registered in the tab bar. Reach it only via the home header avatar: `router.push('/(tabs)/(profile)' as never)`. The `as never` cast is required because typed routes don't know the unregistered group.
-- **Group layouts are pass-throughs** — every group `_layout.tsx` is `<Stack screenOptions={{ headerShown: false }} />`. Only `(automate)/_layout.tsx` declares its child screens explicitly.
+- **Group layouts have named-route anchors** — only `(home)` has an `index.tsx` (owns `/`). All other groups use named routes (`list`, `threads`, `dashboard`, `view`) with `unstable_settings = { anchor: '<name>' }` so they don't compete for `/` in the linking config.
 - **No native headers** — screens render their own back chevron + `useRouter().back()`.
 - **Safe-area padding** — `useSafeAreaInsets()` + `TAB_BAR_OVERLAY` (from `@/components/screen-shell`) added to bottom padding so content clears the floating glass tab bar.
 - **Dynamic params** — `useLocalSearchParams<{...}>()`; `[automationId]` also reads an optional `created` param (`'live' | 'paused'`) for post-creation banners.
-- **Two styling regimes** — `@/tw` className is the standard; raw RN + `StyleSheet.create()` + `useThemeColors()` is the documented escape hatch (`[automationId].tsx`, `(profile)/index.tsx`) for Android `useCssElement` layout bugs. See `src/tw/AGENTS.md`.
+- **Two styling regimes** — `@/tw` className is the standard; raw RN + `StyleSheet.create()` + `useThemeColors()` is the documented escape hatch (`[automationId].tsx`, `(profile)/view.tsx`) for Android `useCssElement` layout bugs. See `src/tw/AGENTS.md`.
 
 ## GOTCHAS
 

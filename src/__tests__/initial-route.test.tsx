@@ -2,15 +2,13 @@
  * Regression: cold start and post-signup must land on the Home tab.
  *
  * Root cause: on native, getInitialURL() returns the app scheme URL
- * (e.g. kaplun://), which triggers getStateFromPath('/'). With multiple
- * tab groups each owning an index.tsx, every group index maps to "/" and
+ * (e.g. kaplun://), which triggers getStateFromPath('/'). When multiple
+ * tab groups each own an index.tsx, every group index maps to "/" and
  * the linking config resolves to the first alphabetical group — (automate).
- * The TabRouter's initialRouteName prop and the redirect route at
- * (tabs)/index.tsx are both bypassed because the initial state comes from
- * URL resolution, not from the router defaults.
  *
- * Fix: useLayoutEffect in TabsLayout checks on first mount whether pathname
- * is "/" (root, no real deep link) and force-replaces to /(tabs)/(home).
+ * Structural fix: only (home) has an index.tsx. All other tab groups use
+ * named routes (list, threads, dashboard, view) so their URLs no longer
+ * compete for "/". No redirect route, no useLayoutEffect, no anchor hacks.
  *
  * The route map below mirrors the real src/app tree (keys extension-free,
  * in Metro's require.context key order) because renderRouter needs an
@@ -30,10 +28,10 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-import React, { useLayoutEffect, useRef } from 'react';
+import React from 'react';
 import { Text } from 'react-native';
 import { renderRouter, screen } from 'expo-router/testing-library';
-import { Stack, Tabs, Redirect, useRouter, usePathname } from 'expo-router';
+import { Stack, Tabs } from 'expo-router';
 
 function marker(label: string) {
   return function Marker() {
@@ -53,32 +51,22 @@ function groupStack(...names: string[]) {
   };
 }
 
+function groupStackWithSettings(names: string[], settings: object) {
+  return {
+    default: groupStack(...names),
+    unstable_settings: settings,
+  };
+}
+
 function TabsLayout() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const initialChecked = useRef(false);
-
-  useLayoutEffect(() => {
-    if (initialChecked.current) return;
-    initialChecked.current = true;
-    if (pathname === '/' || pathname === '') {
-      router.replace('/(tabs)/(home)' as never);
-    }
-  }, [pathname, router]);
-
   return (
-    <Tabs initialRouteName="(home)" screenOptions={{ headerShown: false }}>
+    <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="(home)" />
       <Tabs.Screen name="(automate)" />
       <Tabs.Screen name="(messages)" />
       <Tabs.Screen name="(insights)" />
-      <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>
   );
-}
-
-function TabsIndexRedirect() {
-  return <Redirect href={'/(tabs)/(home)' as never} />;
 }
 
 function RootLayout() {
@@ -94,27 +82,21 @@ function RootLayout() {
   );
 }
 
-const tabsLayoutModule = {
-  default: TabsLayout,
-  unstable_settings: { anchor: '(home)' },
-};
-
 const routes = {
   '(tabs)/(automate)/[automationId]': marker('AUTOMATE_DETAIL'),
-  '(tabs)/(automate)/_layout': groupStack('index', 'new', '[automationId]'),
-  '(tabs)/(automate)/index': marker('AUTOMATE'),
+  '(tabs)/(automate)/_layout': groupStackWithSettings(['list', 'new', '[automationId]'], { anchor: 'list' }),
+  '(tabs)/(automate)/list': marker('AUTOMATE'),
   '(tabs)/(automate)/new': marker('AUTOMATE_NEW'),
-  '(tabs)/(home)/_layout': groupStack('index'),
+  '(tabs)/(home)/_layout': groupStackWithSettings(['index'], { anchor: 'index' }),
   '(tabs)/(home)/index': marker('HOME'),
-  '(tabs)/(insights)/_layout': groupStack('index'),
-  '(tabs)/(insights)/index': marker('INSIGHTS'),
+  '(tabs)/(insights)/_layout': groupStackWithSettings(['index'], { anchor: 'dashboard' }),
+  '(tabs)/(insights)/dashboard': marker('INSIGHTS'),
   '(tabs)/(messages)/[threadId]': marker('THREAD'),
-  '(tabs)/(messages)/_layout': groupStack('index', '[threadId]'),
-  '(tabs)/(messages)/index': marker('MESSAGES'),
-  '(tabs)/(profile)/_layout': groupStack('index'),
-  '(tabs)/(profile)/index': marker('PROFILE'),
-  '(tabs)/_layout': tabsLayoutModule,
-  '(tabs)/index': TabsIndexRedirect,
+  '(tabs)/(messages)/_layout': groupStackWithSettings(['index'], { anchor: 'threads' }),
+  '(tabs)/(messages)/threads': marker('MESSAGES'),
+  '(tabs)/(profile)/_layout': groupStackWithSettings(['index'], { anchor: 'view' }),
+  '(tabs)/(profile)/view': marker('PROFILE'),
+  '(tabs)/_layout': { default: TabsLayout },
   '_layout': {
     default: RootLayout,
     unstable_settings: { anchor: '(tabs)' },

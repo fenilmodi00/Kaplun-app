@@ -28,7 +28,7 @@ jest.mock('@/lib/bridge-context', () => ({
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import AutomateScreen from '@/app/(tabs)/(automate)/index';
+import AutomateScreen from '@/app/(tabs)/(automate)/list';
 import { useAutomations, useOverviewStats } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 

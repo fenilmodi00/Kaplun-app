@@ -38,4 +38,4 @@
 - **NO `expo-image` or RN `Image` direct imports** — use `@/tw/image` for className support.
 - **NO `react-native-reanimated` direct import for `AnimatedView`** — use `@/tw/animated` (platform-specific).
 - **NO `useThemeColors()` in `@/tw` components** — tokens resolve through the CSS runtime; hardcoding or hook-reading colors here double-sources the theme.
-- **Documented raw-RN escape hatches** — `ui/input.tsx`/`ui/textarea.tsx` (Android font metrics), `ClayAnimatedButton`, `ClaySpinner`, `AuthScreen`, `(automate)/[automationId].tsx`, `(profile)/index.tsx`. These use `StyleSheet.create()` + `useThemeColors()`; everything else must stay on `className`.
+- **Documented raw-RN escape hatches** — `ui/input.tsx`/`ui/textarea.tsx` (Android font metrics), `ClayAnimatedButton`, `ClaySpinner`, `AuthScreen`, `(automate)/[automationId].tsx`, `(profile)/view.tsx`. These use `StyleSheet.create()` + `useThemeColors()`; everything else must stay on `className`.
