@@ -78,5 +78,8 @@
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4",
     "typescript": "~5.9.2"
-  }
+  },
+  "trustedDependencies": [
+    "@shopify/react-native-skia"
+  ]
 }

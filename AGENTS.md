@@ -140,6 +140,7 @@ Direct native deps (custom dev client, not Expo Go): `@react-native-community/ne
 - **Rule:** adding any new native package requires a new EAS `development` build before device testing. JS-only work can ship via Metro until then.
 - Root wiring lives in `src/app/_layout.tsx`: `GestureHandlerRootView`, React Query `onlineManager` (NetInfo) + `focusManager` (AppState). Offline-first session/auth fixes stay in the `offline-first-p0` plan — do not duplicate NetInfo install/wiring there.
 - PagerView and Skia are installed but unused in UI; import the packages directly when building features (no wrapper until needed).
+- **Bun + Skia:** `@shopify/react-native-skia` must be in `package.json` `trustedDependencies` so Bun runs its `postinstall` (`install-libs.js`), which copies `libskia.a` into `libs/android`. Without that, EAS Gradle fails with `Could not find libskia.a` / `Run npx install-skia`. After adding Skia: `bun pm trust @shopify/react-native-skia` (or reinstall) once locally.
 - PanelUI / Uniwind are **not** adopted; NativeWind + Clay stay.
 
 ### Backend (api-go)
