@@ -313,3 +313,72 @@ jest.mock('react-native-css', () => ({
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+
+// NetInfo — always online in tests
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    addEventListener: jest.fn(() => jest.fn()),
+    fetch: jest.fn(() => Promise.resolve({ isConnected: true, isInternetReachable: true })),
+  },
+}));
+
+// Gesture handler — passthrough wrapper
+jest.mock('react-native-gesture-handler', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    GestureHandlerRootView: View,
+    Swipeable: View,
+    DrawerLayout: View,
+    State: {},
+    PanGestureHandler: View,
+    TapGestureHandler: View,
+    FlingGestureHandler: View,
+    ForceTouchGestureHandler: View,
+    LongPressGestureHandler: View,
+    NativeViewGestureHandler: View,
+    PinchGestureHandler: View,
+    RotationGestureHandler: View,
+    RawButton: View,
+    BaseButton: View,
+    RectButton: View,
+    BorderlessButton: View,
+    FlatList: View,
+    gestureHandlerRootHOC: (c: unknown) => c,
+    Directions: {},
+  };
+});
+
+// PagerView — stub for future swipe screens
+jest.mock('react-native-pager-view', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    __esModule: true,
+    default: React.forwardRef(
+      (
+        { children, ...props }: { children?: React.ReactNode } & Record<string, unknown>,
+        ref: React.Ref<unknown>,
+      ) => React.createElement(View, { ...props, ref }, children),
+    ),
+  };
+});
+
+// Skia — stub canvas for future GPU work
+jest.mock('@shopify/react-native-skia', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Stub = ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>) =>
+    React.createElement(View, props, children);
+  return {
+    Canvas: Stub,
+    Circle: Stub,
+    Group: Stub,
+    Path: Stub,
+    Skia: { Path: { Make: () => ({}) } },
+    useValue: (v: unknown) => ({ current: v }),
+    useComputedValue: (fn: () => unknown) => ({ current: fn() }),
+  };
+});
+
