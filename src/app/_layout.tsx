@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import '@/global.css';
 import '@/lib/polyfills';
 import { useEffect } from 'react';
@@ -6,12 +7,15 @@ export const unstable_settings = {
   // After sign-in the authenticated shell should start on the tabs navigator.
   anchor: '(tabs)',
 };
-import { View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationBar } from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { onlineManager, focusManager } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
 import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
 import { useClayFonts } from '@/lib/fonts';
@@ -20,6 +24,21 @@ import { ClaySpinner } from '@/components/clay/ClaySpinner';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 import { SessionProvider, useSession } from '@/lib/session-context';
 import { VariableContextProvider } from 'nativewind';
+
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  });
+});
+
+focusManager.setEventListener((handleFocus) => {
+  const subscription = AppState.addEventListener('change', (status) => {
+    if (Platform.OS !== 'web') {
+      handleFocus(status === 'active');
+    }
+  });
+  return () => subscription.remove();
+});
 
 async function applySystemChrome(canvas: string) {
   try {
@@ -87,20 +106,22 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-          <SessionProvider>
-            <BridgeProvider>
-              <ThemeVariablesProvider>
-                <RootNavigator />
-              </ThemeVariablesProvider>
-            </BridgeProvider>
-          </SessionProvider>
-        </PersistQueryClientProvider>
-      </View>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+            <SessionProvider>
+              <BridgeProvider>
+                <ThemeVariablesProvider>
+                  <RootNavigator />
+                </ThemeVariablesProvider>
+              </BridgeProvider>
+            </SessionProvider>
+          </PersistQueryClientProvider>
+        </View>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
