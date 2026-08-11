@@ -88,7 +88,7 @@ jest.mock('@/hooks/useDashboard', () => ({
 
 import React from 'react';
 import { render, waitFor } from '@testing-library/react-native';
-import HomeScreen from '@/app/(tabs)/(home)/index';
+import HomeScreen from '@/screens/home';
 import { fetchProfile } from '@/lib/instagram';
 
 const mockFetchProfile = fetchProfile as jest.Mock;

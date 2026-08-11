@@ -30,7 +30,7 @@ jest.mock('expo-router', () => ({
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import ThreadDetail from '@/app/(tabs)/(messages)/[threadId]';
+import ThreadDetail from '@/screens/messages/thread';
 import { useMessages } from '@/hooks/useMessages';
 import { tablesDB } from '@/lib/appwrite';
 

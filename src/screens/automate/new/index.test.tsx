@@ -27,7 +27,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 import React from 'react';
 import { render, waitFor, fireEvent, cleanup, act } from '@testing-library/react-native';
-import NewAutomationScreen from '@/app/(tabs)/(automate)/new';
+import NewAutomationScreen from '@/screens/automate/new';
 import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { fetchMedia } from '@/lib/instagram';

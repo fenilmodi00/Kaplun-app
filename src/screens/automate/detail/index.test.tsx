@@ -25,7 +25,7 @@ jest.mock('expo-router', () => ({
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-import AutomationDetail from '@/app/(tabs)/(automate)/[automationId]';
+import AutomationDetail from '@/screens/automate/detail';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 
 const mockUseAutomations = useAutomations as jest.Mock;

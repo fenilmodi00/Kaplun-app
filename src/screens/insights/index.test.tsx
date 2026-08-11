@@ -19,7 +19,7 @@ jest.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
 
-import InsightsScreen from '@/app/(tabs)/(insights)/dashboard';
+import InsightsScreen from '@/screens/insights';
 
 const baseProfile = {
   id: '1',
