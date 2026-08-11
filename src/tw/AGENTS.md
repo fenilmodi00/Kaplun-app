@@ -33,9 +33,12 @@
 
 ## ANTI-PATTERNS
 
-- **NO direct `react-native` imports in screens/components** — use `@/tw` primitives so `className` works. Exceptions: `Platform`, `Dimensions`, `FlatList`, `KeyboardAvoidingView` (no `@/tw` equivalents), and components that explicitly avoid NativeWind for Android layout stability (ClayAnimatedButton, ClaySpinner, AuthScreen).
+- **NO direct `react-native` imports in screens/components** — use `@/tw` primitives so `className` works. Allowed without exception: `Platform`, `Dimensions`, `FlatList`, `KeyboardAvoidingView`, `StyleProp`, `ViewStyle`, `NativeScrollEvent` (no `@/tw` equivalents). Files outside this allowed set must be listed in the escape-hatch exception list above.
 - **NO `StyleSheet.create()` in screens** — use Tailwind `className` via `@/tw` primitives. `StyleSheet.create()` bypasses the CSS runtime and breaks theming.
 - **NO `expo-image` or RN `Image` direct imports** — use `@/tw/image` for className support.
 - **NO `react-native-reanimated` direct import for `AnimatedView`** — use `@/tw/animated` (platform-specific).
 - **NO `useThemeColors()` in `@/tw` components** — tokens resolve through the CSS runtime; hardcoding or hook-reading colors here double-sources the theme.
-- **Documented raw-RN escape hatches** — `ui/input.tsx`/`ui/textarea.tsx` (Android font metrics), `ClayAnimatedButton`, `ClaySpinner`, `AuthScreen`, `(automate)/[automationId].tsx`, `(profile)/view.tsx`. These use `StyleSheet.create()` + `useThemeColors()`; everything else must stay on `className`.
+- **Documented raw-RN escape hatches** (13 files, must match `scripts/check-structure.mjs` EXCEPTIONS exactly):
+  - Components (8): `src/components/ui/input.tsx`, `src/components/ui/textarea.tsx` (Android font metrics), `src/components/clay/ClayAnimatedButton.tsx` + `.web.tsx`, `src/components/clay/ClaySpinner.tsx` + `.web.tsx` (Android layout stability), `src/components/auth/AuthScreen.tsx`, `src/components/edge-blur.tsx`.
+  - Screens (5): `src/screens/automate/detail/index.tsx`, `src/screens/automate/detail/components.tsx`, `src/screens/automate/new/index.tsx`, `src/screens/messages/thread.tsx`, `src/screens/profile/index.tsx`.
+  - These use `StyleSheet.create()` + `useThemeColors()` or raw-RN imports outside the allowed set; everything else must stay on `className`.

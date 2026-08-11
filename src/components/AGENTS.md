@@ -6,12 +6,25 @@ Scope: the `ui/` form kit, `auth/`, `automation/`, and 3 root-level components. 
 
 | Path | Role |
 |------|------|
-| `ui/` (10 primitives) | Self-made form/display kit: `card`, `badge`, `input`, `textarea`, `switch`, `radio`, `toggle-card`, `collapsible`, `reveal`, `glass-surface` |
+| `ui/` (11 primitives) | Self-made form/display kit: `card`, `badge`, `input`, `textarea`, `switch`, `radio`, `toggle-card`, `collapsible`, `reveal`, `glass-surface`, `error-state` |
 | `auth/AuthScreen.tsx` | Login/signup OTP screen, 761 lines. Internal pieces: `CapsuleToggle`, `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
 | `automation/AutomationDmPreview.tsx` | Simulated IG DM inbox preview for the automation builder; `{username}` substitution; hardcoded IG colors by design |
 | `edge-blur.tsx` | Canvas scrim — plain `LinearGradient`, NOT a real blur (native `expo-blur` crashed Android on transitions; `blurTarget`/`intensity` props kept for call-site compat) |
 | `screen-shell.tsx` | Screen padding shell; exports `TAB_BAR_OVERLAY` used with `useSafeAreaInsets` so content clears the floating tab bar |
 | `symbol-icon.tsx` | SF Symbol wrapper used by the tab bar |
+| `ui/error-state.tsx` | Shared error state: centered message + optional Retry button with mount-time shake. Consolidates per-screen private copies |
+
+## NAMING CONVENTIONS
+
+| Directory | Convention | Examples |
+|-----------|-----------|----------|
+| `ui/` | kebab-case | `toggle-card.tsx`, `error-state.tsx`, `glass-surface.tsx` |
+| `clay/` | PascalCase | `ClayAnimatedButton.tsx`, `ClaySpinner.tsx`, `TabBar.tsx` |
+| `auth/` | PascalCase | `AuthScreen.tsx` |
+| `automation/` | PascalCase | `AutomationDmPreview.tsx` |
+| root-level | kebab-case | `edge-blur.tsx`, `screen-shell.tsx`, `symbol-icon.tsx` |
+
+Existing files are grandfathered. New files must follow the convention for their directory.
 
 ## `ui/` KIT CONVENTIONS
 

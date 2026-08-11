@@ -35,7 +35,7 @@ Key architectural decisions:
 | Backend | Go 1.25, Gin 1.12 | Module path `kaplun/api-go`. |
 | Database | Appwrite TablesDB | Document-based; NOT the SQL Databases API. |
 | Instagram | Meta Graph API v26.0 | Direct from app and backend. |
-| Testing | jest-expo, Go `testing` package | Frontend tests in `src/__tests__/`. |
+| Testing | jest-expo, Go `testing` package | Frontend tests in `src/testing/`, `src/screens/` (colocated), `src/components/` (colocated). |
 | Lint | `tsc --noEmit` | No ESLint/Prettier/Biome config. |
 
 ## REPOSITORY STRUCTURE
@@ -72,7 +72,6 @@ Key architectural decisions:
 │   ├── testing/            # Integration + auth-gate test harness
 │   ├── tw/                 # className-enabled RN primitives
 │   ├── types/              # Global TypeScript types
-│   ├── __tests__/          # Jest test suites
 │   └── global.css          # Tailwind theme tokens (Clay design system)
 ├── __mocks__/              # Jest manual mocks (@expo/ui)
 ├── assets/                 # App icons + splash
@@ -93,13 +92,14 @@ Key architectural decisions:
 Subdirectory guides (read these before editing the relevant area):
 
 - `api-go/AGENTS.md` — Gin backend conventions, routes, in-process loops, auth, workers, tunnel.
-- `src/app/AGENTS.md` — route tree, provider stack, `Stack.Protected` auth gate, 4-tab + hidden profile.
+- `src/app/AGENTS.md` — route tree, routes-only rule, re-export contract, provider stack, `Stack.Protected` auth gate, 4-tab + hidden profile.
+- `src/screens/AGENTS.md` — screen extraction spec, route-to-screen map, folder conventions, styling rules.
 - `src/lib/AGENTS.md` — Appwrite, repository, session, theme, Instagram, resilience, realtime.
 - `src/hooks/AGENTS.md` — React Query hooks, repository pattern, realtime invalidation.
-- `src/components/AGENTS.md` — non-Clay components: `ui/` kit, `auth/`, `automation/`, screen shell.
+- `src/components/AGENTS.md` — non-Clay components: `ui/` kit, `auth/`, `automation/`, naming conventions, screen shell.
 - `src/components/clay/AGENTS.md` — Clay design system, `.web.tsx` variants, raw-RN exceptions.
-- `src/tw/AGENTS.md` — styling primitives and `useCssElement` bridge.
-- `src/__tests__/AGENTS.md` — jest-expo conventions, mock boundary, render flavors, known failures.
+- `src/tw/AGENTS.md` — styling primitives, `useCssElement` bridge, raw-RN escape-hatch list.
+- `src/testing/AGENTS.md` — shared test infrastructure, mock boundary, render flavors, known failures.
 
 ### Route tree
 
@@ -145,7 +145,7 @@ npx jest --testPathIgnorePatterns=integration
 # that is resolved.
 ```
 
-A known pre-existing failure exists in `src/__tests__/ui-components.test.tsx` (two `Input` style assertions fail because the mocked CSS runtime flattens style arrays differently). All other suites pass.
+A known pre-existing failure exists in `src/components/ui/ui-components.test.tsx` (two `Input` style assertions fail because the mocked CSS runtime flattens style arrays differently). All other suites pass.
 
 ### Native dependencies
 
@@ -249,12 +249,12 @@ Auth bridge:
 
 ## TESTING STRATEGY
 
-- **Frontend:** jest-expo with `jest.setup.ts` providing global infra mocks (expo-router, Appwrite, `@/tw`, Reanimated, AsyncStorage, `@expo/ui`, etc.). Data hooks are mocked per-file. Check `jest.setup.ts` before adding per-file mocks; see `src/__tests__/AGENTS.md`.
+- **Frontend:** jest-expo with `jest.setup.ts` providing global infra mocks (expo-router, Appwrite, `@/tw`, Reanimated, AsyncStorage, `@expo/ui`, etc.). Data hooks are mocked per-file. Check `jest.setup.ts` before adding per-file mocks; see `src/testing/AGENTS.md`.
 - **Backend:** colocated `*_test.go` files using `httptest` and table-driven tests. No external services required.
 - **Coverage:** `collectCoverageFrom: ['src/**/*.{ts,tsx}']` in `jest.config.js`.
 - **Known issues:**
   - `bun test` segfaults in this environment; use `npx jest`.
-  - `src/__tests__/ui-components.test.tsx` has two failing `Input` style assertions (pre-existing).
+  - `src/components/ui/ui-components.test.tsx` has two failing `Input` style assertions (pre-existing).
 
 ## SECURITY CONSIDERATIONS
 
@@ -326,7 +326,7 @@ Auth bridge:
 ## NOTES AND GOTCHAS
 
 - **Large-file hotspots** (prefer targeted edits): `src/components/auth/AuthScreen.tsx` (~761 lines), `api-go/internal/worker/comment_runner.go` (~1247 lines), `src/screens/automate/new/index.tsx` (~1112 lines, largest screen file). Route files are all 1-line re-exports now (≤5 lines each).
-- **`jest.setup.ts` is ~315 lines of global mocks** — check it before adding per-file mocks; conventions live in `src/__tests__/AGENTS.md`.
+- **`jest.setup.ts` is ~315 lines of global mocks** — check it before adding per-file mocks; conventions live in `src/testing/AGENTS.md`.
 - **`EdgeBlur` is not a blur** — it renders a plain `LinearGradient` canvas scrim because the real `expo-blur` layer crashed Android on screen transitions. The `blurTarget`/`intensity` props are kept only for call-site compatibility.
 - **api-go in-process loops** — sweeper, reconcile poller, token refresh, and insights sync all run inside the server process. No external scheduler is required.
 - **Reanimated web crash (#8285)** — `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to no-op stubs on web. `metro.config.js` also keeps `inlineRequires` lazy imports for worklets (#9445) — do not remove.

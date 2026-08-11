@@ -1,14 +1,15 @@
 # src/testing/ — Shared test infrastructure
 
-Holds cross-cutting test utilities and suites shared across `src/__tests__/`. Run with `bunx jest` (never `bun test` — segfaults under Bun 1.3.3). Filter: `--testPathPattern=instagram`; skip integration: `--testPathIgnorePatterns=integration`.
+Holds cross-cutting test utilities and shared suites. Run with `bunx jest` (never `bun test` — segfaults under Bun 1.3.3). Filter: `--testPathPattern=instagram`; skip integration: `--testPathIgnorePatterns=integration`.
 
 ## Contents
 
 - `test-utils.ts` — `createQueryClientWrapper()` (QueryClientProvider, `retry: false`). Imported as `@/testing/test-utils` from any suite that needs a real React Query context.
 - `integration.test.tsx` — Home screen integration suite (imports `Home` from `@/app/(tabs)/(home)/index`).
 - `auth-gate.test.tsx` — Root auth layout suite (imports `RootLayout` from `@/app/_layout`).
+- `initial-route.test.tsx` — Initial route resolution suite.
 
-`src/__tests__/` holds the remaining 21 suites (lib clients, hooks, screens, components).
+Remaining suites are colocated: `src/lib/` (8), `src/hooks/` (4), `src/screens/` (12), `src/components/` (4).
 
 ## MOCK BOUNDARY (the key convention)
 
@@ -26,13 +27,19 @@ Async assertions use `waitFor(..., { timeout: 5000, interval: 100 })`.
 ## SUITE MAP (condensed)
 
 Suites in `src/testing/`:
-- `integration` (Home screen end-to-end), `auth-gate` (root layout Protected gate)
+- `integration` (Home screen end-to-end), `auth-gate` (root layout Protected gate), `initial-route`
 
-Suites in `src/__tests__/`:
-- lib clients: `automations-client`, `instagram` (190 refresh+retry), `instagram-oauth`, `auth-session`, `polyfills`
-- hooks: `useAutomations`, `useAutomationGate`, `auth-flow`
-- screens: `home-dashboard`, `automate-home`/`automate-new`/`automate-detail`, `messages`, `thread-detail`, `profile`, `insights`
-- components: `tab-bar` (4 tabs, nested-route hide), `screen-shell`, `ui-components`, `theme` (palette parity invariants), `query-client` (persistence rules)
+Suites colocated in `src/lib/`:
+- `automations`, `instagram` (190 refresh+retry), `instagram-oauth`, `auth-session`, `polyfills`, `format-time`, `theme` (palette parity invariants), `query-client` (persistence rules)
+
+Suites colocated in `src/hooks/`:
+- `useAutomations`, `useAutomationGate`, `useAuthFlow`, `useMessages`
+
+Suites colocated in `src/screens/`:
+- `home`, `automate`/`automate-new`/`automate-detail`, `messages`, `thread`, `profile`, `insights` + 4 `utils.test.ts`
+
+Suites colocated in `src/components/`:
+- `tab-bar` (4 tabs, nested-route hide), `screen-shell`, `ui-components`, `error-state`
 
 ## KNOWN FAILURES
 

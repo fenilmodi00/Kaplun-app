@@ -35,7 +35,7 @@ Route-to-screen mapping (target):
 ## STYLING RULES
 
 - **`@/tw` primitives only** — `View`, `Text`, `Pressable` from `@/tw` with Tailwind `className`. Full primitive list and `cn()` utilities in `src/tw/AGENTS.md`.
-- **Raw-RN exceptions follow their files** — screens that use `StyleSheet.create()` today (`[automationId].tsx`, `(profile)/view.tsx`) keep that exception when moved. `src/tw/AGENTS.md` tracks the escape-hatch list under "Documented raw-RN escape hatches"; update both docs when a screen's regime changes.
+- **Raw-RN exceptions follow their files** — screens that use `StyleSheet.create()` today (`src/screens/automate/detail/index.tsx`, `src/screens/profile/index.tsx`) keep that exception. `src/tw/AGENTS.md` tracks the escape-hatch list under "Documented raw-RN escape hatches"; update both docs when a screen's regime changes.
 - **Theme tokens, not hex** — colors via `className` tokens or `useThemeColors()` in raw-RN islands. See root `AGENTS.md` anti-patterns.
 - **Reanimated via `@/lib/reanimated-platform` or `@/tw/animated` only** — see root `AGENTS.md`.
 
