@@ -28,7 +28,6 @@ const EXCEPTIONS = new Set([
   'src/screens/automate/detail/index.tsx',
   'src/screens/automate/detail/components.tsx',
   'src/screens/automate/new/index.tsx',
-  'src/screens/messages/thread.tsx',
   'src/screens/profile/index.tsx',
 ]);
 

@@ -297,13 +297,18 @@ jest.mock('uniwind', () => {
 
 // Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner, and
 // pass-through component mocks (Text/Button/Card/Surface/Avatar/Badge/Alert/
-// Skeleton) so migrated screens render in tests. Text-bearing parts render a
-// real RN Text so getByText queries keep working.
+// Skeleton/EmptyState/Item/Kpi/BarChart/Input/Marker/Message/MessageScroller)
+// so migrated screens render in tests. Text-bearing parts render a real RN
+// Text so getByText queries keep working.
 jest.mock('panelui-native', () => {
   const React = require('react');
-  const { View, Text: RNText, Pressable } = require('react-native');
+  const { View, Text: RNText, Pressable, TextInput, ScrollView } = require('react-native');
   const viewPassthrough = (props: any) => React.createElement(View, props, props?.children);
   const textPassthrough = (props: any) => React.createElement(RNText, props, props?.children);
+  // Compound families need per-family roots: Object.assign mutates the shared
+  // function object, so two families assigning the same part name collide.
+  const family = (parts: Record<string, unknown>) =>
+    Object.assign((props: any) => viewPassthrough(props), parts);
   const wrapTextChild = (child: unknown) =>
     typeof child === 'string' || typeof child === 'number'
       ? React.createElement(RNText, null, child)
@@ -340,7 +345,7 @@ jest.mock('panelui-native', () => {
         wrapTextChild(children),
         endContent,
       ),
-    Card: Object.assign(viewPassthrough, {
+    Card: family({
       Header: viewPassthrough,
       Title: textPassthrough,
       Description: textPassthrough,
@@ -353,14 +358,14 @@ jest.mock('panelui-native', () => {
       React.createElement(View, props, wrapTextChild(count !== undefined ? String(count) : children)),
     Chip: ({ children, ...props }: any) =>
       React.createElement(Pressable, props, wrapTextChild(children)),
-    Alert: Object.assign(viewPassthrough, {
+    Alert: family({
       Indicator: viewPassthrough,
       Content: viewPassthrough,
       Title: textPassthrough,
       Description: textPassthrough,
     }),
     Skeleton: viewPassthrough,
-    EmptyState: Object.assign(viewPassthrough, {
+    EmptyState: family({
       Header: viewPassthrough,
       Media: viewPassthrough,
       Title: textPassthrough,
@@ -379,7 +384,7 @@ jest.mock('panelui-native', () => {
       Header: viewPassthrough,
       Footer: viewPassthrough,
     }),
-    Kpi: Object.assign(viewPassthrough, {
+    Kpi: family({
       Header: viewPassthrough,
       Icon: viewPassthrough,
       Title: textPassthrough,
@@ -395,7 +400,7 @@ jest.mock('panelui-native', () => {
       Separator: viewPassthrough,
       Group: viewPassthrough,
     }),
-    BarChart: Object.assign(viewPassthrough, {
+    BarChart: family({
       Header: viewPassthrough,
       Grid: () => null,
       Bar: () => null,
@@ -404,6 +409,27 @@ jest.mock('panelui-native', () => {
       YAxis: () => null,
       Tooltip: () => null,
       Legend: () => null,
+    }),
+    Input: (props: any) => React.createElement(TextInput, props),
+    Marker: family({
+      Icon: viewPassthrough,
+      Content: textPassthrough,
+    }),
+    Message: family({
+      Group: viewPassthrough,
+      Avatar: viewPassthrough,
+      Content: viewPassthrough,
+      Header: textPassthrough,
+      Bubble: viewPassthrough,
+      BubbleContent: textPassthrough,
+      Footer: textPassthrough,
+      Actions: viewPassthrough,
+    }),
+    MessageScroller: family({
+      Viewport: (props: any) => React.createElement(ScrollView, props, props?.children),
+      Content: viewPassthrough,
+      Item: viewPassthrough,
+      Button: () => null,
     }),
     PANEL_THEMES: [mockFamily],
     PANEL_THEME_NAMES: ['light', 'dark'],

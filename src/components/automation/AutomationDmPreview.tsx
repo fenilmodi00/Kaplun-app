@@ -7,8 +7,8 @@
 import React, { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Avatar } from 'panelui-native';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
-import { ClayAvatar } from '@/components/clay/ClayAvatar';
 import { View, Text, ScrollView } from '@/tw';
 import { Image } from '@/tw/image';
 import type { InstagramMediaResponse } from '@/lib/instagram';
@@ -33,6 +33,11 @@ function formatCount(n: number): string {
 
 function substituteUsername(text: string): string {
   return text.replace(/{username}/gi, SAMPLE_FAN);
+}
+
+function initials(name: string): string {
+  const letters = name.trim().split(/\s+/).map((word) => word.charAt(0)).join('');
+  return letters.slice(0, 2).toUpperCase() || '?';
 }
 
 function VerifiedBadge({ size = 14 }: { size?: number }) {
@@ -95,7 +100,12 @@ function PreviewHeader({
   return (
     <View className="flex-row items-center border-b px-3 py-2.5" style={{ borderColor: '#262626', backgroundColor: IG_BG }}>
       <Ionicons name="chevron-back" size={22} color="#ffffff" />
-      <ClayAvatar src={avatarUri} size={35} className="ml-1" />
+      <Avatar
+        source={avatarUri ? { uri: avatarUri } : undefined}
+        fallback={initials(displayName)}
+        size="sm"
+        className="ml-1"
+      />
       <View className="ml-2 flex-1" style={{ minWidth: 0 }}>
         <View className="flex-row items-center gap-1">
           <Text className="font-bold" style={{ fontSize: 16, lineHeight: 20, color: '#ffffff' }} numberOfLines={1}>
@@ -221,7 +231,11 @@ export function AutomationDmPreview({
             </View>
           ) : !hasFlow ? (
             <View className="items-center gap-2 px-4 py-6">
-              <ClayAvatar src={profile.avatarUri} size={64} />
+              <Avatar
+                source={profile.avatarUri ? { uri: profile.avatarUri } : undefined}
+                fallback={initials(profile.displayName)}
+                size="xl"
+              />
               <View className="flex-row items-center gap-1.5">
                 <Text className="font-bold" style={{ fontSize: 16, color: '#ffffff' }}>
                   {profile.displayName}

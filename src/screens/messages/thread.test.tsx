@@ -9,14 +9,6 @@ jest.mock('@/hooks/useMessages', () => ({
   useMessages: jest.fn(),
 }));
 
-jest.mock('@/components/clay/ClayAnimatedButton', () => ({
-  ClayAnimatedButton: ({ children, onPress }: { children: React.ReactNode; onPress: () => void }) => {
-    const React = require('react');
-    const { Pressable, Text } = require('react-native');
-    return React.createElement(Pressable, { onPress }, React.createElement(Text, null, children));
-  },
-}));
-
 // Override the expo-router mock to provide a threadId
 jest.mock('expo-router', () => ({
   useRouter: () => ({
