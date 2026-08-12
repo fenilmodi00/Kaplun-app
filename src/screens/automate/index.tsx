@@ -1,11 +1,10 @@
 /**
  * Automations list screen — connection gate, stats, and campaign rows.
  *
- * Styled with NativeWind v5 className via `@/tw` primitives.
- * The per-row toggle is an `@expo/ui` Host island (SwiftUI/Material You Switch).
- *
- * NOTE: verify layout on Android before editing — this screen previously
- * suffered from a `useCssElement` layout bug (ballooned cards, floating text).
+ * PanelUI migration (Phase 2, screen 5): rows are `Item`, status pills are
+ * `Badge`, the per-row toggle is PanelUI `Switch` (the @expo/ui Host island
+ * is gone), and cards/empty/error states are `Card`/`Surface`/`EmptyState`.
+ * Layout-only primitives still come from `@/tw` (Uniwind className).
  */
 
 import React, { useState, useCallback, useRef } from 'react';
@@ -13,16 +12,22 @@ import { FlatList, type NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Host, Switch as ExpoUISwitch } from '@expo/ui';
-import { View, Text, Pressable, ScrollView } from '@/tw';
+import { View, Pressable, ScrollView, useCSSVariable } from '@/tw';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Item,
+  Skeleton,
+  Surface,
+  Switch,
+  Text,
+} from 'panelui-native';
 import { useAutomations, useOverviewStats } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ErrorState } from '@/components/ui/error-state';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
-import { useThemeColors } from '@/lib/theme';
-import { useThemeMode } from 'panelui-native';
 import type { Automation } from '@/lib/automations';
 
 function getTargetSummary(automation: Automation): string {
@@ -51,31 +56,33 @@ function StatsCard() {
   const { stats, loading } = useOverviewStats();
 
   return (
-    <View className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-1">
-      <View className="flex-row justify-around">
-        <View className="items-center gap-0.5">
-          <Text className="font-semibold text-ink" style={{ fontSize: 24, lineHeight: 30 }}>
-            {loading ? '--' : stats?.sent_7d ?? 0}
-          </Text>
-          <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>
-            DMs sent (7d)
-          </Text>
+    <Card>
+      <Card.Content className="gap-1">
+        <View className="flex-row justify-around">
+          <View className="items-center gap-0.5">
+            <Text size="2xl" weight="semibold">
+              {loading ? '--' : stats?.sent_7d ?? 0}
+            </Text>
+            <Text size="sm" muted>
+              DMs sent (7d)
+            </Text>
+          </View>
+          <View className="items-center gap-0.5">
+            <Text size="2xl" weight="semibold">
+              {loading ? '--' : stats?.top_keyword_7d || '—'}
+            </Text>
+            <Text size="sm" muted>
+              Top keyword
+            </Text>
+          </View>
         </View>
-        <View className="items-center gap-0.5">
-          <Text className="font-semibold text-ink" style={{ fontSize: 24, lineHeight: 30 }}>
-            {loading ? '--' : stats?.top_keyword_7d || '—'}
-          </Text>
-          <Text className="text-muted" style={{ fontSize: 13, lineHeight: 18 }}>
-            Top keyword
-          </Text>
-        </View>
-      </View>
-      <Text className="mt-1.5 text-center text-muted-soft" style={{ fontSize: 13, lineHeight: 18 }}>
-        {loading
-          ? 'Loading stats...'
-          : `${stats?.active_automations ?? 0} active automation${(stats?.active_automations ?? 0) !== 1 ? 's' : ''}`}
-      </Text>
-    </View>
+        <Text size="sm" muted className="mt-1.5 text-center">
+          {loading
+            ? 'Loading stats...'
+            : `${stats?.active_automations ?? 0} active automation${(stats?.active_automations ?? 0) !== 1 ? 's' : ''}`}
+        </Text>
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -86,41 +93,58 @@ function ConnectionGate({
   onConnect: () => void;
   isConnecting: boolean;
 }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   return (
-    <View className="border border-brand-lavender rounded-[14px] bg-brand-lavender p-3.5 gap-3.5">
+    <Surface bordered padding="lg">
       <View className="items-center gap-2 py-3">
-        <Ionicons name="logo-instagram" size={32} color={t.ink} />
-        <Text className="text-center font-medium text-ink" style={{ fontSize: 16, lineHeight: 22 }}>
+        <Ionicons name="logo-instagram" size={32} color={foreground} />
+        <Text weight="medium" className="text-center">
           Connect Instagram to enable automations
         </Text>
       </View>
-      <ClayAnimatedButton
-        variant="primary"
+      <Button
         fullWidth
+        size="lg"
         loading={isConnecting}
         onPress={onConnect}
+        startContent={<Ionicons name="logo-instagram" size={17} color={primaryForeground} />}
       >
         Connect Instagram
-      </ClayAnimatedButton>
-    </View>
+      </Button>
+    </Surface>
   );
 }
 
-function EmptyState() {
+function AutomationsEmptyState() {
   const router = useRouter();
   return (
-    <View className="flex-1 items-center justify-center gap-3.5 p-4">
-      <Text className="text-center text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
-        No automations yet
-      </Text>
-      <ClayAnimatedButton
-        variant="primary"
-        onPress={() => router.push('./new' as never)}
-      >
-        Create your first
-      </ClayAnimatedButton>
-    </View>
+    <EmptyState>
+      <EmptyState.Header>
+        <EmptyState.Title>No automations yet</EmptyState.Title>
+      </EmptyState.Header>
+      <EmptyState.Content>
+        <Button onPress={() => router.push('./new' as never)}>
+          Create your first
+        </Button>
+      </EmptyState.Content>
+    </EmptyState>
+  );
+}
+
+function AutomationsErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <EmptyState>
+      <EmptyState.Header>
+        <EmptyState.Title>Couldn't load automations</EmptyState.Title>
+        <EmptyState.Description>{error}</EmptyState.Description>
+      </EmptyState.Header>
+      <EmptyState.Content>
+        <Button variant="outline" onPress={onRetry}>
+          Retry
+        </Button>
+      </EmptyState.Content>
+    </EmptyState>
   );
 }
 
@@ -136,82 +160,68 @@ function AutomationRow({
   disabled?: boolean;
 }) {
   const isError = automation.status === 'error';
-  const { mode: scheme } = useThemeMode();
 
   return (
-    <Pressable onPress={onPress} className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-2">
-      <View className="flex-row items-center justify-between gap-2">
-        <Text className="flex-1 font-semibold text-ink" style={{ fontSize: 16, lineHeight: 22 }} numberOfLines={1}>
-          {automation.name}
-        </Text>
-        {isError && (
-          <View className="rounded-pill bg-error px-2.5 py-1">
-            <Text className="font-semibold text-on-primary" style={{ fontSize: 13 }}>
-              Reconnect needed
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View className="flex-row items-center gap-2">
-        <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
-          {getTargetSummary(automation)}
-        </Text>
-        <Text className="text-muted-soft" style={{ fontSize: 14 }}>
-          •
-        </Text>
-        <Text className="flex-1 text-muted" style={{ fontSize: 14, lineHeight: 20 }} numberOfLines={1}>
-          {getKeywordsPreview(automation)}
-        </Text>
-      </View>
-
-      <View className="flex-row items-center justify-between gap-2 mt-1">
-        <View className="rounded-pill bg-surface-card px-2.5 py-1">
-          <Text className="font-semibold text-muted" style={{ fontSize: 13 }}>
-            -- sent
-          </Text>
+    <Item orientation="vertical" variant="outline" onPress={onPress}>
+      <Item.Content className="w-full gap-2">
+        <View className="flex-row items-center gap-2">
+          <Item.Title numberOfLines={1} className="flex-1">
+            {automation.name}
+          </Item.Title>
+          {isError && <Badge variant="destructive">Reconnect needed</Badge>}
         </View>
-        <Host matchContents colorScheme={scheme} seedColor="#22c55e">
-          <ExpoUISwitch
-            testID="automation-switch"
-            value={automation.status === 'active'}
-            onValueChange={onToggle}
-            disabled={disabled}
-          />
-        </Host>
-      </View>
-    </Pressable>
+        <View className="flex-row items-center gap-2">
+          <Item.Description numberOfLines={1}>
+            {getTargetSummary(automation)}
+          </Item.Description>
+          <Text size="sm" muted>
+            •
+          </Text>
+          <Item.Description numberOfLines={1} className="flex-1">
+            {getKeywordsPreview(automation)}
+          </Item.Description>
+        </View>
+      </Item.Content>
+      <Item.Footer className="w-full flex-row items-center justify-between gap-2">
+        <Badge variant="secondary">-- sent</Badge>
+        <Switch
+          value={automation.status === 'active'}
+          onValueChange={onToggle}
+          disabled={disabled}
+        />
+      </Item.Footer>
+    </Item>
   );
 }
 
 function Header({ onAdd }: { onAdd: () => void }) {
   const insets = useSafeAreaInsets();
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
   return (
     <View className="flex-row items-start justify-between pb-2" style={{ paddingTop: insets.top + 12 }}>
       <View className="flex-1 gap-0.5">
-        <Text className="font-semibold text-ink" style={{ fontSize: 21, lineHeight: 27, letterSpacing: -0.4 }}>
+        <Text size="xl" weight="semibold" className="tracking-tight">
           Automations
         </Text>
-        <Text className="text-muted" style={{ fontSize: 14, lineHeight: 20 }}>
+        <Text size="sm" muted>
           Auto-DM when followers comment keywords
         </Text>
       </View>
       <Pressable
         onPress={onAdd}
         accessibilityLabel="Create automation"
+        accessibilityRole="button"
         hitSlop={8}
-        className="h-11 w-11 rounded-md items-center justify-center bg-ink/[0.06]"
-        style={({ pressed }) => ({ backgroundColor: pressed ? `${t.ink}24` : undefined })}
+        className="h-11 w-11 items-center justify-center rounded-md bg-secondary"
       >
-        <Ionicons name="add" size={22} color={t.ink} />
+        <Ionicons name="add" size={22} color={foreground} />
       </Pressable>
     </View>
   );
 }
 
 function SkeletonRow() {
-  return <View className="h-[88px] rounded-[14px] border border-hairline bg-surface-card" />;
+  return <Skeleton className="h-[88px] rounded-xl" />;
 }
 
 export default function AutomationsScreen() {
@@ -288,7 +298,7 @@ export default function AutomationsScreen() {
   // Connection-check loading state
   if (gateLoading) {
     return (
-      <View className="flex-1 bg-canvas">
+      <View className="flex-1 bg-background">
         <Header onAdd={handleAdd} />
         <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
@@ -305,7 +315,7 @@ export default function AutomationsScreen() {
   // Not connected
   if (!connected) {
     return (
-      <View className="flex-1 bg-canvas">
+      <View className="flex-1 bg-background">
         <Header onAdd={handleAdd} />
         <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <ConnectionGate onConnect={handleConnect} isConnecting={isConnecting} />
@@ -317,7 +327,7 @@ export default function AutomationsScreen() {
   // Connected — loading
   if (automationsLoading) {
     return (
-      <View className="flex-1 bg-canvas">
+      <View className="flex-1 bg-background">
         <Header onAdd={handleAdd} />
         <ScrollView contentContainerStyle={scrollContentStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
@@ -333,11 +343,11 @@ export default function AutomationsScreen() {
 
   if (automationsError) {
     return (
-      <View className="flex-1 bg-canvas">
+      <View className="flex-1 bg-background">
         <Header onAdd={handleAdd} />
         <ScrollView contentContainerStyle={scrollContentCenterStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
-          <ErrorState error={automationsError} onRetry={refresh} />
+          <AutomationsErrorState error={automationsError} onRetry={refresh} />
         </ScrollView>
       </View>
     );
@@ -345,11 +355,11 @@ export default function AutomationsScreen() {
 
   if (automations.length === 0) {
     return (
-      <View className="flex-1 bg-canvas">
+      <View className="flex-1 bg-background">
         <Header onAdd={handleAdd} />
         <ScrollView contentContainerStyle={scrollContentCenterStyle} onScroll={handleScroll} scrollEventThrottle={16}>
           <StatsCard />
-          <EmptyState />
+          <AutomationsEmptyState />
         </ScrollView>
       </View>
     );
@@ -357,7 +367,7 @@ export default function AutomationsScreen() {
 
   // List state
   return (
-    <View className="flex-1 bg-canvas">
+    <View className="flex-1 bg-background">
       <FlatList
         data={automations}
         renderItem={renderItem}

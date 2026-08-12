@@ -297,7 +297,7 @@ jest.mock('uniwind', () => {
 
 // Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner, and
 // pass-through component mocks (Text/Button/Card/Surface/Avatar/Badge/Alert/
-// Skeleton/EmptyState/Item/Kpi/BarChart/Input/Marker/Message/MessageScroller)
+// Skeleton/EmptyState/Item/Kpi/BarChart/Input/Marker/Message/MessageScroller/Switch)
 // so migrated screens render in tests. Text-bearing parts render a real RN
 // Text so getByText queries keep working.
 jest.mock('panelui-native', () => {
@@ -411,6 +411,8 @@ jest.mock('panelui-native', () => {
       Legend: () => null,
     }),
     Input: (props: any) => React.createElement(TextInput, props),
+    Switch: (props: any) =>
+      React.createElement(View, { accessible: true, accessibilityRole: 'switch', ...props }, props?.children),
     Marker: family({
       Icon: viewPassthrough,
       Content: textPassthrough,

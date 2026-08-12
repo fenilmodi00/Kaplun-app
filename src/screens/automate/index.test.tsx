@@ -184,12 +184,12 @@ describe('AutomateScreen', () => {
       toggleStatus,
     });
 
-    const { getAllByTestId } = await render(<AutomateScreen />);
+    const { getAllByRole } = await render(<AutomateScreen />);
     await waitFor(() => {
-      expect(getAllByTestId('automation-switch')).toHaveLength(2);
+      expect(getAllByRole('switch')).toHaveLength(2);
     });
 
-    const switches = getAllByTestId('automation-switch');
+    const switches = getAllByRole('switch');
     fireEvent(switches[0], 'valueChange', false);
     expect(toggleStatus).toHaveBeenCalledWith(
       expect.objectContaining({ $id: 'auto-1' })
