@@ -6,8 +6,6 @@ import {
   getThemePreference,
   setThemePreference,
   subscribeThemePreference,
-  lightCssVariables,
-  darkCssVariables,
 } from '@/lib/theme';
 
 describe('theme palettes', () => {
@@ -31,9 +29,7 @@ describe('theme palettes', () => {
     expect(Object.keys(darkColors).sort()).toEqual(Object.keys(lightColors).sort());
   });
 
-  // Dark-theme regression invariants — catch "forgot the dark value" and palette drift
   it('every dark value differs from its light counterpart', () => {
-    // These keys are intentionally identical in both palettes (semantic / brand constants)
     const intentionalSame: (keyof typeof lightColors)[] = ['error', 'brandTeal'];
     for (const key of Object.keys(lightColors) as (keyof typeof lightColors)[]) {
       if (intentionalSame.includes(key)) continue;
@@ -77,7 +73,6 @@ describe('theme preference store', () => {
     expect(getThemePreference()).toBe('dark');
     expect(listener).toHaveBeenCalledTimes(2);
 
-    // Setting same value is a no-op
     setThemePreference('dark');
     expect(listener).toHaveBeenCalledTimes(2);
 
@@ -92,27 +87,5 @@ describe('theme preference store', () => {
     setThemePreference('light');
     expect(listener).not.toHaveBeenCalled();
     setThemePreference('dark');
-  });
-});
-
-describe('CSS variable maps', () => {
-  it('light and dark have identical keys', () => {
-    expect(Object.keys(lightCssVariables).sort()).toEqual(
-      Object.keys(darkCssVariables).sort(),
-    );
-  });
-
-  it('every key differs except the explicitly same list', () => {
-    const intentionalSame = [
-      '--color-surface-dark',
-      '--color-surface-dark-elevated',
-    ];
-    for (const key of Object.keys(lightCssVariables)) {
-      if (intentionalSame.includes(key)) {
-        expect(darkCssVariables[key]).toBe(lightCssVariables[key]);
-      } else {
-        expect(darkCssVariables[key]).not.toBe(lightCssVariables[key]);
-      }
-    }
   });
 });

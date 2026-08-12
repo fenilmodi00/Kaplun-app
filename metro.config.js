@@ -1,6 +1,6 @@
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
-const { withNativewind } = require('nativewind/metro');
+const { withUniwindConfig } = require('uniwind/metro');
 
 const config = getDefaultConfig(__dirname);
 
@@ -9,20 +9,20 @@ config.transformer.getTransformOptions = async () => ({
   transform: { inlineRequires: true },
 });
 
-// Wrap with NativeWind — per official docs, only 2 options exist in v5:
-const nwConfig = withNativewind(config, {
-  globalClassNamePolyfill: false,
-  typescriptEnvPath: 'nativewind-env.d.ts',
+// Wrap with Uniwind — replaces NativeWind v5
+const uwConfig = withUniwindConfig(config, {
+  cssEntryFile: './src/global.css',
+  dtsFile: './uniwind-types.d.ts',
 });
 
-// SAFETY: re-assert getTransformOptions in case withNativewind overwrote it
-if (!nwConfig.transformer.getTransformOptions) {
-  nwConfig.transformer.getTransformOptions = config.transformer.getTransformOptions;
+// SAFETY: re-assert getTransformOptions in case withUniwindConfig overwrote it
+if (!uwConfig.transformer.getTransformOptions) {
+  uwConfig.transformer.getTransformOptions = config.transformer.getTransformOptions;
 }
 
 // Web: alias reanimated/worklets to stubs — Reanimated 4.1.1 crashes with Worklets #8285
-const upstreamResolveRequest = nwConfig.resolver.resolveRequest;
-nwConfig.resolver.resolveRequest = (context, moduleName, platform) => {
+const upstreamResolveRequest = uwConfig.resolver.resolveRequest;
+uwConfig.resolver.resolveRequest = (context, moduleName, platform) => {
   if (platform === 'web') {
     if (
       moduleName === 'react-native-reanimated' ||
@@ -49,4 +49,4 @@ nwConfig.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = nwConfig;
+module.exports = uwConfig;

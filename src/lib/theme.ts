@@ -1,12 +1,13 @@
-import { useColorScheme } from 'react-native';
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Uniwind } from 'uniwind';
+import { useThemeMode } from 'panelui-native';
 
 /**
  * Theme palettes for raw-RN islands that bypass the CSS runtime
  * (StyleSheet.create components, system chrome, gradient scrims, glass tint).
- * Token source of truth remains src/global.css — keep these values in sync
- * with the light @theme block and the dark override block.
+ * Static maps selected by useThemeMode().mode — NOT re-implemented with
+ * useCSSVariable() calls (would violate rules of hooks and be fragile).
  */
 export const lightColors = {
   canvas: '#fffaf0',
@@ -85,6 +86,8 @@ export function setThemePreference(next: ThemePreference): void {
   preference = next;
   listeners.forEach((listener) => { listener(); });
   void AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
+  // Single seam: update both the store and Uniwind's in-memory singleton
+  Uniwind.setTheme(next);
 }
 
 export async function hydrateThemePreference(): Promise<void> {
@@ -96,8 +99,11 @@ export async function hydrateThemePreference(): Promise<void> {
         listeners.forEach((listener) => { listener(); });
       }
     }
+    // Always sync Uniwind — its default is 'system', Kaplun requires 'dark' default
+    Uniwind.setTheme(preference);
   } catch {
     // ignore read failures — default dark is fine
+    Uniwind.setTheme('dark');
   }
 }
 
@@ -113,10 +119,9 @@ export function resolveScheme(
 }
 
 export function useThemeScheme(): 'light' | 'dark' {
-  const pref = useThemePreference();
-  const system = useColorScheme();
+  const { mode } = useThemeMode();
   if (process.env.EXPO_OS === 'web') return 'light';
-  return resolveScheme(pref, system);
+  return mode;
 }
 
 export function colorsForScheme(scheme: 'light' | 'dark'): ThemeColors {
@@ -125,90 +130,4 @@ export function colorsForScheme(scheme: 'light' | 'dark'): ThemeColors {
 
 export function useThemeColors(): ThemeColors {
   return colorsForScheme(useThemeScheme());
-}
-
-/* ── CSS variable maps for VariableContextProvider runtime override ──
- * Mechanical mirror of src/global.css @theme tokens — keep in sync.
- * Keys are prefixed with '--color-' to match the CSS custom properties.
- */
-
-export const lightCssVariables: Record<string, string> = {
-  '--color-canvas': '#fffaf0',
-  '--color-canvas-alt': '#f9f8f5',
-  '--color-primary': '#0a0a0a',
-  '--color-primary-active': '#1f1f1f',
-  '--color-primary-disabled': '#e5e5e5',
-  '--color-button-secondary': '#f3f2ed',
-  '--color-button-secondary-hover': '#eae8df',
-  '--color-ink': '#0a0a0a',
-  '--color-body-strong': '#1a1a1a',
-  '--color-body': '#3a3a3a',
-  '--color-muted': '#6a6a6a',
-  '--color-muted-soft': '#9a9a9a',
-  '--color-hairline': '#e5e5e5',
-  '--color-border-subtle': 'rgba(209, 205, 199, 0.45)',
-  '--color-border-strong': 'rgba(10, 10, 10, 0.12)',
-  '--color-surface-soft': '#faf5e8',
-  '--color-surface-card': '#f5f0e0',
-  '--color-surface-strong': '#ebe6d6',
-  '--color-surface-input': '#fffaf0',
-  '--color-surface-overlay': '#fffaf0',
-  '--color-hairline-strong': '#d8d4cc',
-  '--color-surface-dark': '#035d44',
-  '--color-surface-dark-elevated': '#1a2a2a',
-  '--color-on-primary': '#ffffff',
-  '--color-on-dark': '#ffffff',
-  '--color-brand-pink': '#ff4d8b',
-  '--color-brand-teal': '#1a3a3a',
-  '--color-brand-lavender': '#b8a4ed',
-  '--color-brand-peach': '#ffb084',
-  '--color-brand-ochre': '#e8b94a',
-  '--color-brand-mint': '#a4d4c5',
-  '--color-brand-coral': '#ff6b5a',
-  '--color-success': '#22c55e',
-  '--color-warning': '#f59e0b',
-  '--color-error': '#ef4444',
-};
-
-export const darkCssVariables: Record<string, string> = {
-  '--color-canvas': '#000000',
-  '--color-canvas-alt': '#0a0a0a',
-  '--color-primary': '#f5f5f5',
-  '--color-primary-active': '#d4d4d4',
-  '--color-primary-disabled': '#2a2a2a',
-  '--color-button-secondary': '#121212',
-  '--color-button-secondary-hover': '#1a1a1a',
-  '--color-ink': '#f5f5f5',
-  '--color-body-strong': '#e5e5e5',
-  '--color-body': '#b8b8b8',
-  '--color-muted': '#8a8a8a',
-  '--color-muted-soft': '#666666',
-  '--color-hairline': '#2a2a2a',
-  '--color-border-subtle': 'rgba(255, 255, 255, 0.08)',
-  '--color-border-strong': 'rgba(255, 255, 255, 0.16)',
-  '--color-surface-soft': '#0a0a0a',
-  '--color-surface-card': '#121212',
-  '--color-surface-strong': '#222222',
-  '--color-surface-input': '#101010',
-  '--color-surface-overlay': '#181818',
-  '--color-hairline-strong': '#3d3d3d',
-  // surface-dark and surface-dark-elevated intentionally keep light values (no dark override)
-  '--color-surface-dark': '#035d44',
-  '--color-surface-dark-elevated': '#1a2a2a',
-  '--color-on-primary': '#050505',
-  '--color-on-dark': '#f5f5f5',
-  '--color-brand-pink': '#ff5c96',
-  '--color-brand-teal': '#77d6c5',
-  '--color-brand-lavender': '#c7b7ff',
-  '--color-brand-peach': '#ffc09d',
-  '--color-brand-ochre': '#f2c65b',
-  '--color-brand-mint': '#9de0cb',
-  '--color-brand-coral': '#ff826f',
-  '--color-success': '#4ade80',
-  '--color-warning': '#fbbf24',
-  '--color-error': '#fb7185',
-};
-
-export function cssVariablesForScheme(scheme: 'light' | 'dark'): Record<string, string> {
-  return scheme === 'dark' ? darkCssVariables : lightCssVariables;
 }

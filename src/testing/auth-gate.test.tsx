@@ -40,7 +40,8 @@ jest.mock('@/lib/theme', () => ({
     glassTint: '#fffaf0',
   }),
   useThemeScheme: () => 'light',
-  cssVariablesForScheme: () => ({}),
+  useThemePreference: () => 'light',
+  setThemePreference: jest.fn(),
   hydrateThemePreference: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -68,7 +69,8 @@ jest.mock('expo-router', () => {
       : React.createElement(View, { testID: 'protected-closed' });
   Stack.Screen = ({ name }: { name: string }) =>
     React.createElement(Text, null, `screen:${name}`);
-  return { Stack };
+  const ThemeProvider = ({ children }: { children: React.ReactNode }) => children;
+  return { Stack, ThemeProvider };
 });
 
 jest.mock('@/lib/fonts', () => ({
@@ -79,12 +81,6 @@ jest.mock('@/lib/fonts', () => ({
     semibold: 'Inter_600SemiBold',
   },
 }));
-
-jest.mock('@/components/clay/ClaySpinner', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-  return { ClaySpinner: () => React.createElement(Text, null, 'Loading') };
-});
 
 jest.mock('@/lib/bridge-context', () => ({
   BridgeProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -114,8 +110,9 @@ describe('Root auth layout — SessionProvider + Protected', () => {
       signOut: jest.fn(),
     });
 
-    const { getByText } = await render(<RootLayout />);
-    expect(getByText('Loading')).toBeTruthy();
+    const { queryByText } = await render(<RootLayout />);
+    expect(queryByText('screen:sign-in')).toBeNull();
+    expect(queryByText('screen:(tabs)')).toBeNull();
   });
 
   it('opens sign-in when session is null', async () => {

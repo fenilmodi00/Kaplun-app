@@ -8,22 +8,21 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 import { AppState, Platform, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationBar } from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { onlineManager, focusManager } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
 import { useClayFonts } from '@/lib/fonts';
-import { useThemeColors, useThemeScheme, hydrateThemePreference, cssVariablesForScheme } from '@/lib/theme';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
+import { useThemeColors, hydrateThemePreference } from '@/lib/theme';
+import { PanelUIProvider, Spinner, useThemeMode } from 'panelui-native';
+import { useCSSVariable } from '@/tw';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 import { SessionProvider, useSession } from '@/lib/session-context';
-import { VariableContextProvider } from 'nativewind';
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -48,27 +47,16 @@ async function applySystemChrome(canvas: string) {
   }
 }
 
-function ThemeVariablesProvider({ children }: { children: React.ReactNode }) {
-  const scheme = useThemeScheme();
-  if (process.env.EXPO_OS === 'web') {
-    return <>{children}</>;
-  }
-  return (
-    <VariableContextProvider value={cssVariablesForScheme(scheme)}>
-      {children}
-    </VariableContextProvider>
-  );
-}
-
 function RootNavigator() {
   const [fontsLoaded, fontsError] = useClayFonts();
   const { session, isLoading } = useSession();
   const { setStatus } = useBridge();
   const theme = useThemeColors();
+  const background = useCSSVariable('--color-background') as string;
 
   useEffect(() => {
-    applySystemChrome(theme.canvas);
-  }, [theme.canvas]);
+    applySystemChrome(background ?? theme.canvas);
+  }, [background, theme.canvas]);
 
   useEffect(() => {
     setStatus(isLoading ? 'bridging' : 'ready');
@@ -76,15 +64,15 @@ function RootNavigator() {
 
   if ((!fontsLoaded && !fontsError) || isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.canvas, gap: 16, padding: 24 }}>
-        <ClaySpinner size={40} label="Loading..." />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: background ?? theme.canvas, gap: 16, padding: 24 }}>
+        <Spinner size="md" />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.canvas } }}>
+    <View style={{ flex: 1, backgroundColor: background ?? theme.canvas }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background ?? theme.canvas } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>
@@ -98,30 +86,50 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const theme = useThemeColors();
-  const scheme = useThemeScheme();
+  const { mode } = useThemeMode();
+  const background = useCSSVariable('--color-background') as string;
+  const canvas = background ?? theme.canvas;
 
   useEffect(() => {
     void hydrateThemePreference();
     // ponytail: stored-'light' users see a brief dark flash before hydration; acceptable, gate later if it matters.
   }, []);
 
+  const navTheme = {
+    dark: mode === 'dark',
+    colors: {
+      primary: theme.primary,
+      background: canvas,
+      card: canvas,
+      text: theme.ink,
+      border: theme.hairline,
+      notification: theme.error,
+    },
+    fonts: {
+      regular: { fontFamily: 'Inter_400Regular', fontWeight: 'normal' as const },
+      medium: { fontFamily: 'Inter_500Medium', fontWeight: '500' as const },
+      bold: { fontFamily: 'Inter_600SemiBold', fontWeight: '600' as const },
+      heavy: { fontFamily: 'Inter_600SemiBold', fontWeight: '700' as const },
+    },
+  };
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <PanelUIProvider>
       <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-            <SessionProvider>
-              <BridgeProvider>
-                <ThemeVariablesProvider>
+        <ThemeProvider value={navTheme}>
+          <View style={{ flex: 1, backgroundColor: canvas }}>
+            <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+            <NavigationBar style={mode === 'dark' ? 'light' : 'dark'} />
+            <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+              <SessionProvider>
+                <BridgeProvider>
                   <RootNavigator />
-                </ThemeVariablesProvider>
-              </BridgeProvider>
-            </SessionProvider>
-          </PersistQueryClientProvider>
-        </View>
+                </BridgeProvider>
+              </SessionProvider>
+            </PersistQueryClientProvider>
+          </View>
+        </ThemeProvider>
       </SafeAreaProvider>
-    </GestureHandlerRootView>
+    </PanelUIProvider>
   );
 }

@@ -21,7 +21,8 @@ import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ErrorState } from '@/components/ui/error-state';
 import { TAB_BAR_CLEARANCE } from '@/components/screen-shell';
 import { reportTabBarScroll } from '@/lib/tab-bar-scroll';
-import { useThemeColors, useThemeScheme } from '@/lib/theme';
+import { useThemeColors } from '@/lib/theme';
+import { useThemeMode } from 'panelui-native';
 import type { Automation } from '@/lib/automations';
 
 function getTargetSummary(automation: Automation): string {
@@ -135,7 +136,7 @@ function AutomationRow({
   disabled?: boolean;
 }) {
   const isError = automation.status === 'error';
-  const scheme = useThemeScheme();
+  const { mode: scheme } = useThemeMode();
 
   return (
     <Pressable onPress={onPress} className="border border-hairline rounded-[14px] bg-canvas p-3.5 gap-2">

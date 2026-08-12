@@ -259,24 +259,6 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-// Mock @/tw — className is a no-op in jest (no CSS runtime)
-jest.mock('@/tw', () => {
-  const React = require('react');
-  const { View, Text, ScrollView, Pressable, TextInput, TouchableHighlight } = require('react-native');
-  const passthrough = (Comp: any) => (props: any) => React.createElement(Comp, props);
-  return {
-    View: passthrough(View),
-    Text: passthrough(Text),
-    ScrollView: passthrough(ScrollView),
-    Pressable: passthrough(Pressable),
-    TextInput: passthrough(TextInput),
-    TouchableHighlight: passthrough(TouchableHighlight),
-    Link: ({ children, ...props }: any) => React.createElement(Text, props, children),
-    useCSSVariable: () => '#000000',
-    AnimatedScrollView: passthrough(ScrollView),
-  };
-});
-
 // Mock @/tw/image (uses RN Image, not expo-image per D11)
 jest.mock('@/tw/image', () => {
   const React = require('react');
@@ -296,16 +278,55 @@ jest.mock('@/tw/cn', () => ({
   clayInput: '', clayCard: '', clayFeatureCardBase: '', clayButtonBase: '',
 }));
 
-// Mock nativewind + react-native-css at the module level
-jest.mock('nativewind', () => ({
-  useUnstableNativeVariable: () => '#000000',
-  VariableContextProvider: ({ children }: any) => children,
-  styled: (Comp: any) => Comp,
-}));
-jest.mock('react-native-css', () => ({
-  useCssElement: (_: any, props: any) => props,
-  useNativeVariable: () => '#000000',
-}));
+// Mock uniwind — provides useCSSVariable, useResolveClassNames, Uniwind, useUniwind
+jest.mock('uniwind', () => {
+  const React = require('react');
+  return {
+    useCSSVariable: (name: string | string[]) =>
+      Array.isArray(name) ? name.map(() => '#000000') : '#000000',
+    useResolveClassNames: () => ({}),
+    useUniwind: () => ({ theme: 'dark' }),
+    Uniwind: {
+      setTheme: jest.fn(),
+      getCSSVariable: (name: string | string[]) =>
+        Array.isArray(name) ? name.map(() => '#000000') : '#000000',
+    },
+    withUniwind: (Comp: any) => Comp,
+  };
+});
+
+// Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner
+jest.mock('panelui-native', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const mockFamily = {
+    id: 'panel',
+    name: 'Panel',
+    light: 'light',
+    dark: 'dark',
+    swatch: ['#262626', '#f5f5f5'],
+  };
+  let currentMode = 'dark';
+  return {
+    PanelUIProvider: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(View, { style: { flex: 1 } }, children),
+    useThemeMode: () => ({
+      family: mockFamily,
+      mode: currentMode,
+      setFamily: jest.fn(),
+      setMode: (m: string) => { currentMode = m; },
+      toggleMode: () => { currentMode = currentMode === 'dark' ? 'light' : 'dark'; },
+    }),
+    useTheme: () => ({
+      theme: currentMode === 'dark' ? 'dark' : 'light',
+      setTheme: jest.fn(),
+    }),
+    Spinner: (props: any) => React.createElement(View, props),
+    PANEL_THEMES: [mockFamily],
+    PANEL_THEME_NAMES: ['light', 'dark'],
+    PANEL_EXTRA_THEMES: [],
+  };
+});
 
 // Mock AsyncStorage globally — query cache persistence (src/lib/query-client.ts)
 // imports it at module load; the lib ships its own jest mock.

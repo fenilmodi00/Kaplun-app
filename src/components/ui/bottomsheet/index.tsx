@@ -33,7 +33,8 @@ import type {
   BottomSheetBackgroundProps,
   BottomSheetFooterProps,
 } from '@expo/ui/community/bottom-sheet';
-import { useThemeColors, useThemeScheme } from '@/lib/theme';
+import { useThemeColors } from '@/lib/theme';
+import { useThemeMode } from 'panelui-native';
 import { hapticImpactLight } from '@/lib/haptics';
 import {
   BottomSheetBackdrop,
@@ -111,7 +112,7 @@ function ThemedBottomSheet({
 }: BottomSheetProps & {
   Component: typeof ExpoBottomSheet | typeof ExpoBottomSheetModal;
 }) {
-  const scheme = useThemeScheme();
+  const { mode: scheme } = useThemeMode();
   const mergedBackground = useSheetBackgroundStyle(backgroundStyle);
   const defaultIndex = Component === ExpoBottomSheetModal ? -1 : 0;
   const { isOpen, handleChange } = useSheetOpenState(onChange, (index ?? defaultIndex) >= 0);

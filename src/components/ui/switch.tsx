@@ -1,6 +1,6 @@
 import React from 'react';
 import { Host, Switch as ExpoSwitch } from '@expo/ui';
-import { useThemeScheme } from '@/lib/theme';
+import { useThemeMode } from 'panelui-native';
 
 export interface SwitchProps {
   value: boolean;
@@ -13,7 +13,7 @@ export interface SwitchProps {
 
 export function Switch({ value, onValueChange, isDisabled, testID, accessibilityLabel, size }: SwitchProps) {
   const a11y: { accessibilityLabel?: string } = { accessibilityLabel };
-  const scheme = useThemeScheme();
+  const { mode: scheme } = useThemeMode();
 
   return (
     <Host matchContents colorScheme={scheme} seedColor="#22c55e">
