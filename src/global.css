@@ -94,42 +94,43 @@
     --font-sans: "Inter_400Regular";
     --font-display: "Inter_500Medium";
 
-    /* Typography — Tailwind v4 triple-var pattern */
+    /* Typography — Tailwind v4 triple-var pattern. Line-heights MUST be calc() ratios
+       (lh / fontSize), never px: react-native-css multiplies numeric line-height by em. */
     --text-display-xl: 72px;
-    --text-display-xl--line-height: 72px;
+    --text-display-xl--line-height: calc(72 / 72);
     --text-display-xl--letter-spacing: -2.5px;
     --text-display-lg: 56px;
-    --text-display-lg--line-height: 59px;
+    --text-display-lg--line-height: calc(59 / 56);
     --text-display-lg--letter-spacing: -2px;
     --text-display-md: 40px;
-    --text-display-md--line-height: 44px;
+    --text-display-md--line-height: calc(44 / 40);
     --text-display-md--letter-spacing: -1px;
     --text-display-sm: 32px;
-    --text-display-sm--line-height: 37px;
+    --text-display-sm--line-height: calc(37 / 32);
     --text-display-sm--letter-spacing: -0.5px;
     --text-title-lg: 24px;
-    --text-title-lg--line-height: 31px;
+    --text-title-lg--line-height: calc(31 / 24);
     --text-title-lg--letter-spacing: -0.3px;
     --text-title-md: 18px;
-    --text-title-md--line-height: 25px;
+    --text-title-md--line-height: calc(25 / 18);
     --text-title-sm: 16px;
-    --text-title-sm--line-height: 22px;
+    --text-title-sm--line-height: calc(22 / 16);
     --text-body-lg: 18px;
-    --text-body-lg--line-height: 28px;
+    --text-body-lg--line-height: calc(28 / 18);
     --text-body-md: 16px;
-    --text-body-md--line-height: 25px;
+    --text-body-md--line-height: calc(25 / 16);
     --text-body-sm: 14px;
-    --text-body-sm--line-height: 22px;
+    --text-body-sm--line-height: calc(22 / 14);
     --text-caption: 13px;
-    --text-caption--line-height: 18px;
+    --text-caption--line-height: calc(18 / 13);
     --text-caption-uppercase: 12px;
-    --text-caption-uppercase--line-height: 17px;
+    --text-caption-uppercase--line-height: calc(17 / 12);
     --text-caption-uppercase--letter-spacing: 1.5px;
     --text-button: 14px;
-    --text-button--line-height: 14px;
+    --text-button--line-height: calc(14 / 14);
     --text-button--letter-spacing: -0.14px;
     --text-nav-link: 14px;
-    --text-nav-link--line-height: 20px;
+    --text-nav-link--line-height: calc(20 / 14);
   }
 }
 
