@@ -22,7 +22,6 @@ import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import type { InsightPoint } from '@/lib/instagram';
 import { dayLabel, formatCompact, sumPoints } from './utils';
-import { Reveal } from '@/components/ui/reveal';
 
 type PeriodDays = 7 | 28;
 const PERIOD_OPTIONS: readonly PeriodDays[] = [7, 28];
@@ -419,117 +418,95 @@ export default function InsightsScreen() {
 
   return (
     <ScreenShell contentContainerStyle={{ gap: 12 }}>
-      {/* Header */}
-      <Reveal delay={0} style={{ width: '100%' }}>
-        <View className="gap-1.5">
-          <View className="flex-row items-center justify-between">
-            <Text size="3xl" weight="medium" className="tracking-tight">
-              Insights
-            </Text>
-            <View className="flex-row items-center gap-2.5">
-              {isRefreshing && !isLoading ? (
-                <View className="flex-row items-center gap-1.5">
-                  <View className="h-1.5 w-1.5 rounded-full bg-warning" />
-                  <Text size="xs" muted>
-                    Updating…
-                  </Text>
-                </View>
-              ) : null}
-              <PeriodToggle days={windowDays} onChange={setWindowDays} />
-            </View>
-          </View>
-          <Text size="sm" muted>
-            {profile?.username ? `@${profile.username} · ` : ''}Last {windowDays} days
+      {/* Header — always painted on first frame so the tab switch isn't empty. */}
+      <View className="gap-1.5">
+        <View className="flex-row items-center justify-between">
+          <Text size="3xl" weight="medium" className="tracking-tight">
+            Insights
           </Text>
+          <View className="flex-row items-center gap-2.5">
+            {isRefreshing && !isLoading ? (
+              <View className="flex-row items-center gap-1.5">
+                <View className="h-1.5 w-1.5 rounded-full bg-warning" />
+                <Text size="xs" muted>
+                  Updating…
+                </Text>
+              </View>
+            ) : null}
+            <PeriodToggle days={windowDays} onChange={setWindowDays} />
+          </View>
         </View>
-      </Reveal>
+        <Text size="sm" muted>
+          {profile?.username ? `@${profile.username} · ` : ''}Last {windowDays} days
+        </Text>
+      </View>
 
       {isLoading ? (
-        <Reveal delay={50} style={{ width: '100%' }}>
-          <DataSkeleton />
-        </Reveal>
+        <DataSkeleton />
       ) : isReconnectError ? (
-        <Reveal delay={50} style={{ width: '100%' }}>
-          <ReconnectCard
-            variant={error as 'session_expired' | 'insights_permission'}
-            loading={isReconnecting}
-            onReconnect={handleReconnect}
-          />
-        </Reveal>
+        <ReconnectCard
+          variant={error as 'session_expired' | 'insights_permission'}
+          loading={isReconnecting}
+          onReconnect={handleReconnect}
+        />
       ) : (
         <>
-          {error && (
-            <Reveal delay={50} style={{ width: '100%' }}>
-              <InlineErrorStrip message={error} onRetry={refresh} />
-            </Reveal>
-          )}
+          {error && <InlineErrorStrip message={error} onRetry={refresh} />}
 
-          {/* KPI grid */}
-          <Reveal delay={60} style={{ width: '100%' }}>
-            <View className="flex-row flex-wrap gap-2.5">
-              <KpiCard
-                label="Followers"
-                value={
-                  profile?.followers_count != null
-                    ? formatCompact(profile.followers_count)
-                    : followerSeries.length > 0
-                      ? formatCompact(followerSeries[followerSeries.length - 1].value)
-                      : '—'
-                }
-                sub={
-                  followerDelta != null
-                    ? followerDelta > 0
-                      ? `+${formatCompact(followerDelta)} this period`
-                      : followerDelta < 0
-                        ? `${formatCompact(followerDelta)} this period`
-                        : 'No change this period'
-                    : 'Trends at 100+ followers'
-                }
-              />
-              <KpiCard
-                label="Reach"
-                value={reachTotal != null ? formatCompact(reachTotal) : '—'}
-                sub={reachAvg != null ? `avg ${formatCompact(reachAvg)}/day` : `Last ${windowDays} days`}
-              />
-              <KpiCard
-                label="Views"
-                value={insights?.viewsTotal != null ? formatCompact(insights.viewsTotal) : '—'}
-                sub={insights?.viewsTotal != null ? `Last ${windowDays} days` : 'Unavailable yet'}
-              />
-              <KpiCard
-                label="Engaged"
-                value={
-                  insights?.accountsEngagedTotal != null
-                    ? formatCompact(insights.accountsEngagedTotal)
+          <View className="flex-row flex-wrap gap-2.5">
+            <KpiCard
+              label="Followers"
+              value={
+                profile?.followers_count != null
+                  ? formatCompact(profile.followers_count)
+                  : followerSeries.length > 0
+                    ? formatCompact(followerSeries[followerSeries.length - 1].value)
                     : '—'
-                }
-                sub={
-                  insights?.accountsEngagedTotal != null
-                    ? `Accounts · ${windowDays}D`
-                    : 'Unavailable yet'
-                }
-              />
-            </View>
-          </Reveal>
-
-          {/* Reach chart */}
-          <Reveal delay={110} style={{ width: '100%' }}>
-            <ReachChartCard points={insights?.reach ?? []} windowDays={windowDays} />
-          </Reveal>
-
-          {/* Followers */}
-          <Reveal delay={160} style={{ width: '100%' }}>
-            <FollowersCard
-              followers={profile?.followers_count ?? null}
-              series={followerSeries}
-              windowDays={windowDays}
+              }
+              sub={
+                followerDelta != null
+                  ? followerDelta > 0
+                    ? `+${formatCompact(followerDelta)} this period`
+                    : followerDelta < 0
+                      ? `${formatCompact(followerDelta)} this period`
+                      : 'No change this period'
+                  : 'Trends at 100+ followers'
+              }
             />
-          </Reveal>
+            <KpiCard
+              label="Reach"
+              value={reachTotal != null ? formatCompact(reachTotal) : '—'}
+              sub={reachAvg != null ? `avg ${formatCompact(reachAvg)}/day` : `Last ${windowDays} days`}
+            />
+            <KpiCard
+              label="Views"
+              value={insights?.viewsTotal != null ? formatCompact(insights.viewsTotal) : '—'}
+              sub={insights?.viewsTotal != null ? `Last ${windowDays} days` : 'Unavailable yet'}
+            />
+            <KpiCard
+              label="Engaged"
+              value={
+                insights?.accountsEngagedTotal != null
+                  ? formatCompact(insights.accountsEngagedTotal)
+                  : '—'
+              }
+              sub={
+                insights?.accountsEngagedTotal != null
+                  ? `Accounts · ${windowDays}D`
+                  : 'Unavailable yet'
+              }
+            />
+          </View>
 
-          {/* Top posts */}
-          <Reveal delay={210} style={{ width: '100%' }}>
-            <TopPostsCard items={topMedia} />
-          </Reveal>
+          <ReachChartCard points={insights?.reach ?? []} windowDays={windowDays} />
+
+          <FollowersCard
+            followers={profile?.followers_count ?? null}
+            series={followerSeries}
+            windowDays={windowDays}
+          />
+
+          <TopPostsCard items={topMedia} />
         </>
       )}
     </ScreenShell>

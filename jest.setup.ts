@@ -39,6 +39,7 @@ jest.mock('expo-router', () => ({
     replace: jest.fn(),
     dismissTo: jest.fn(),
     back: jest.fn(),
+    prefetch: jest.fn(),
   }),
   // Run the focus callback once on mount (same contract as useEffect for tests).
   useFocusEffect: (callback: () => void | (() => void)) => {

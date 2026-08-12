@@ -130,8 +130,9 @@ export function useInsights(windowDays: number): UseInsightsResult {
     topMedia,
     // Loading means "nothing to show": pending with no data of our own.
     // keepPreviousData supplies data during period switches, and restored
-    // caches arrive with data — neither should skeleton.
-    isLoading: !isReady || (insightsQuery.isPending && insightsQuery.data === undefined),
+    // caches arrive with data — neither should skeleton. Don't gate on
+    // isReady: a persisted cache should paint even while the bridge catches up.
+    isLoading: insightsQuery.isPending && insightsQuery.data === undefined,
     isRefreshing: insightsQuery.isFetching,
     error,
     refresh,
