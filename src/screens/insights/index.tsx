@@ -3,37 +3,48 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 
-import { View, Text, Pressable } from '@/tw';
+import { View, Pressable, useCSSVariable } from '@/tw';
 import { Image } from '@/tw/image';
 import { ScreenShell } from '@/components/screen-shell';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+import {
+  Alert,
+  BarChart,
+  Button,
+  Card,
+  Chip,
+  Kpi,
+  Skeleton,
+  Text,
+} from 'panelui-native';
 import { useInsights, type TopMediaItem } from '@/hooks/useInsights';
 import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
-import { useThemeColors } from '@/lib/theme';
 import type { InsightPoint } from '@/lib/instagram';
 import { dayLabel, formatCompact, sumPoints } from './utils';
-import { Reveal, SkeletonBlock } from './components';
+import { Reveal } from '@/components/ui/reveal';
 
 type PeriodDays = 7 | 28;
 const PERIOD_OPTIONS: readonly PeriodDays[] = [7, 28];
+
+// Scrim-over-photo glyphs sit on the image, not on a themed surface.
+const SCRIM_GLYPH = '#ffffff';
 
 // ── Skeleton ─────────────────────────────────────────────────────────
 
 function DataSkeleton() {
   return (
-    <View style={{ gap: 16 }}>
-      <View className="flex-row" style={{ gap: 10 }}>
-        <SkeletonBlock height={92} style={{ flex: 1 }} />
-        <SkeletonBlock height={92} style={{ flex: 1 }} />
+    <View className="gap-4">
+      <View className="flex-row gap-2.5">
+        <Skeleton className="h-23 flex-1 rounded-2xl" />
+        <Skeleton className="h-23 flex-1 rounded-2xl" />
       </View>
-      <View className="flex-row" style={{ gap: 10 }}>
-        <SkeletonBlock height={92} style={{ flex: 1 }} />
-        <SkeletonBlock height={92} style={{ flex: 1 }} />
+      <View className="flex-row gap-2.5">
+        <Skeleton className="h-23 flex-1 rounded-2xl" />
+        <Skeleton className="h-23 flex-1 rounded-2xl" />
       </View>
-      <SkeletonBlock height={220} />
-      <SkeletonBlock height={140} />
+      <Skeleton className="h-56 rounded-2xl" />
+      <Skeleton className="h-35 rounded-2xl" />
     </View>
   );
 }
@@ -47,37 +58,18 @@ function PeriodToggle({
   days: PeriodDays;
   onChange: (d: PeriodDays) => void;
 }) {
-  const t = useThemeColors();
   return (
-    <View
-      className="flex-row bg-surface-card border border-hairline"
-      style={{ borderRadius: 9999, padding: 3 }}
-    >
-      {PERIOD_OPTIONS.map((option) => {
-        const active = option === days;
-        return (
-          <Pressable
-            key={option}
-            onPress={() => onChange(option)}
-            hitSlop={6}
-            style={{
-              borderRadius: 9999,
-              paddingVertical: 10,
-              paddingHorizontal: 16,
-              minWidth: 48,
-              alignItems: 'center',
-              backgroundColor: active ? t.ink : 'transparent',
-            }}
-          >
-            <Text
-              className="font-semibold"
-              style={{ fontSize: 12.5, color: active ? t.onPrimary : t.muted }}
-            >
-              {option}D
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View className="flex-row gap-1.5">
+      {PERIOD_OPTIONS.map((option) => (
+        <Chip
+          key={option}
+          size="sm"
+          selected={option === days}
+          onPress={() => onChange(option)}
+        >
+          {`${option}D`}
+        </Chip>
+      ))}
     </View>
   );
 }
@@ -86,29 +78,21 @@ function PeriodToggle({
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-lg"
-      style={{ flexBasis: '48%', flexGrow: 1, padding: 14, gap: 2 }}
-    >
-      <Text
-        className="font-semibold uppercase text-muted"
-        style={{ fontSize: 11, letterSpacing: 1.2 }}
-      >
-        {label}
-      </Text>
-      <Text className="font-semibold text-ink" style={{ fontSize: 24, letterSpacing: -0.4 }}>
-        {value}
-      </Text>
-      <Text className="text-muted-soft" style={{ fontSize: 12 }}>
-        {sub}
-      </Text>
+    <View className="flex-grow" style={{ flexBasis: '48%' }}>
+      <Kpi>
+        <Kpi.Stat>
+          <Kpi.Title className="text-xs uppercase tracking-wider">{label}</Kpi.Title>
+          <Kpi.Value className="tracking-tight">{value}</Kpi.Value>
+          <Text size="xs" muted>
+            {sub}
+          </Text>
+        </Kpi.Stat>
+      </Kpi>
     </View>
   );
 }
 
 // ── Reach chart ──────────────────────────────────────────────────────
-
-const CHART_HEIGHT = 120;
 
 function ReachChartCard({
   points,
@@ -117,109 +101,74 @@ function ReachChartCard({
   points: InsightPoint[];
   windowDays: PeriodDays;
 }) {
-  // Selection is keyed by day (endTime), not index — it survives refetches and
-  // resolves to null automatically when the period toggle drops the day.
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Selection latches the last index the pan gesture touched — the chart's own
+  // active band resets when the finger lifts, so the readout and Reset survive.
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const total = useMemo(() => sumPoints(points), [points]);
-  const max = useMemo(() => points.reduce((m, p) => Math.max(m, p.value), 0), [points]);
-  const maxIdx = useMemo(
-    () => (max > 0 ? points.findIndex((p) => p.value === max) : -1),
-    [points, max]
-  );
-  const selectedPoint = useMemo(
-    () => points.find((p) => p.endTime === selectedTime) ?? null,
-    [points, selectedTime]
-  );
+  const selectedPoint =
+    selectedIdx != null && selectedIdx < points.length ? points[selectedIdx] : null;
 
   const hasData = points.length > 0 && total > 0;
   const headerValue = selectedPoint ? selectedPoint.value : total;
   const headerSub = selectedPoint ? dayLabel(selectedPoint.endTime) : `Last ${windowDays} days`;
 
-  const axisIdx = useMemo(() => {
-    if (points.length < 2) return [];
-    const last = points.length - 1;
-    return [0, Math.floor(last / 3), Math.floor((2 * last) / 3), last].filter(
-      (v, i, arr) => arr.indexOf(v) === i
-    );
-  }, [points]);
+  const chartData = useMemo(
+    () => points.map((p) => ({ day: dayLabel(p.endTime), value: p.value })),
+    [points]
+  );
 
-  const barRadius = windowDays <= 7 ? 6 : 3;
-
-  const t = useThemeColors();
+  const muted = useCSSVariable('--color-muted-foreground') as string;
   return (
-    <View className="bg-surface-card border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
+    <Card className="gap-3.5 p-4.5">
       <View className="flex-row items-end justify-between">
-        <View style={{ gap: 2 }}>
-          <Text
-            className="font-semibold uppercase text-muted"
-            style={{ fontSize: 11, letterSpacing: 1.2 }}
-          >
+        <View className="gap-0.5">
+          <Text size="xs" weight="semibold" muted className="uppercase tracking-wider">
             Reach
           </Text>
-          <Text className="font-semibold text-ink" style={{ fontSize: 28, letterSpacing: -0.5 }}>
+          <Text size="2xl" weight="bold" className="tracking-tight">
             {formatCompact(headerValue)}
           </Text>
-          <Text className="text-muted-soft" style={{ fontSize: 12 }}>
+          <Text size="xs" muted>
             {headerSub}
           </Text>
         </View>
         {selectedPoint != null && (
-          <Pressable
-            onPress={() => setSelectedTime(null)}
-            style={{ paddingVertical: 6, paddingHorizontal: 8 }}
-          >
-            <Text className="font-medium text-muted" style={{ fontSize: 12.5 }}>
-              Reset
-            </Text>
-          </Pressable>
+          <Button variant="ghost" size="sm" onPress={() => setSelectedIdx(null)}>
+            Reset
+          </Button>
         )}
       </View>
 
       {hasData ? (
-        <View>
-          <View className="flex-row items-end" style={{ height: CHART_HEIGHT, gap: windowDays <= 7 ? 6 : 2 }}>
-            {points.map((point, i) => {
-              const pct = max > 0 ? point.value / max : 0;
-              const isSelected = selectedTime === point.endTime;
-              const isMax = i === maxIdx && selectedTime == null;
-              const barClass = isSelected ? 'bg-ink' : isMax ? 'bg-brand-ochre' : 'bg-surface-strong';
-              return (
-                <Pressable
-                  key={point.endTime}
-                  onPress={() => setSelectedTime(isSelected ? null : point.endTime)}
-                  className={`flex-1 ${barClass}`}
-                  style={{
-                    height: `${Math.max(pct * 100, 2.5)}%`,
-                    borderTopLeftRadius: barRadius,
-                    borderTopRightRadius: barRadius,
-                  }}
-                  accessibilityLabel={`Reach ${point.value} on ${dayLabel(point.endTime)}`}
-                />
-              );
-            })}
-          </View>
-          <View className="flex-row justify-between" style={{ marginTop: 8 }}>
-            {axisIdx.map((i) => (
-              <Text key={i} className="text-muted-soft" style={{ fontSize: 10.5 }}>
-                {dayLabel(points[i].endTime)}
-              </Text>
-            ))}
-          </View>
-        </View>
+        <BarChart
+          data={chartData}
+          xDataKey="day"
+          aspectRatio={2.6}
+          minBarLength={3}
+          cornerRadius={windowDays <= 7 ? 6 : 3}
+          accessibilityLabel={`Reach over the last ${windowDays} days, total ${formatCompact(total)}`}
+          onActiveIndexChange={(index) => {
+            if (index >= 0) setSelectedIdx(index);
+          }}
+        >
+          <BarChart.Bar dataKey="value" colorIndex={1} />
+          <BarChart.XAxis ticks={4} />
+          <BarChart.Tooltip formatValue={(v) => formatCompact(v)} />
+        </BarChart>
       ) : (
-        <View className="items-center" style={{ height: CHART_HEIGHT, justifyContent: 'center', gap: 6 }}>
-          <Ionicons name="stats-chart-outline" size={22} color={t.mutedSoft} />
-          <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
+        <View className="h-30 items-center justify-center gap-1.5">
+          <Ionicons name="stats-chart-outline" size={22} color={muted} />
+          <Text size="sm" muted className="max-w-60 text-center">
             No reach data yet — Meta can take up to 48h to report new insights.
           </Text>
         </View>
       )}
-    </View>
+    </Card>
   );
 }
 
-// ── Followers card (saturated Clay feature card) ─────────────────────
+// ── Followers card (accent surface, sparkline + trend badge) ─────────
 
 function FollowersCard({
   followers,
@@ -234,79 +183,44 @@ function FollowersCard({
   const delta =
     series.length >= 2 ? series[series.length - 1].value - series[0].value : null;
 
-  const min = series.reduce((m, p) => Math.min(m, p.value), Infinity);
-  const max = series.reduce((m, p) => Math.max(m, p.value), -Infinity);
-  const range = max - min;
+  // Line sparkline, not bars: a bar chart's zero-baseline domain would render
+  // 1490→1500 as identical full-height bars. Lines may crop, bars may not.
+  const sparkData = useMemo(() => series.map((p) => ({ value: p.value })), [series]);
 
+  const muted = useCSSVariable('--color-muted-foreground') as string;
   return (
-    <View className="bg-brand-teal rounded-xl" style={{ padding: 18, gap: 12 }}>
-      <View className="flex-row items-start justify-between">
-        <View style={{ gap: 2 }}>
-          <Text
-            className="font-semibold uppercase"
-            style={{ fontSize: 11, letterSpacing: 1.2, color: 'rgba(255,255,255,0.7)' }}
-          >
-            Followers
-          </Text>
-          <Text className="font-semibold text-white" style={{ fontSize: 28, letterSpacing: -0.5 }}>
-            {current != null ? formatCompact(current) : '—'}
-          </Text>
-        </View>
+    <Kpi surface={false} colorIndex={3} className="gap-2 rounded-2xl bg-success-soft p-4">
+      <Kpi.Header>
+        <Kpi.Title className="text-xs uppercase tracking-wider">Followers</Kpi.Title>
         {delta != null && (
-          <View
-            className="flex-row items-center"
-            style={{
-              gap: 4,
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              borderRadius: 9999,
-              paddingVertical: 4,
-              paddingHorizontal: 10,
-            }}
-          >
-            <Ionicons
-              name={delta > 0 ? 'trending-up' : delta < 0 ? 'trending-down' : 'remove'}
-              size={12}
-              color="#ffffff"
-            />
-            <Text className="font-semibold text-white" style={{ fontSize: 12 }}>
-              {delta > 0 ? `+${formatCompact(delta)}` : delta === 0 ? 'No change' : formatCompact(delta)}
-            </Text>
-          </View>
+          <Kpi.Trend
+            variant="badge"
+            value={delta}
+            format={(v) =>
+              v > 0 ? `+${formatCompact(v)}` : v < 0 ? formatCompact(v) : 'No change'
+            }
+          />
         )}
-      </View>
+      </Kpi.Header>
+      <Kpi.Value className="text-3xl tracking-tight">
+        {current != null ? formatCompact(current) : '—'}
+      </Kpi.Value>
 
       {series.length >= 2 ? (
-        <View className="flex-row items-end" style={{ height: 44, gap: 2 }}>
-          {series.map((point, i) => {
-            const pct = range > 0 ? (point.value - min) / range : 0;
-            const isLast = i === series.length - 1;
-            return (
-              <View
-                key={point.endTime}
-                className="flex-1"
-                style={{
-                  height: `${25 + pct * 75}%`,
-                  backgroundColor: isLast ? '#ffffff' : 'rgba(255,255,255,0.35)',
-                  borderTopLeftRadius: 2,
-                  borderTopRightRadius: 2,
-                }}
-              />
-            );
-          })}
-        </View>
+        <Kpi.Chart data={sparkData} dataKey="value" height={44} colorIndex={3} />
       ) : (
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <Ionicons name="lock-closed-outline" size={13} color="rgba(255,255,255,0.8)" />
-          <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', flex: 1 }}>
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="lock-closed-outline" size={13} color={muted} />
+          <Text size="sm" muted className="flex-1">
             Daily follower trends unlock at 100 followers — a Meta threshold.
           </Text>
         </View>
       )}
 
-      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+      <Text size="xs" muted>
         Last {windowDays} days
       </Text>
-    </View>
+    </Kpi>
   );
 }
 
@@ -320,7 +234,8 @@ function mediaTypeIcon(item: TopMediaItem): React.ComponentProps<typeof Ionicons
 
 function TopPostTile({ item }: { item: TopMediaItem }) {
   const typeIcon = mediaTypeIcon(item);
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
+  const muted = useCSSVariable('--color-muted-foreground') as string;
   const open = useCallback(() => {
     if (item.permalink) {
       Linking.openURL(item.permalink).catch((err: unknown) =>
@@ -330,11 +245,8 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
   }, [item.permalink]);
 
   return (
-    <Pressable onPress={open} style={{ flexBasis: '48%', flexGrow: 1, gap: 6 }}>
-      <View
-        className="bg-surface-card border border-hairline"
-        style={{ aspectRatio: 1, borderRadius: 12, overflow: 'hidden' }}
-      >
+    <Pressable onPress={open} className="flex-grow gap-1.5" style={{ flexBasis: '48%' }}>
+      <View className="aspect-square overflow-hidden rounded-xl border border-border bg-card">
         {item.imageUri ? (
           <Image
             source={{ uri: item.imageUri }}
@@ -343,34 +255,25 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
           />
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Ionicons name="image-outline" size={22} color={t.mutedSoft} />
+            <Ionicons name="image-outline" size={22} color={muted} />
           </View>
         )}
         {typeIcon && (
-          <View
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              borderRadius: 9999,
-              padding: 5,
-            }}
-          >
-            <Ionicons name={typeIcon} size={11} color={t.onPrimary} />
+          <View className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5">
+            <Ionicons name={typeIcon} size={11} color={SCRIM_GLYPH} />
           </View>
         )}
       </View>
-      <View className="flex-row items-center" style={{ gap: 12 }}>
-        <View className="flex-row items-center" style={{ gap: 4 }}>
-          <Ionicons name="heart" size={12} color={t.ink} />
-          <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
+      <View className="flex-row items-center gap-3">
+        <View className="flex-row items-center gap-1">
+          <Ionicons name="heart" size={12} color={foreground} />
+          <Text size="xs" weight="medium">
             {formatCompact(item.like_count ?? 0)}
           </Text>
         </View>
-        <View className="flex-row items-center" style={{ gap: 4 }}>
-          <Ionicons name="chatbubble" size={11} color={t.ink} />
-          <Text className="font-medium text-ink" style={{ fontSize: 12 }}>
+        <View className="flex-row items-center gap-1">
+          <Ionicons name="chatbubble" size={11} color={foreground} />
+          <Text size="xs" weight="medium">
             {formatCompact(item.comments_count ?? 0)}
           </Text>
         </View>
@@ -380,35 +283,30 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
 }
 
 function TopPostsCard({ items }: { items: TopMediaItem[] }) {
-  const t = useThemeColors();
+  const muted = useCSSVariable('--color-muted-foreground') as string;
   return (
-    <View className="bg-surface-card border border-hairline rounded-xl" style={{ padding: 18, gap: 14 }}>
-      <View style={{ gap: 2 }}>
-        <Text
-          className="font-semibold uppercase text-muted"
-          style={{ fontSize: 11, letterSpacing: 1.2 }}
-        >
-          Top posts
-        </Text>
-        <Text className="text-muted-soft" style={{ fontSize: 12 }}>
-          Ranked by likes + comments
-        </Text>
-      </View>
-      {items.length > 0 ? (
-        <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-          {items.map((item) => (
-            <TopPostTile key={item.id} item={item} />
-          ))}
-        </View>
-      ) : (
-        <View className="items-center" style={{ paddingVertical: 18, gap: 6 }}>
-          <Ionicons name="images-outline" size={22} color={t.mutedSoft} />
-          <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 240 }}>
-            No posts yet — share a post on Instagram and its performance lands here.
-          </Text>
-        </View>
-      )}
-    </View>
+    <Card>
+      <Card.Header>
+        <Card.Title>Top posts</Card.Title>
+        <Card.Description>Ranked by likes + comments</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {items.length > 0 ? (
+          <View className="flex-row flex-wrap gap-3">
+            {items.map((item) => (
+              <TopPostTile key={item.id} item={item} />
+            ))}
+          </View>
+        ) : (
+          <View className="items-center gap-1.5 py-5">
+            <Ionicons name="images-outline" size={22} color={muted} />
+            <Text size="sm" muted className="max-w-60 text-center">
+              No posts yet — share a post on Instagram and its performance lands here.
+            </Text>
+          </View>
+        )}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -423,7 +321,8 @@ function ReconnectCard({
   loading: boolean;
   onReconnect: () => void;
 }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   const copy =
     variant === 'insights_permission'
       ? {
@@ -438,53 +337,42 @@ function ReconnectCard({
         };
 
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-xl items-center"
-      style={{ padding: 24, gap: 12 }}
-    >
-      <View
-        className="bg-brand-lavender items-center justify-center"
-        style={{ width: 52, height: 52, borderRadius: 26 }}
-      >
-        <Ionicons name={copy.icon} size={24} color={t.ink} />
+    <Card className="items-center gap-3 p-6">
+      <View className="h-13 w-13 items-center justify-center rounded-full bg-info-soft">
+        <Ionicons name={copy.icon} size={24} color={foreground} />
       </View>
-      <Text
-        className="font-semibold text-ink text-center"
-        style={{ fontSize: 19, letterSpacing: -0.3 }}
-      >
+      <Text size="lg" weight="semibold" className="text-center tracking-tight">
         {copy.title}
       </Text>
-      <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 280 }}>
+      <Text size="sm" muted className="max-w-70 text-center">
         {copy.body}
       </Text>
-      <ClayAnimatedButton variant="primary" fullWidth loading={loading} onPress={onReconnect} height={48}>
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <Ionicons name="logo-instagram" size={16} color={t.onPrimary} />
-          <Text className="font-semibold text-white" style={{ fontSize: 14.5 }}>
-            {loading ? 'Waiting for Instagram…' : 'Reconnect Instagram'}
-          </Text>
-        </View>
-      </ClayAnimatedButton>
-    </View>
+      <Button
+        variant="primary"
+        fullWidth
+        loading={loading}
+        onPress={onReconnect}
+        startContent={<Ionicons name="logo-instagram" size={16} color={primaryForeground} />}
+      >
+        {loading ? 'Waiting for Instagram…' : 'Reconnect Instagram'}
+      </Button>
+    </Card>
   );
 }
 
 function InlineErrorStrip({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <View
-      className="flex-row items-center bg-surface-card border border-hairline rounded-lg"
-      style={{ padding: 12, gap: 10 }}
-    >
-      <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />
-      <Text className="text-muted" style={{ fontSize: 12.5, flex: 1 }} numberOfLines={2}>
-        Couldn’t load insights — {message}
-      </Text>
-      <Pressable onPress={onRetry} style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
-        <Text className="font-semibold text-ink" style={{ fontSize: 12.5 }}>
-          Retry
-        </Text>
-      </Pressable>
-    </View>
+    <Alert variant="destructive" className="items-center">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Description numberOfLines={2}>
+          Couldn’t load insights — {message}
+        </Alert.Description>
+      </Alert.Content>
+      <Button variant="secondary" size="sm" onPress={onRetry}>
+        Retry
+      </Button>
+    </Alert>
   );
 }
 
@@ -533,22 +421,16 @@ export default function InsightsScreen() {
     <ScreenShell contentContainerStyle={{ gap: 12 }}>
       {/* Header */}
       <Reveal delay={0} style={{ width: '100%' }}>
-        <View style={{ gap: 6 }}>
+        <View className="gap-1.5">
           <View className="flex-row items-center justify-between">
-            <Text
-              className="font-medium text-ink"
-              style={{ fontSize: 32, lineHeight: 37, letterSpacing: -0.5 }}
-            >
+            <Text size="3xl" weight="medium" className="tracking-tight">
               Insights
             </Text>
-            <View className="flex-row items-center" style={{ gap: 10 }}>
+            <View className="flex-row items-center gap-2.5">
               {isRefreshing && !isLoading ? (
-                <View className="flex-row items-center" style={{ gap: 5 }}>
-                  <View
-                    className="bg-brand-ochre"
-                    style={{ width: 6, height: 6, borderRadius: 3 }}
-                  />
-                  <Text className="text-muted-soft" style={{ fontSize: 11.5 }}>
+                <View className="flex-row items-center gap-1.5">
+                  <View className="h-1.5 w-1.5 rounded-full bg-warning" />
+                  <Text size="xs" muted>
                     Updating…
                   </Text>
                 </View>
@@ -556,7 +438,7 @@ export default function InsightsScreen() {
               <PeriodToggle days={windowDays} onChange={setWindowDays} />
             </View>
           </View>
-          <Text className="text-muted" style={{ fontSize: 13 }}>
+          <Text size="sm" muted>
             {profile?.username ? `@${profile.username} · ` : ''}Last {windowDays} days
           </Text>
         </View>
@@ -584,7 +466,7 @@ export default function InsightsScreen() {
 
           {/* KPI grid */}
           <Reveal delay={60} style={{ width: '100%' }}>
-            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+            <View className="flex-row flex-wrap gap-2.5">
               <KpiCard
                 label="Followers"
                 value={
