@@ -65,6 +65,7 @@ function TabsLayout() {
       <Tabs.Screen name="(automate)" />
       <Tabs.Screen name="(messages)" />
       <Tabs.Screen name="(insights)" />
+      <Tabs.Screen name="(profile)" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -94,7 +95,7 @@ const routes = {
   '(tabs)/(messages)/[threadId]': marker('THREAD'),
   '(tabs)/(messages)/_layout': groupStackWithSettings(['index'], { anchor: 'threads' }),
   '(tabs)/(messages)/threads': marker('MESSAGES'),
-  '(tabs)/(profile)/_layout': groupStackWithSettings(['index'], { anchor: 'view' }),
+  '(tabs)/(profile)/_layout': groupStackWithSettings(['view'], { anchor: 'view' }),
   '(tabs)/(profile)/view': marker('PROFILE'),
   '(tabs)/_layout': { default: TabsLayout },
   '_layout': {
@@ -110,6 +111,21 @@ it('boots into the Home tab', async () => {
 
   expect(result.getSegments().join('/')).toBe('(tabs)/(home)');
   expect(screen.queryAllByText('HOME').length).toBeGreaterThan(0);
+});
+
+/**
+ * Home header avatar pushes `/(tabs)/(profile)/view`. Bare `/(tabs)/(profile)`
+ * mis-resolves to `(automate)/[automationId]` — never use the group-only href.
+ */
+it('navigates home avatar path to Profile, not Automate', async () => {
+  const result = renderRouter(routes, { initialUrl: '/(tabs)/(profile)/view' });
+  await result;
+
+  const segments = result.getSegments().join('/');
+  expect(segments).toContain('(profile)');
+  expect(segments).not.toContain('(automate)');
+  expect(screen.queryAllByText('PROFILE').length).toBeGreaterThan(0);
+  expect(screen.queryAllByText('AUTOMATE').length).toBe(0);
 });
 
 it('anchors survive expo-router’s validated route crawl', () => {

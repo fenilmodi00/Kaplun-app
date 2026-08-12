@@ -5,6 +5,28 @@
  * Mocks fetchProfile to return a profile.
  */
 
+const mockPush = jest.fn();
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: jest.fn(),
+    dismissTo: jest.fn(),
+    back: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = require('react');
+    React.useEffect(() => {
+      const cleanup = callback();
+      return typeof cleanup === 'function' ? cleanup : undefined;
+    }, [callback]);
+  },
+  useLocalSearchParams: () => ({}),
+  Link: ({ children }: { children: React.ReactNode }) => children,
+  Slot: ({ children }: { children?: React.ReactNode }) => children || null,
+}));
+
 jest.mock('@/hooks/useAppwriteUser', () => ({
   useAppwriteUser: () => ({ data: { $id: 'test-user-id' }, isLoading: false }),
 }));
@@ -86,8 +108,17 @@ jest.mock('@/hooks/useDashboard', () => ({
   }),
 }));
 
+jest.mock('@/screens/score', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    ScoreSheet: React.forwardRef((_props: unknown, _ref: unknown) =>
+      React.createElement(View, { testID: 'score-sheet' })),
+  };
+});
+
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import HomeScreen from '@/screens/home';
 import { fetchProfile } from '@/lib/instagram';
 
@@ -164,5 +195,39 @@ describe('HomeScreen — Connected state', () => {
     await waitFor(() => {
       expect(getByText('Kaplun')).toBeTruthy();
     }, { timeout: 5000, interval: 100 });
+  });
+
+  it('profile avatar pushes /(tabs)/(profile)/view, not a bare group href', async () => {
+    mockPush.mockClear();
+
+    const { getByLabelText } = await render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(getByLabelText('Profile')).toBeTruthy();
+    }, { timeout: 5000, interval: 100 });
+
+    fireEvent.press(getByLabelText('Profile'));
+    expect(mockPush).toHaveBeenCalledWith('/(tabs)/(profile)/view');
+  });
+
+  it('renders Profile Score card when connected', async () => {
+    const { getByText } = await render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(getByText('Profile Score')).toBeTruthy();
+    }, { timeout: 5000, interval: 100 });
+  });
+
+  it('pressing View score does not crash', async () => {
+    const { getByText, getByTestId } = await render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(getByText('View score')).toBeTruthy();
+    }, { timeout: 5000, interval: 100 });
+
+    fireEvent.press(getByText('View score'));
+
+    // Present is imperative on the mock (no-op); the sheet stays mounted.
+    expect(getByTestId('score-sheet')).toBeTruthy();
   });
 });

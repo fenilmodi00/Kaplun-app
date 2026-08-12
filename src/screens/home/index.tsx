@@ -29,6 +29,7 @@ import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
+import { ScoreSheet, type ScoreSheetRef } from '@/screens/score';
 import { getGreeting, profileFromCreator, hasUsableToken, getInitials } from './utils';
 import { ErrorShake, Reveal } from './components';
 
@@ -42,7 +43,7 @@ function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
   const router = useRouter();
   return (
     <Pressable
-      onPress={() => router.push('/(tabs)/(profile)' as never)}
+      onPress={() => router.push('/(tabs)/(profile)/view' as never)}
       accessibilityLabel="Profile"
       accessibilityRole="button"
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -233,6 +234,7 @@ export default function HomeScreen() {
   const { isReady: bridgeReady } = useBridge();
   const insets = useSafeAreaInsets();
   const placeholderSheetRef = useRef<BottomSheetMethods>(null);
+  const scoreSheetRef = useRef<ScoreSheetRef>(null);
   const mutedForeground = useCSSVariable('--color-muted-foreground') as string;
   const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   const foreground = useCSSVariable('--color-foreground') as string;
@@ -512,6 +514,28 @@ export default function HomeScreen() {
           {/* Connected home */}
           {profile && <ConnectionChip profile={profile} />}
 
+          <Reveal delay={110} style={{ width: '100%' }}>
+            <Card className="mb-3.5 gap-3 p-5">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-success-soft">
+                  <Ionicons name="speedometer" size={20} color={foreground} />
+                </View>
+                <View className="flex-1 gap-0.5">
+                  <Text size="base" weight="semibold">
+                    Profile Score
+                  </Text>
+                  <Text size="xs" muted>
+                    Your AI read on the last 30 days
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={mutedForeground} />
+              </View>
+              <Button variant="secondary" size="sm" onPress={() => scoreSheetRef.current?.present()}>
+                View score
+              </Button>
+            </Card>
+          </Reveal>
+
           <Module
             title="Instagram DMs"
             subtitle="Your unified inbox"
@@ -550,6 +574,8 @@ export default function HomeScreen() {
           </View>
         </BottomSheetView>
       </BottomSheetModal>
+
+      <ScoreSheet ref={scoreSheetRef} />
     </ScreenShell>
   );
 }

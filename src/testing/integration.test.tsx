@@ -84,6 +84,13 @@ jest.mock('@/hooks/useDashboard', () => ({
   }),
 }));
 
+jest.mock('@/screens/score', () => {
+  const React = require('react');
+  return {
+    ScoreSheet: React.forwardRef((_props: unknown, _ref: unknown) => null),
+  };
+});
+
 describe('Integration Tests', () => {
   beforeEach(() => {
     mockFetchMedia.mockReset();
