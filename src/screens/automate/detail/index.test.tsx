@@ -23,8 +23,7 @@ jest.mock('expo-router', () => ({
 }));
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import AutomationDetail from '@/screens/automate/detail';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 
@@ -186,69 +185,58 @@ describe('AutomationDetail', () => {
 
   // ── Actions ──
 
-  it('pause button calls toggleStatus', async () => {
+  it('status switch calls toggleStatus', async () => {
     const toggleStatus = jest.fn();
     mockUseAutomations.mockReturnValue({
       ...defaultAutomationsReturn,
       toggleStatus,
     });
 
-    const { getByText } = await render(<AutomationDetail />);
-    const pauseButton = getByText('Pause');
-    expect(pauseButton).toBeTruthy();
+    const { getByRole } = await render(<AutomationDetail />);
+    const toggle = getByRole('switch');
+    expect(toggle.props.value).toBe(true);
 
     await act(async () => {
-      fireEvent.press(pauseButton);
+      fireEvent(toggle, 'valueChange');
     });
 
     expect(toggleStatus).toHaveBeenCalledTimes(1);
     expect(toggleStatus).toHaveBeenCalledWith(mockAutomation);
   });
 
-  it('shows Resume when automation is paused', async () => {
+  it('switch is off when automation is paused', async () => {
     mockUseAutomations.mockReturnValue({
       ...defaultAutomationsReturn,
       automations: [{ ...mockAutomation, status: 'paused' as const }],
     });
 
-    const { getByText } = await render(<AutomationDetail />);
-    expect(getByText('Resume')).toBeTruthy();
+    const { getByRole } = await render(<AutomationDetail />);
+    expect(getByRole('switch').props.value).toBe(false);
   });
 
-  it('delete shows Alert.confirm then calls deleteAutomation', async () => {
+  it('delete confirms via Dialog then calls deleteAutomation', async () => {
     const deleteAutomation = jest.fn();
     mockUseAutomations.mockReturnValue({
       ...defaultAutomationsReturn,
       deleteAutomation,
     });
 
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation((_title, _message, buttons) => {
-        const destructive = buttons?.find((b) => b.style === 'destructive');
-        destructive?.onPress?.();
-      });
+    const { getByText, getByLabelText, queryByText } = await render(<AutomationDetail />);
 
-    const { getByText } = await render(<AutomationDetail />);
-    const deleteButton = getByText('Delete');
-    expect(deleteButton).toBeTruthy();
+    // Dialog content mounts only after the trigger is pressed
+    expect(queryByText('Delete Automation')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(deleteButton);
+      fireEvent.press(getByText('Delete'));
     });
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Delete Automation',
-      expect.stringContaining('Test Automation'),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Cancel', style: 'cancel' }),
-        expect.objectContaining({ text: 'Delete', style: 'destructive' }),
-      ]),
-    );
+    expect(getByText('Delete Automation')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Confirm delete'));
+    });
 
     expect(deleteAutomation).toHaveBeenCalledTimes(1);
     expect(deleteAutomation).toHaveBeenCalledWith('auto-1');
-
-    alertSpy.mockRestore();
   });
 });

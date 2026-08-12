@@ -1,49 +1,52 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { type ReactNode } from 'react';
+import { Badge, Item, Text } from 'panelui-native';
+import { View } from '@/tw';
 import type { AutomationLog } from '@/lib/automations';
-import { useThemeColors } from '@/lib/theme';
 import { formatRelativeTime } from '@/lib/format-time';
-import { actionMeta } from './utils';
-import type { AutomationStyles } from './index';
+import { actionBadgeVariant, actionLabel } from './utils';
 
-export function StatCell({ value, label, styles }: { value: string; label: string; styles: AutomationStyles }) {
+export function ConfigRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <View style={styles.statCell}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View className="flex-row justify-between gap-3">
+      <Text size="sm" muted>{label}</Text>
+      {children}
     </View>
   );
 }
 
-export function LogRow({ log, styles }: { log: AutomationLog; styles: AutomationStyles }) {
-  const t = useThemeColors();
-  const meta = actionMeta(t)[log.action] ?? actionMeta(t).pending;
-
+export function StatCell({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.logRow}>
-      <View style={styles.logBody}>
-        <View style={styles.logTopRow}>
-          <Text style={styles.logUsername} numberOfLines={1}>
-            {log.commenter_username ?? 'Unknown'}
-          </Text>
-          <Text style={styles.logTime}>{formatRelativeTime(log.created_at)}</Text>
-        </View>
-        <Text style={styles.logComment} numberOfLines={1}>
-          {log.comment_text ?? '—'}
-        </Text>
-        <View style={styles.logBadgeRow}>
-          {log.matched_keyword ? (
-            <View style={styles.keywordChip}>
-              <Text style={styles.keywordChipText}>{log.matched_keyword}</Text>
-            </View>
-          ) : null}
-          <View style={[styles.actionBadge, { backgroundColor: meta.bg }]}>
-            <Text style={[styles.actionBadgeText, { color: meta.text }]}>
-              {meta.label}
-            </Text>
-          </View>
-        </View>
-      </View>
+    <View className="items-center gap-0.5">
+      <Text weight="semibold">{value}</Text>
+      <Text size="sm" muted>{label}</Text>
     </View>
+  );
+}
+
+export function LogRow({ log }: { log: AutomationLog }) {
+  return (
+    <Item className="border-b border-border">
+      <Item.Content>
+        <View className="flex-row items-center justify-between gap-2">
+          <Item.Title numberOfLines={1} className="shrink">
+            {log.commenter_username ?? 'Unknown'}
+          </Item.Title>
+          <Text size="xs" muted>
+            {formatRelativeTime(log.created_at)}
+          </Text>
+        </View>
+        <Item.Description numberOfLines={1}>
+          {log.comment_text ?? '—'}
+        </Item.Description>
+        <View className="mt-0.5 flex-row items-center gap-2">
+          {log.matched_keyword ? (
+            <Badge variant="secondary">{log.matched_keyword}</Badge>
+          ) : null}
+          <Badge variant={actionBadgeVariant(log.action)}>
+            {actionLabel(log.action)}
+          </Badge>
+        </View>
+      </Item.Content>
+    </Item>
   );
 }

@@ -413,6 +413,55 @@ jest.mock('panelui-native', () => {
     Input: (props: any) => React.createElement(TextInput, props),
     Switch: (props: any) =>
       React.createElement(View, { accessible: true, accessibilityRole: 'switch', ...props }, props?.children),
+    // Stateful mock mirroring the real component: Trigger/Close clone their
+    // child and compose onPress; Content mounts only while open.
+    Dialog: (() => {
+      const DialogContext = React.createContext(null);
+      const useDialog = () => React.useContext(DialogContext);
+      const DialogRoot = (props: any) => {
+        const [internalOpen, setInternalOpen] = React.useState(props?.defaultOpen ?? false);
+        const isControlled = props?.open !== undefined;
+        const open = isControlled ? props.open : internalOpen;
+        const setOpen = (v: boolean) => {
+          if (!isControlled) setInternalOpen(v);
+          props?.onOpenChange?.(v);
+        };
+        return React.createElement(DialogContext.Provider, { value: { open, setOpen } }, props?.children);
+      };
+      const DialogTrigger = ({ children }: any) => {
+        const ctx = useDialog();
+        if (!React.isValidElement(children)) return children;
+        return React.cloneElement(children as React.ReactElement<any>, {
+          onPress: (...args: unknown[]) => {
+            children.props?.onPress?.(...args);
+            ctx?.setOpen(true);
+          },
+        });
+      };
+      const DialogContent = (props: any) => {
+        const ctx = useDialog();
+        if (!ctx?.open) return null;
+        return React.createElement(View, props, props?.children);
+      };
+      const DialogClose = ({ children }: any) => {
+        const ctx = useDialog();
+        if (!React.isValidElement(children)) return children;
+        return React.cloneElement(children as React.ReactElement<any>, {
+          onPress: (...args: unknown[]) => {
+            children.props?.onPress?.(...args);
+            ctx?.setOpen(false);
+          },
+        });
+      };
+      return Object.assign(DialogRoot, {
+        Trigger: DialogTrigger,
+        Content: DialogContent,
+        Title: textPassthrough,
+        Description: textPassthrough,
+        Footer: viewPassthrough,
+        Close: DialogClose,
+      });
+    })(),
     Marker: family({
       Icon: viewPassthrough,
       Content: textPassthrough,

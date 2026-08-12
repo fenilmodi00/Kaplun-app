@@ -1,45 +1,53 @@
 /**
  * Automation detail screen — status, stats, config summary, activity feed.
  *
- * NOTE: raw React Native + StyleSheet instead of `@/tw` className primitives.
- * The useCssElement bridge drops layout classes on Android (same ballooning
- * the builder had). See src/tw/AGENTS.md for the documented escape hatch.
+ * PanelUI components (Card, Item, Badge, Switch, Dialog, Alert, EmptyState)
+ * on semantic tokens; layout stays on `@/tw` primitives.
  */
 
 import React, { useCallback, useMemo } from 'react';
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Switch,
+  Text,
+} from 'panelui-native';
+import { Pressable, View, useCSSVariable } from '@/tw';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
-import type { Automation, AutomationLog } from '@/lib/automations';
+import type { AutomationLog } from '@/lib/automations';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
-import { useThemeColors, type ThemeColors } from '@/lib/theme';
-import { ACCENTS, computeStats, statusMeta, targetLabel } from './utils';
-import { StatCell, LogRow } from './components';
+import { computeStats, statusBadgeVariant, targetLabel } from './utils';
+import { ConfigRow, LogRow, StatCell } from './components';
 
-const FONT = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-};
-
-export type AutomationStyles = ReturnType<typeof buildStyles>;
+function DetailErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <EmptyState>
+      <EmptyState.Header>
+        <EmptyState.Title>Couldn't load activity</EmptyState.Title>
+        <EmptyState.Description>{error}</EmptyState.Description>
+      </EmptyState.Header>
+      <EmptyState.Content>
+        <Button variant="outline" onPress={onRetry}>
+          Retry
+        </Button>
+      </EmptyState.Content>
+    </EmptyState>
+  );
+}
 
 export default function AutomationDetailScreen() {
   const { automationId, created } = useLocalSearchParams<{ automationId: string; created?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const t = useThemeColors();
-  const styles = useMemo(() => buildStyles(t), [t]);
+  const foreground = useCSSVariable('--color-foreground') as string;
   const { automations, toggleStatus, deleteAutomation } = useAutomations();
   const { logs, loading, error, refresh } = useAutomationLogs(automationId ?? '');
   const { stats: apiStats, loading: statsLoading } = useAutomationStats(automationId ?? '');
@@ -65,25 +73,14 @@ export default function AutomationDetailScreen() {
     toggleStatus(automation);
   }, [automation, toggleStatus]);
 
-  const handleDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(() => {
     if (!automation) return;
-    Alert.alert(
-      'Delete Automation',
-      `Are you sure you want to delete "${automation.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteAutomation(automation.$id),
-        },
-      ],
-    );
+    deleteAutomation(automation.$id);
   }, [automation, deleteAutomation]);
 
   const renderItem = useCallback(
-    ({ item }: { item: AutomationLog }) => <LogRow log={item} styles={styles} />,
-    [styles],
+    ({ item }: { item: AutomationLog }) => <LogRow log={item} />,
+    [],
   );
 
   const keyExtractor = useCallback(
@@ -91,84 +88,71 @@ export default function AutomationDetailScreen() {
     [],
   );
 
-  const statusMetaValue = automation
-    ? (statusMeta(t)[automation.status] ?? { bg: t.surfaceCard, text: t.muted })
-    : { bg: t.surfaceCard, text: t.muted };
-
   const isPaused = automation?.status === 'paused';
 
   // Loading state
   if (loading && !automation) {
     return (
-      <View style={styles.centerState}>
-        <Text style={styles.stateMuted}>Loading automation...</Text>
+      <View className="flex-1 items-center justify-center gap-4 bg-background p-4">
+        <Text muted>Loading automation...</Text>
       </View>
     );
   }
 
   // Error state
   if (error) {
-    return (
-      <View style={styles.centerState}>
-        <Text style={styles.stateError}>{error}</Text>
-        <ClayAnimatedButton variant="secondary" onPress={refresh}>
-          Retry
-        </ClayAnimatedButton>
-      </View>
-    );
+    return <DetailErrorState error={error} onRetry={refresh} />;
   }
 
   // Not found state
   if (!automation) {
     return (
-      <View style={styles.centerState}>
-        <Text style={styles.stateMuted}>Automation not found</Text>
+      <View className="flex-1 items-center justify-center bg-background p-4">
+        <Text muted>Automation not found</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View className="flex-1 bg-background">
       {/* Header: back + name + status */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View
+        className="flex-row items-center gap-2 border-b border-border bg-background px-2 pb-3"
+        style={{ paddingTop: insets.top + 12 }}
+      >
         <Pressable
           onPress={() => router.back()}
           accessibilityLabel="Back"
-          style={styles.backBtn}
+          className="h-10 w-10 items-center justify-center"
         >
-          <Ionicons name="chevron-back" size={24} color={t.ink} />
+          <Ionicons name="chevron-back" size={24} color={foreground} />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
+        <Text size="lg" weight="semibold" numberOfLines={1} className="flex-1">
           {automation.name}
         </Text>
-        <View style={[styles.statusBadge, { backgroundColor: statusMetaValue.bg }]}>
-          <Text style={[styles.statusBadgeText, { color: statusMetaValue.text }]}>
-            {automation.status}
-          </Text>
-        </View>
+        <Badge variant={statusBadgeVariant(automation.status)} labelClassName="capitalize">
+          {automation.status}
+        </Badge>
       </View>
 
       {/* Stats strip */}
-      <View style={styles.statsStrip}>
+      <View className="flex-row items-center justify-around border-b border-border bg-background px-4 py-3">
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.sent ?? stats.sent)}
           label="Sent"
-          styles={styles}
         />
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.skipped ?? stats.skipped)}
           label="Skipped"
-          styles={styles}
         />
         <StatCell
           value={statsLoading ? '--' : String(apiStats?.failed ?? stats.failed)}
           label="Failed"
-          styles={styles}
         />
       </View>
 
       {/* Activity feed */}
-      <View style={styles.feedWrap}>
+      <View className="flex-1">
         <FlatList
           data={logs}
           renderItem={renderItem}
@@ -176,437 +160,173 @@ export default function AutomationDetailScreen() {
           contentContainerStyle={{ paddingBottom: 12 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <View style={styles.feedHeader}>
+            <View className="gap-3 px-4 py-3">
               {/* Post-creation guidance: the engine has no test endpoint, so
                   the honest "test" is to comment on the targeted post and
                   watch the activity feed below. */}
               {created === 'live' && (
-                <View style={[styles.noticeCard, styles.noticeLive]}>
-                  <Text style={styles.noticeTitle}>You're live!</Text>
-                  <Text style={styles.noticeBody}>
-                    Test it now: comment{' '}
-                    {automation.match_any_word
-                      ? 'anything'
-                      : `one of your keywords (e.g. "${automation.keywords[0] ?? ''}")`}{' '}
-                    on your post — the DM fires automatically and shows up in
-                    Activity below.
-                  </Text>
-                </View>
+                <Alert variant="success">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Title>You're live!</Alert.Title>
+                    <Alert.Description>
+                      Test it now: comment{' '}
+                      {automation.match_any_word
+                        ? 'anything'
+                        : `one of your keywords (e.g. "${automation.keywords[0] ?? ''}")`}{' '}
+                      on your post — the DM fires automatically and shows up in
+                      Activity below.
+                    </Alert.Description>
+                  </Alert.Content>
+                </Alert>
               )}
               {created === 'paused' && (
-                <View style={[styles.noticeCard, styles.noticePaused]}>
-                  <Text style={styles.noticeTitle}>Saved as paused</Text>
-                  <Text style={styles.noticeBody}>
-                    Nothing fires while paused. Hit Resume below when you're ready to go live.
-                  </Text>
-                </View>
+                <Alert variant="warning">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Title>Saved as paused</Alert.Title>
+                    <Alert.Description>
+                      Nothing fires while paused. Flip the Active switch in
+                      Configuration when you're ready to go live.
+                    </Alert.Description>
+                  </Alert.Content>
+                </Alert>
               )}
 
               {/* Config summary card */}
-              <View style={styles.configCard}>
-                <Text style={styles.configTitle}>Configuration</Text>
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Target</Text>
-                  <Text style={styles.configValue}>{targetLabel(automation)}</Text>
-                </View>
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Keywords</Text>
-                  <Text style={styles.configValue} numberOfLines={1}>
-                    {automation.match_any_word ? 'Any word' : automation.keywords.join(', ')}
-                  </Text>
-                </View>
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Match mode</Text>
-                  <Text style={[styles.configValue, styles.capitalize]}>
-                    {automation.match_mode.replace(/_/g, ' ')}
-                  </Text>
-                </View>
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>DM text</Text>
-                  <Text style={styles.configValue} numberOfLines={1}>
-                    {automation.dm_message}
-                  </Text>
-                </View>
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Public reply</Text>
-                  <Text style={styles.configValue}>
-                    {automation.public_reply_enabled
-                      ? `On${replyPool.length > 0 ? ` (${replyPool.length} in pool)` : ''}`
-                      : 'Off'}
-                  </Text>
-                </View>
-                {automation.public_reply_enabled && replyPool.length > 0 && (
-                  <View style={styles.poolWrap}>
-                    {replyPool.map((msg) => (
-                      <Text key={msg} style={styles.poolItem} numberOfLines={1}>• {msg}</Text>
-                    ))}
-                  </View>
-                )}
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Follow gate</Text>
-                  <Text style={styles.configValue}>
-                    {automation.require_follow ? 'On' : 'Off'}
-                  </Text>
-                </View>
-                {automation.require_follow && (
-                  <>
-                    <View style={styles.configRow}>
-                      <Text style={styles.configLabel}>Prompt message</Text>
-                      <Text style={styles.configValue} numberOfLines={1}>
-                        {automation.follow_prompt_message ?? 'Follow me to unlock the link!'}
-                      </Text>
-                    </View>
-                    <View style={styles.configRow}>
-                      <Text style={styles.configLabel}>Button label</Text>
-                      <Text style={styles.configValue}>
-                        {automation.follow_prompt_button_label ?? 'Follow'}
-                      </Text>
-                    </View>
-                  </>
-                )}
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Follow-up</Text>
-                  <Text style={styles.configValue}>
-                    {automation.follow_up_enabled
-                      ? `On${automation.follow_up_delay_minutes ? ` (${automation.follow_up_delay_minutes}m delay)` : ''}`
-                      : 'Off'}
-                  </Text>
-                </View>
-                {automation.follow_up_enabled && automation.follow_up_message && (
-                  <View style={styles.configRow}>
-                    <Text style={styles.configLabel}>Follow-up msg</Text>
-                    <Text style={styles.configValue} numberOfLines={1}>
-                      {automation.follow_up_message}
+              <Card>
+                <Card.Header>
+                  <Card.Title>Configuration</Card.Title>
+                </Card.Header>
+                <Card.Content className="gap-2">
+                  <ConfigRow label="Target">
+                    <Text size="sm" className="max-w-[60%]">{targetLabel(automation)}</Text>
+                  </ConfigRow>
+                  <ConfigRow label="Keywords">
+                    <Text size="sm" className="max-w-[60%]" numberOfLines={1}>
+                      {automation.match_any_word ? 'Any word' : automation.keywords.join(', ')}
                     </Text>
+                  </ConfigRow>
+                  <ConfigRow label="Match mode">
+                    <Text size="sm" className="max-w-[60%] capitalize">
+                      {automation.match_mode.replace(/_/g, ' ')}
+                    </Text>
+                  </ConfigRow>
+                  <ConfigRow label="DM text">
+                    <Text size="sm" className="max-w-[60%]" numberOfLines={1}>
+                      {automation.dm_message}
+                    </Text>
+                  </ConfigRow>
+                  <ConfigRow label="Public reply">
+                    <Text size="sm" className="max-w-[60%]">
+                      {automation.public_reply_enabled
+                        ? `On${replyPool.length > 0 ? ` (${replyPool.length} in pool)` : ''}`
+                        : 'Off'}
+                    </Text>
+                  </ConfigRow>
+                  {automation.public_reply_enabled && replyPool.length > 0 && (
+                    <View className="gap-0.5 pl-1">
+                      {replyPool.map((msg) => (
+                        <Text key={msg} size="xs" muted numberOfLines={1}>
+                          • {msg}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                  <ConfigRow label="Follow gate">
+                    <Text size="sm" className="max-w-[60%]">
+                      {automation.require_follow ? 'On' : 'Off'}
+                    </Text>
+                  </ConfigRow>
+                  {automation.require_follow && (
+                    <>
+                      <ConfigRow label="Prompt message">
+                        <Text size="sm" className="max-w-[60%]" numberOfLines={1}>
+                          {automation.follow_prompt_message ?? 'Follow me to unlock the link!'}
+                        </Text>
+                      </ConfigRow>
+                      <ConfigRow label="Button label">
+                        <Text size="sm" className="max-w-[60%]">
+                          {automation.follow_prompt_button_label ?? 'Follow'}
+                        </Text>
+                      </ConfigRow>
+                    </>
+                  )}
+                  <ConfigRow label="Follow-up">
+                    <Text size="sm" className="max-w-[60%]">
+                      {automation.follow_up_enabled
+                        ? `On${automation.follow_up_delay_minutes ? ` (${automation.follow_up_delay_minutes}m delay)` : ''}`
+                        : 'Off'}
+                    </Text>
+                  </ConfigRow>
+                  {automation.follow_up_enabled && automation.follow_up_message && (
+                    <ConfigRow label="Follow-up msg">
+                      <Text size="sm" className="max-w-[60%]" numberOfLines={1}>
+                        {automation.follow_up_message}
+                      </Text>
+                    </ConfigRow>
+                  )}
+                  <ConfigRow label="DM trigger">
+                    <Text size="sm" className="max-w-[60%]">
+                      {automation.dm_trigger_enabled ? 'On' : 'Off'}
+                    </Text>
+                  </ConfigRow>
+                  <View className="flex-row items-center justify-between">
+                    <Text size="sm" muted>Active</Text>
+                    <Switch value={!isPaused} onValueChange={handlePauseResume} />
                   </View>
-                )}
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>DM trigger</Text>
-                  <Text style={styles.configValue}>
-                    {automation.dm_trigger_enabled ? 'On' : 'Off'}
-                  </Text>
-                </View>
-              </View>
+                </Card.Content>
+              </Card>
 
               {logs.length > 0 ? (
-                <Text style={styles.activityTitle}>Activity</Text>
+                <Text weight="semibold" className="mt-1">Activity</Text>
               ) : null}
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.stateMuted}>
-                No activity yet — comments will appear here
-              </Text>
+            <View className="items-center justify-center py-8">
+              <Text muted>No activity yet — comments will appear here</Text>
             </View>
           }
         />
       </View>
 
-      {/* Actions row */}
+      {/* Delete action with confirmation */}
       <View
-        style={[
-          styles.actionsRow,
-          { paddingBottom: insets.bottom + TAB_BAR_OVERLAY },
-        ]}
+        className="border-t border-border bg-background px-4 pt-3"
+        style={{ paddingBottom: insets.bottom + TAB_BAR_OVERLAY }}
       >
-        <View style={styles.actionCell}>
-          <ClayAnimatedButton
-            variant="secondary"
-            onPress={handlePauseResume}
-            fullWidth
-          >
-            {isPaused ? 'Resume' : 'Pause'}
-          </ClayAnimatedButton>
-        </View>
-        <View style={styles.actionCell}>
-          <ClayAnimatedButton
-            variant="primary"
-            onPress={handleDelete}
-            fullWidth
-          >
-            Delete
-          </ClayAnimatedButton>
-        </View>
+        <Dialog>
+          <Dialog.Trigger>
+            <Button variant="destructive" fullWidth>
+              Delete
+            </Button>
+          </Dialog.Trigger>
+          <Dialog.Content>
+            <Dialog.Title>Delete Automation</Dialog.Title>
+            <Dialog.Description>
+              {`Are you sure you want to delete "${automation.name}"? This cannot be undone.`}
+            </Dialog.Description>
+            <Dialog.Footer>
+              <Dialog.Close>
+                <Button variant="ghost" size="sm">
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              <Dialog.Close>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onPress={handleConfirmDelete}
+                  accessibilityLabel="Confirm delete"
+                >
+                  Delete
+                </Button>
+              </Dialog.Close>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
       </View>
     </View>
   );
-}
-
-function buildStyles(t: ThemeColors) {
-  return StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: t.canvas,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    padding: 16,
-    backgroundColor: t.canvas,
-  },
-  stateMuted: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 15,
-    lineHeight: 21,
-    color: t.muted,
-  },
-  stateError: {
-    textAlign: 'center',
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: ACCENTS.error,
-  },
-
-  /* Header */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingBottom: 12,
-    backgroundColor: t.canvas,
-    borderBottomWidth: 1,
-    borderBottomColor: t.hairline,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    fontFamily: FONT.semibold,
-    fontSize: 18,
-    lineHeight: 25,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-  statusBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  statusBadgeText: {
-    fontFamily: FONT.semibold,
-    fontSize: 12,
-    lineHeight: 17,
-    letterSpacing: 1.5,
-    textTransform: 'capitalize',
-    includeFontPadding: false,
-  },
-
-  /* Stats strip */
-  statsStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: t.canvas,
-    borderBottomWidth: 1,
-    borderBottomColor: t.hairline,
-  },
-  statCell: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  statValue: {
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-  statLabel: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: t.muted,
-    includeFontPadding: false,
-  },
-
-  /* Feed */
-  feedWrap: {
-    flex: 1,
-  },
-  feedHeader: {
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  noticeCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    gap: 4,
-  },
-  noticeLive: {
-    backgroundColor: ACCENTS.mintTint,
-    borderColor: ACCENTS.mint,
-  },
-  noticePaused: {
-    backgroundColor: ACCENTS.ochreTint,
-    borderColor: ACCENTS.ochre,
-  },
-  noticeTitle: {
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-  noticeBody: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: t.ink,
-  },
-  configCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: t.hairline,
-    backgroundColor: t.canvas,
-    padding: 14,
-    gap: 8,
-  },
-  configTitle: {
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-  configRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  configLabel: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: t.muted,
-  },
-  configValue: {
-    maxWidth: '60%',
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: t.ink,
-  },
-  capitalize: {
-    textTransform: 'capitalize',
-  },
-  poolWrap: {
-    gap: 2,
-    paddingLeft: 4,
-  },
-  poolItem: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: t.muted,
-    includeFontPadding: false,
-  },
-  activityTitle: {
-    marginTop: 4,
-    fontFamily: FONT.semibold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-
-  /* Log rows */
-  logRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: t.hairline,
-  },
-  logBody: {
-    gap: 4,
-  },
-  logTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  logUsername: {
-    flexShrink: 1,
-    fontFamily: FONT.semibold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: t.ink,
-    includeFontPadding: false,
-  },
-  logTime: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: t.mutedSoft,
-    includeFontPadding: false,
-  },
-  logComment: {
-    fontFamily: FONT.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: t.muted,
-  },
-  logBadgeRow: {
-    marginTop: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  keywordChip: {
-    borderRadius: 999,
-    backgroundColor: t.surfaceCard,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  keywordChipText: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    color: t.muted,
-    includeFontPadding: false,
-  },
-  actionBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  actionBadgeText: {
-    fontFamily: FONT.semibold,
-    fontSize: 13,
-    includeFontPadding: false,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 32,
-  },
-
-  /* Actions row */
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    backgroundColor: t.canvas,
-    borderTopWidth: 1,
-    borderTopColor: t.hairline,
-  },
-  actionCell: {
-    flex: 1,
-  },
-  });
 }
