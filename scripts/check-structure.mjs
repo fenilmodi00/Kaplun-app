@@ -26,7 +26,6 @@ const EXCEPTIONS = new Set([
   'src/components/ui/bottomsheet/backdrop.tsx',
   // Screens — raw RN + StyleSheet (moved from routes, documented escape hatches)
   'src/screens/automate/new/index.tsx',
-  'src/screens/profile/index.tsx',
 ]);
 
 function walk(dir) {

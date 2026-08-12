@@ -1,5 +1,4 @@
-import { formatCount, statusMeta, ACCENTS } from './utils';
-import { lightColors } from '@/lib/theme';
+import { formatCount, statusBadgeVariant } from './utils';
 
 describe('formatCount', () => {
   it('returns the raw number below 1000', () => {
@@ -18,38 +17,20 @@ describe('formatCount', () => {
   });
 });
 
-describe('statusMeta', () => {
-  const meta = statusMeta(lightColors);
-
-  it('maps invited to teal bg with onPrimary text', () => {
-    expect(meta.invited).toEqual({ bg: ACCENTS.teal, text: lightColors.onPrimary });
+describe('statusBadgeVariant', () => {
+  it.each([
+    ['invited', 'info'],
+    ['negotiating', 'warning'],
+    ['contracted', 'success'],
+    ['content_pending', 'info'],
+    ['live', 'success'],
+    ['completed', 'secondary'],
+    ['declined', 'destructive'],
+  ] as const)('maps %s to %s', (status, variant) => {
+    expect(statusBadgeVariant(status)).toBe(variant);
   });
 
-  it('maps negotiating to ochre bg with ink text', () => {
-    expect(meta.negotiating).toEqual({ bg: ACCENTS.ochre, text: lightColors.ink });
-  });
-
-  it('maps contracted to mint bg with ink text', () => {
-    expect(meta.contracted).toEqual({ bg: ACCENTS.mint, text: lightColors.ink });
-  });
-
-  it('maps content_pending to lavender bg with onPrimary text', () => {
-    expect(meta.content_pending).toEqual({ bg: ACCENTS.lavender, text: lightColors.onPrimary });
-  });
-
-  it('maps live to mint bg with ink text', () => {
-    expect(meta.live).toEqual({ bg: ACCENTS.mint, text: lightColors.ink });
-  });
-
-  it('maps completed to surfaceCard bg with muted text', () => {
-    expect(meta.completed).toEqual({ bg: lightColors.surfaceCard, text: lightColors.muted });
-  });
-
-  it('maps declined to error bg with onPrimary text', () => {
-    expect(meta.declined).toEqual({ bg: ACCENTS.error, text: lightColors.onPrimary });
-  });
-
-  it('returns undefined for an unknown status', () => {
-    expect(meta.unknown_status).toBeUndefined();
+  it('falls back to secondary for an unknown status', () => {
+    expect(statusBadgeVariant('unknown_status')).toBe('secondary');
   });
 });

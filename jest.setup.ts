@@ -297,7 +297,7 @@ jest.mock('uniwind', () => {
 
 // Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner, and
 // pass-through component mocks (Text/Button/Card/Surface/Avatar/Badge/Alert/
-// Skeleton/EmptyState/Item/Kpi/BarChart/Input/Marker/Message/MessageScroller/Switch)
+// Skeleton/EmptyState/Item/Kpi/BarChart/Input/OtpInput/Marker/Message/MessageScroller/Switch)
 // so migrated screens render in tests. Text-bearing parts render a real RN
 // Text so getByText queries keep working.
 jest.mock('panelui-native', () => {
@@ -309,10 +309,15 @@ jest.mock('panelui-native', () => {
   // function object, so two families assigning the same part name collide.
   const family = (parts: Record<string, unknown>) =>
     Object.assign((props: any) => viewPassthrough(props), parts);
-  const wrapTextChild = (child: unknown) =>
-    typeof child === 'string' || typeof child === 'number'
-      ? React.createElement(RNText, null, child)
-      : child;
+  const wrapTextChild = (child: unknown): unknown => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return React.createElement(RNText, null, child);
+    }
+    // JSX interpolation like `{format(n)} followers` arrives as an array —
+    // wrap each text node or RN throws "Text strings must be rendered in <Text>".
+    if (Array.isArray(child)) return child.map(wrapTextChild);
+    return child;
+  };
   const mockFamily = {
     id: 'panel',
     name: 'Panel',
@@ -411,6 +416,7 @@ jest.mock('panelui-native', () => {
       Legend: () => null,
     }),
     Input: (props: any) => React.createElement(TextInput, props),
+    OtpInput: (props: any) => React.createElement(TextInput, props),
     Textarea: (props: any) => React.createElement(TextInput, { ...props, multiline: true }),
     Switch: (props: any) =>
       React.createElement(View, { accessible: true, accessibilityRole: 'switch', ...props }, props?.children),

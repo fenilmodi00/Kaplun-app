@@ -1,25 +1,23 @@
-import type { ThemeColors } from '@/lib/theme';
+/** PanelUI Badge variants this screen maps statuses into. */
+export type DealBadgeVariant = 'secondary' | 'destructive' | 'success' | 'warning' | 'info';
 
-export const ACCENTS = {
-  mint: '#a4d4c5',
-  lavender: '#b8a4ed',
-  peach: '#ffb084',
-  teal: '#1a3a3a',
-  ochre: '#e8b94a',
-  error: '#ef4444',
-};
-
-/** Status chip colors (hex mirror of DESIGN.md §3.3) */
-export function statusMeta(t: ThemeColors): Record<string, { bg: string; text: string }> {
-  return {
-    invited: { bg: ACCENTS.teal, text: t.onPrimary },
-    negotiating: { bg: ACCENTS.ochre, text: t.ink },
-    contracted: { bg: ACCENTS.mint, text: t.ink },
-    content_pending: { bg: ACCENTS.lavender, text: t.onPrimary },
-    live: { bg: ACCENTS.mint, text: t.ink },
-    completed: { bg: t.surfaceCard, text: t.muted },
-    declined: { bg: ACCENTS.error, text: t.onPrimary },
-  };
+/** Deal status -> semantic Badge variant (hue-faithful to the old Clay accents). */
+export function statusBadgeVariant(status: string): DealBadgeVariant {
+  switch (status) {
+    case 'invited':
+      return 'info';
+    case 'negotiating':
+      return 'warning';
+    case 'contracted':
+    case 'live':
+      return 'success';
+    case 'content_pending':
+      return 'info';
+    case 'declined':
+      return 'destructive';
+    default:
+      return 'secondary';
+  }
 }
 
 export function formatCount(n: number): string {
