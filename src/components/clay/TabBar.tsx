@@ -71,14 +71,13 @@ function TabButton({
 
   return (
     <Pressable
-      className="items-center justify-center"
-      style={{ width: 48, minHeight: 44 }}
+      className="w-12 min-h-11 items-center justify-center"
       accessibilityRole="tab"
       accessibilityState={{ selected: isFocused }}
       accessibilityLabel={tab.label}
       onPress={onPress}
     >
-      <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+      <View className="w-6 h-6 items-center justify-center">
         <Animated.View style={[ICON_LAYER, inactiveIconStyle]}>
           <SymbolIcon
             name={TAB_NAMES[tab.name]}
@@ -141,14 +140,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
 
   return (
     <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        justifyContent: 'flex-end',
-      }}
+      className="absolute inset-0 justify-end"
       pointerEvents="box-none"
     >
       {/*
@@ -192,7 +184,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
           }}
         >
           <GlassSurface borderRadius={9999}>
-            <View className="flex-row" style={{ paddingVertical: 8, paddingHorizontal: 6 }}>
+            <View className="flex-row py-2 px-1.5">
               {TABS.map((tab, index) => {
                 const isFocused = state.index === index;
                 return (
