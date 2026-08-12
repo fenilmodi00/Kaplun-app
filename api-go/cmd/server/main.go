@@ -310,6 +310,7 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 		lookup := &creatorLookupAdapter{client: awClient, creatorsTableID: cfg.AppwriteCreatorsTableID}
 		reportSvc := profilescore.NewReportService(profilescore.ReportServiceDeps{
 			Insights: insightsStore,
+			Syncer:   insightsSvc,
 			LLM:      llmClient,
 			Store:    reportStore,
 			Lookup:   lookup,

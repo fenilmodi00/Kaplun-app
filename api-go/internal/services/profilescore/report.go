@@ -66,6 +66,16 @@ type InsightsReader interface {
 	GetCreatorDerived(ctx context.Context, creatorRowID string) (map[string]any, error)
 }
 
+// InsightsSyncer triggers a fresh insights sync for a creator before the
+// report reads data. The concrete insights.Service satisfies this interface.
+type InsightsSyncer interface {
+	SyncCreator(ctx context.Context, creatorRowID, accessToken, igUserID string) *insights.SyncResult
+}
+
+// ErrInsightsSyncFailed is returned when the inline insights sync before
+// report generation fails — the report is not generated from stale data.
+var ErrInsightsSyncFailed = errors.New("insights sync failed")
+
 // ReportCacheTTL is how long a cached report is served before a refresh
 // is expected. Manual generate always regenerates (new LLM call).
 const ReportCacheTTL = 7 * 24 * time.Hour
@@ -78,6 +88,7 @@ var ErrCreatorNotFound = errors.New("creator not found")
 // for coach copy, and caches the merged report.
 type ReportService struct {
 	insights InsightsReader
+	syncer   InsightsSyncer
 	llm      LLMClient
 	store    ReportStore
 	lookup   CreatorLookup
@@ -88,6 +99,7 @@ type ReportService struct {
 // ReportServiceDeps holds the dependencies for ReportService.
 type ReportServiceDeps struct {
 	Insights InsightsReader
+	Syncer   InsightsSyncer
 	LLM      LLMClient
 	Store    ReportStore
 	Lookup   CreatorLookup
@@ -98,6 +110,7 @@ type ReportServiceDeps struct {
 func NewReportService(deps ReportServiceDeps) *ReportService {
 	return &ReportService{
 		insights: deps.Insights,
+		syncer:   deps.Syncer,
 		llm:      deps.LLM,
 		store:    deps.Store,
 		lookup:   deps.Lookup,
@@ -106,8 +119,9 @@ func NewReportService(deps ReportServiceDeps) *ReportService {
 	}
 }
 
-// Generate builds a fresh report: resolve creator → read insights → build
-// payload → compute score → call LLM → merge → cache → return.
+// Generate builds a fresh report: resolve creator → sync insights → read
+// insights → build payload → compute score → call LLM → merge → cache →
+// return.
 func (s *ReportService) Generate(ctx context.Context, clerkUserID string) (*ReportResult, error) {
 	creatorRowID, err := s.lookup.GetCreatorRowID(ctx, clerkUserID)
 	if err != nil {
@@ -121,6 +135,30 @@ func (s *ReportService) Generate(ctx context.Context, clerkUserID string) (*Repo
 	if err != nil {
 		return nil, fmt.Errorf("read creator derived: %w", err)
 	}
+
+	// Inline insights sync before reading data — the product brief requires
+	// "ensure insights fresh (inline sync if needed)". Without this, a stale
+	// or errored sync leaves derived stats at zero and the score is 0.
+	if s.syncer != nil {
+		accessToken, _ := creator["access_token"].(string)
+		igUserID, _ := creator["ig_user_id"].(string)
+		if accessToken != "" && igUserID != "" {
+			syncRes := s.syncer.SyncCreator(ctx, creatorRowID, accessToken, igUserID)
+			if syncRes != nil && syncRes.Error != "" {
+				if s.log != nil {
+					s.log.Warn("insights sync failed before report generate",
+						"creator_row_id", creatorRowID, "sync_error", syncRes.Error)
+				}
+				return nil, fmt.Errorf("%w: %s", ErrInsightsSyncFailed, syncRes.Error)
+			}
+			// Re-read the creator row — sync just updated derived stats.
+			creator, err = s.insights.GetCreatorDerived(ctx, creatorRowID)
+			if err != nil {
+				return nil, fmt.Errorf("re-read creator derived after sync: %w", err)
+			}
+		}
+	}
+
 	media, err := s.insights.ListCreatorMedia(ctx, creatorRowID)
 	if err != nil {
 		return nil, fmt.Errorf("read creator media: %w", err)

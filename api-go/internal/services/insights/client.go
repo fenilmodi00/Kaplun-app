@@ -275,10 +275,25 @@ func (c *metaClient) GetAccountInsightsDay(ctx context.Context, accessToken, sin
 // GetAccountInsightsTotals fetches the sync-window totals:
 // GET /me/insights?...&period=day&metric_type=total_value.
 // Returns metric name → total value.
+//
+// One invalid metric in the comma-separated list fails the entire call —
+// the same pattern GetMediaInsights handles. We retry without unsupported
+// metrics (parsed from the Meta error) up to maxInsightRetries times.
 func (c *metaClient) GetAccountInsightsTotals(ctx context.Context, accessToken, since, until string) (map[string]int64, error) {
-	rawURL := fmt.Sprintf("%s/me/insights?metric=%s&period=day&metric_type=total_value&since=%s&until=%s",
-		c.base(), accountTotalMetrics, since, until)
-	data, err := c.get(ctx, rawURL, accessToken)
+	metrics := accountTotalMetrics
+	data, err := c.get(ctx, accountTotalsURL(c.base(), metrics, since, until), accessToken)
+	for retries := 0; err != nil && !meta.IsTokenExpired(err) && retries < maxInsightRetries; retries++ {
+		unsupported := parseUnsupportedMetrics(err)
+		if len(unsupported) == 0 {
+			break
+		}
+		filtered := filterMetrics(metrics, unsupported...)
+		if filtered == metrics {
+			break
+		}
+		metrics = filtered
+		data, err = c.get(ctx, accountTotalsURL(c.base(), metrics, since, until), accessToken)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +303,11 @@ func (c *metaClient) GetAccountInsightsTotals(ctx context.Context, accessToken, 
 		out[k] = num(v)
 	}
 	return out, nil
+}
+
+func accountTotalsURL(base, metrics, since, until string) string {
+	return fmt.Sprintf("%s/me/insights?metric=%s&period=day&metric_type=total_value&since=%s&until=%s",
+		base, metrics, since, until)
 }
 
 // GetDemographics fetches one audience demographics metric with all

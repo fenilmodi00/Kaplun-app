@@ -80,6 +80,11 @@ func writeReportsError(c *gin.Context, err error) {
 			Error:   "creator_not_found",
 			Message: "Creator profile not found. Connect your Instagram account first.",
 		})
+	case errors.Is(err, profilescore.ErrInsightsSyncFailed):
+		c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
+			Error:   "insights_sync_failed",
+			Message: "Could not sync your Instagram insights. Please try again in a moment.",
+		})
 	default:
 		writeInternal(c, err)
 	}
