@@ -117,3 +117,19 @@
 - TabBar: static inline styles converted to Uniwind className, behavior unchanged (floating pill, metallic rim, scroll scale)
 - BottomSheet: rebuilt on gesture-handler + Reanimated, @expo/ui dropped, Modal-based overlay, imperative present/dismiss API preserved
 - jest.setup.ts: Gesture/GestureDetector mocks added, withTiming/withSpring callbacks updated
+
+## 2026-08-13 00:30:15 Task: Phase 3 — Cleanup
+**Status:** complete
+**Commits:** 027dfb7..9f62d60
+**Verification:**
+- tsc --noEmit: 0 errors
+- npx jest --forceExit: 252/252 pass (ALL tests pass — pre-existing ui-components failures gone, ui/ form kit deleted)
+- node scripts/check-structure.mjs: OK
+- 57 files changed, +833/-2229 lines (net -1396 lines of dead code removed)
+- Deleted: src/components/clay/ (8 files), src/components/ui/ form kit (11 files), useClayAnimations.ts, edge-blur.tsx, glass-surface.tsx, __mocks__/@expo/ui
+- Moved: TabBar.tsx + TabBar.test.tsx from clay/ to tab-bar/
+- Updated: all AGENTS.md files, DESIGN.md, check-structure.mjs, package.json (@expo/ui removed)
+- Slimmed: cn.ts (Clay utilities removed), @/tw/index.tsx (dead AnimatedScrollView removed), theme.ts (useThemeColors/lightColors/darkColors removed)
+- useShakeAnimation moved to @/tw/animated
+- EdgeBlur/GlassSurface inlined in TabBar
+- reveal.tsx kept (PanelUI doesn't cover entrance/pop animations)

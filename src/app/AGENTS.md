@@ -1,6 +1,6 @@
 # src/app/ — Expo Router Routes
 
-16 files: 7 layouts, 9 routes. File-based routing; deep-link scheme `kaplun://` (no universal-links config).
+14 files: 6 layouts, 8 routes. File-based routing; deep-link scheme `kaplun://` (no universal-links config).
 
 ## ROUTES-ONLY RULE
 
@@ -57,7 +57,7 @@ Provider stack, outer → inner: `PanelUIProvider` → `SafeAreaProvider` → `T
 
 ## CONVENTIONS
 
-- **Profile is a hidden route** — `(profile)` is not registered in the tab bar. Reach it only via the home header avatar: `router.push('/(tabs)/(profile)' as never)`. The `as never` cast is required because typed routes don't know the unregistered group.
+- **Profile is a hidden route** — `(profile)` is registered with `href: null` (not a tab button). Reach it only via the home header avatar: `router.push('/(tabs)/(profile)/view' as never)`. The bare group path `/(tabs)/(profile)` mis-resolves to `(automate)/[automationId]` — always include `/view`. The `as never` cast is required because typed routes don't always surface the hidden group.
 - **Group layouts have named-route anchors** — only `(home)` has an `index.tsx` (owns `/`). All other groups use named routes (`list`, `threads`, `dashboard`, `view`) with `unstable_settings = { anchor: '<name>' }` so they don't compete for `/` in the linking config.
 - **No native headers** — screens render their own back chevron + `useRouter().back()`.
 - **Safe-area padding** — `useSafeAreaInsets()` + `TAB_BAR_OVERLAY` (from `@/components/screen-shell`) added to bottom padding so content clears the floating glass tab bar.
