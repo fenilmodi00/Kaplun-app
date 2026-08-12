@@ -64,10 +64,10 @@ const NativeReanimated = IS_REANIMATED_AVAILABLE
     require('react-native-reanimated')
   : fallbacks;
 
-/** Namespace matching typical `import * as Reanimated` / default+named usage. */
-export const Reanimated = NativeReanimated;
+/** Same object as default — reanimated puts View on default only, not the module root. */
+export const Reanimated = (NativeReanimated.default ?? NativeReanimated) as typeof fallbacks.default;
 
-export default (NativeReanimated.default ?? NativeReanimated) as typeof fallbacks.default;
+export default Reanimated;
 export const useSharedValue = NativeReanimated.useSharedValue as typeof createFallbackSharedValue;
 export const useAnimatedStyle = NativeReanimated.useAnimatedStyle as typeof fallbacks.useAnimatedStyle;
 export const useAnimatedScrollHandler = NativeReanimated.useAnimatedScrollHandler;

@@ -142,29 +142,31 @@ export const BottomSheetModal = forwardRef<BottomSheetMethods, BottomSheetProps>
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <BottomSheetBackdrop visible={visible && !closing} />
-          <GestureDetector gesture={panGesture}>
-            <Reanimated.View
-              style={[
-                {
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: sheetHeight,
-                  backgroundColor,
-                  borderTopLeftRadius: 24,
-                  borderTopRightRadius: 24,
-                },
-                sheetAnimStyle,
-                backgroundStyle,
-              ]}
-            >
+          <Reanimated.View
+            style={[
+              {
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: sheetHeight,
+                backgroundColor,
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+              },
+              sheetAnimStyle,
+              backgroundStyle,
+            ]}
+          >
+            {/* Pan-to-close only from the drag handle — wrapping the whole panel
+                swallows pans meant for ScrollView content. */}
+            <GestureDetector gesture={panGesture}>
               <View className="items-center pt-3 pb-1">
                 <View className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
               </View>
-              {children}
-            </Reanimated.View>
-          </GestureDetector>
+            </GestureDetector>
+            {children}
+          </Reanimated.View>
         </GestureHandlerRootView>
       </Modal>
     );
