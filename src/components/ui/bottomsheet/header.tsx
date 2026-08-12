@@ -1,7 +1,6 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Pressable } from '@/tw';
-import { useThemeColors } from '@/lib/theme';
+import { View, Text, Pressable, useCSSVariable } from '@/tw';
 
 export interface BottomSheetHeaderProps {
   title: string;
@@ -11,7 +10,7 @@ export interface BottomSheetHeaderProps {
 }
 
 export function BottomSheetHeader({ title, subtitle, onClose, testID }: BottomSheetHeaderProps) {
-  const colors = useThemeColors();
+  const ink = useCSSVariable('--color-foreground') as string;
 
   return (
     <View className="flex-row items-start justify-between gap-3 pb-2" testID={testID}>
@@ -27,7 +26,7 @@ export function BottomSheetHeader({ title, subtitle, onClose, testID }: BottomSh
           className="-mr-2 h-11 w-11 items-center justify-center"
           testID={testID ? `${testID}-close` : undefined}
         >
-          <Ionicons name="close" size={22} color={colors.ink} />
+          <Ionicons name="close" size={22} color={ink} />
         </Pressable>
       ) : null}
     </View>

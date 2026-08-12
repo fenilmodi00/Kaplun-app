@@ -7,8 +7,6 @@ import {
   type BottomSheetMethods,
 } from './index';
 
-jest.mock('@expo/ui/community/bottom-sheet');
-
 describe('BottomSheetModal', () => {
   it('shows children after present()', async () => {
     const ref = createRef<BottomSheetMethods>();

@@ -216,8 +216,8 @@ jest.mock('react-native-reanimated', () => {
     useAnimatedGestureHandler: (handlers: any) => handlers,
     useAnimatedScrollHandler: (handlers: any) => handlers,
     useHandler: jest.fn(),
-    withTiming: (to: any) => to,
-    withSpring: (to: any) => to,
+    withTiming: (to: any, _config?: any, cb?: (finished?: boolean) => void) => { if (cb) cb(true); return to; },
+    withSpring: (to: any, _config?: any, cb?: (finished?: boolean) => void) => { if (cb) cb(true); return to; },
     withDecay: (config: any) => config,
     withSequence: (...args: any[]) => args[args.length - 1],
     withRepeat: (anim: any) => anim,
@@ -534,6 +534,31 @@ jest.mock('react-native-gesture-handler', () => {
     FlatList: View,
     gestureHandlerRootHOC: (c: unknown) => c,
     Directions: {},
+    GestureDetector: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, null, children),
+    Gesture: {
+      Pan: () => {
+        const chain: Record<string, unknown> = {};
+        for (const m of ['onUpdate', 'onEnd', 'onStart', 'onFinalize', 'onTouchesDown', 'onTouchesUp', 'enabled', 'activeOffsetX', 'activeOffsetY', 'failOffsetX', 'failOffsetY', 'shouldCancelWhenOutside', 'runOnJS', 'simultaneousWithExternalGesture', 'blocksExternalGesture', 'manualActivation'])
+          chain[m] = jest.fn().mockReturnValue(chain);
+        return chain;
+      },
+      Tap: () => {
+        const chain: Record<string, unknown> = {};
+        for (const m of ['onStart', 'onEnd', 'onFinalize', 'enabled', 'numberOfTaps', 'runOnJS'])
+          chain[m] = jest.fn().mockReturnValue(chain);
+        return chain;
+      },
+      Native: () => {
+        const chain: Record<string, unknown> = {};
+        for (const m of ['onBegin', 'onStart', 'onEnd', 'onFinalize', 'enabled', 'shouldCancelWhenOutside', 'runOnJS'])
+          chain[m] = jest.fn().mockReturnValue(chain);
+        return chain;
+      },
+      Race: (..._g: unknown[]) => ({}),
+      Simultaneous: (..._g: unknown[]) => ({}),
+      Exclusive: (..._g: unknown[]) => ({}),
+    },
   };
 });
 
