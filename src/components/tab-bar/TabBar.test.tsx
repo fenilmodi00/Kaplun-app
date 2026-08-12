@@ -30,7 +30,6 @@ const TABS = [
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
   { name: '(insights)', label: 'Insights' },
-  { name: '(score)', label: 'Score' },
 ];
 
 function createMockProps(
@@ -70,6 +69,7 @@ function createMockProps(
     navigation: {
       emit: jest.fn(() => ({ defaultPrevented: false })),
       navigate: jest.fn(),
+      preload: jest.fn(),
     } as unknown as BottomTabBarProps['navigation'],
     insets: { top: 0, right: 0, bottom: 0, left: 0 },
     ...overrides,
@@ -77,7 +77,7 @@ function createMockProps(
 }
 
 describe('TabBar', () => {
-  it('renders all 5 tabs', async () => {
+  it('renders all 4 tabs', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
 
@@ -135,10 +135,24 @@ describe('TabBar', () => {
     expect(screen.toJSON()).toBeNull();
   });
 
-  it('all 5 Pressables expose the tab role', async () => {
+  it('preloads Insights after mount so the first tap is not a cold start', async () => {
+    jest.useFakeTimers();
+    try {
+      const props = createMockProps();
+      await render(<TabBar {...props} />);
+      act(() => {
+        jest.runAllTimers();
+      });
+      expect(props.navigation.preload).toHaveBeenCalledWith('(insights)');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('all 4 Pressables expose the tab role', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
-    expect(screen.getAllByRole('tab')).toHaveLength(5);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
   });
 
   it('scale smoke: all tabs still render after scroll down', async () => {

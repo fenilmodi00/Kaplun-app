@@ -14,17 +14,20 @@ const HAS_NATIVE_GLASS =
   Number.parseInt(String(Platform.Version), 10) >= 26;
 
 // ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
-// so the pill stays at scale 1.1 (a static no-op). This is accepted — the animation only runs on native.
+// so the pill stays at scale REST_SCALE (a static no-op). This is accepted — the animation only runs on native.
 
-/** Approx pill height (padding + 44pt targets) at the 1.1x resting scale, for the bottom edge scrim. */
-const PILL_HEIGHT = 66;
+/** Resting whole-pill scale (5% under the old 1.1); minimized stays 0.9. */
+const REST_SCALE = 1.035;
+const MIN_SCALE = 0.9;
+
+/** Approx pill height (padding + 44pt targets) at REST_SCALE, for the bottom edge scrim. */
+const PILL_HEIGHT = 73;
 
 const TAB_NAMES: Record<string, SymbolName> = {
   '(home)': 'home',
   '(automate)': 'automate',
   '(messages)': 'messages',
   '(insights)': 'insights',
-  '(score)': 'score',
 };
 
 const TABS = [
@@ -32,7 +35,6 @@ const TABS = [
   { name: '(automate)', label: 'Automate' },
   { name: '(messages)', label: 'Messages' },
   { name: '(insights)', label: 'Insights' },
-  { name: '(score)', label: 'Score' },
 ];
 
 const ICON_LAYER = {
@@ -125,10 +127,17 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
     minimize.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
   }, [state.index, minimize]);
 
-  // Instagram-style whole-pill scale: 1.1 at rest, 0.9 on scroll down, anchored
-  // bottom-center so the pill sinks toward the bottom edge. All tabs stay visible.
+  // After Home's first paint, mount Insights off-screen so the first tap is a
+  // visibility switch — not a JS parse of BarChart + a Graph round-trip.
+  useEffect(() => {
+    const id = setTimeout(() => navigation.preload('(insights)'));
+    return () => clearTimeout(id);
+  }, [navigation]);
+
+  // Instagram-style whole-pill scale: REST_SCALE at rest, MIN_SCALE on scroll down,
+  // anchored bottom-center so the pill sinks toward the bottom edge. All tabs stay visible.
   const scaleStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1.1 - minimize.value * 0.2 }],
+    transform: [{ scale: REST_SCALE - minimize.value * (REST_SCALE - MIN_SCALE) }],
     transformOrigin: '50% 100%',
   }));
 

@@ -3,11 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import type { View as RNView } from 'react-native';
 
 import { View, Pressable, useCSSVariable } from '@/tw';
-import { Badge, Button, Card, Kpi, Text } from 'panelui-native';
+import { Badge, Button, Card, Kpi, Task, Text } from 'panelui-native';
 import { addLog } from '@/lib/logger';
 import type { ActionPriority, ProfileReport, ReportMeta } from '@/lib/profile-score';
 import { SectionLabel } from './components';
-import { StaggeredCard } from './ceremony';
 import { Reveal } from '@/components/ui/reveal';
 import { ShareCard } from './share-card';
 import { shareScoreCard } from './share';
@@ -113,25 +112,18 @@ export function Scorecard({
           {report.action_plan.map((item, i) => {
             const pill = PRIORITY_BADGE[item.priority] ?? PRIORITY_BADGE.medium;
             return (
-              <StaggeredCard key={i} index={i} ceremony={ceremony} padding="p-5">
-                <View className="gap-2">
-                  <Badge variant={pill.variant} className="self-start">
-                    {pill.label}
-                  </Badge>
-                  <Text size="lg" weight="semibold" className="tracking-tight">
-                    {item.action}
-                  </Text>
-                  <Text size="sm" muted>
-                    {item.why}
-                  </Text>
-                  <View className="flex-row items-start gap-1.5">
-                    <Ionicons name="time-outline" size={13} color={muted} style={{ marginTop: 1 }} />
-                    <Text size="xs" muted className="flex-1">
-                      {item.when_to_post}
-                    </Text>
-                  </View>
-                </View>
-              </StaggeredCard>
+              <Reveal key={i} delay={ceremony ? i * 100 : 60 + i * 40}>
+                <Badge variant={pill.variant} className="self-start mb-1">
+                  {pill.label}
+                </Badge>
+                <Task status="complete">
+                  <Task.Trigger title={item.action} />
+                  <Task.Content>
+                    <Task.Item>{item.why}</Task.Item>
+                    <Task.Item>{item.when_to_post}</Task.Item>
+                  </Task.Content>
+                </Task>
+              </Reveal>
             );
           })}
         </View>

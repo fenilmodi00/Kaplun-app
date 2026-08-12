@@ -14,6 +14,10 @@ export default function TabsLayout() {
     <View style={{ flex: 1 }}>
       <Tabs
         tabBar={(props) => <TabBar {...props} />}
+        // Android defaults this to true, which unmounts a tab when you leave it.
+        // Insights then cold-starts (charts + Graph) on every tap — 2–3s even
+        // with a warm React Query cache. Keep scenes mounted like Instagram.
+        detachInactiveScreens={false}
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
@@ -23,10 +27,11 @@ export default function TabsLayout() {
         <Tabs.Screen name="(automate)" options={{ title: 'Automate' }} />
         <Tabs.Screen name="(messages)" options={{ title: 'Messages' }} />
         <Tabs.Screen name="(insights)" options={{ title: 'Insights' }} />
-        <Tabs.Screen name="(score)" options={{ title: 'Score' }} />
+        {/* Hidden: pushed from home avatar, not a tab button */}
+        <Tabs.Screen name="(profile)" options={{ href: null }} />
       </Tabs>
       <LinearGradient
-        colors={[`${canvas}00`, `${canvas}EB`]}
+        colors={[`${canvas}EB`, `${canvas}00`]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 40 }}

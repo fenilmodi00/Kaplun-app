@@ -12,7 +12,7 @@
  * become advanceable. Modern fake timers also mock Date.now for the count-up.
  */
 
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { act, render, screen, fireEvent, within } from '@testing-library/react-native';
 import type { ProfileReport, ProfileScoreResult, ReportMeta } from '@/lib/profile-score';
 
@@ -34,10 +34,32 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn(),
 }));
 
+// The real sheet gates children behind `visible` (imperative present()) — tests
+// assert content directly, so the mock always renders. Refs no-op.
+jest.mock('@/components/ui/bottomsheet', () => {
+  const React = require('react');
+  const { View, Text } = require('react-native');
+  return {
+    BottomSheetModal: React.forwardRef(
+      ({ children }: { children?: ReactNode }, _ref: unknown) =>
+        React.createElement(View, null, children),
+    ),
+    BottomSheetView: ({ children }: { children?: ReactNode }) =>
+      React.createElement(View, null, children),
+    BottomSheetHeader: ({ title, subtitle }: { title: string; subtitle?: string }) =>
+      React.createElement(
+        View,
+        null,
+        React.createElement(Text, null, title),
+        subtitle ? React.createElement(Text, null, subtitle) : null,
+      ),
+  };
+});
+
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 
-import ScoreScreen from '@/screens/score';
+import ScoreSheet from '@/screens/score';
 
 const mockCaptureRef = jest.mocked(captureRef);
 const mockShareAvailable = jest.mocked(Sharing.isAvailableAsync);
@@ -151,7 +173,7 @@ afterEach(() => {
 describe('ScoreScreen', () => {
   it('loading: renders header with a skeleton below', async () => {
     setLatest({ loading: true });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.getByText('Score')).toBeTruthy();
     expect(screen.queryByText('Generate my score')).toBeNull();
@@ -160,7 +182,7 @@ describe('ScoreScreen', () => {
 
   it('skips the latest fetch while the gate is not connected', async () => {
     setGate({ connected: false });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(mockUseLatestScore).toHaveBeenCalledWith({ enabled: false });
   });
@@ -168,7 +190,7 @@ describe('ScoreScreen', () => {
   it('not connected: steers to the Instagram connect flow', async () => {
     const connect = jest.fn().mockResolvedValue(undefined);
     setGate({ connected: false, connect });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.getByText('Connect Instagram to get scored')).toBeTruthy();
     await press(screen.getByText('Connect Instagram'));
@@ -177,7 +199,7 @@ describe('ScoreScreen', () => {
 
   it('session_expired: shows the reconnect card', async () => {
     setLatest({ error: 'session_expired' });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.getByText('Instagram disconnected')).toBeTruthy();
     expect(screen.getByText('Reconnect Instagram')).toBeTruthy();
@@ -187,7 +209,7 @@ describe('ScoreScreen', () => {
   it('empty state: explicit Generate CTA, no auto-start', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.getByText('Get your AI Profile Score')).toBeTruthy();
     await press(screen.getByText('Generate my score'));
@@ -197,7 +219,7 @@ describe('ScoreScreen', () => {
   it('theater: generate swaps the empty state for staged analysis rows', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
     await press(screen.getByText('Generate my score'));
 
     expect(screen.getByTestId('analysis-theater')).toBeTruthy();
@@ -208,14 +230,13 @@ describe('ScoreScreen', () => {
     expect(screen.getByText(/can take up to a minute/)).toBeTruthy();
     // The lone-spinner empty state is replaced, not stacked.
     expect(screen.queryByText('Get your AI Profile Score')).toBeNull();
-    expect(screen.getByTestId('theater-stage-0-current')).toBeTruthy();
-    expect(screen.getByTestId('theater-stage-1-pending')).toBeTruthy();
+    expect(screen.getByLabelText('Searching')).toBeTruthy();
   });
 
   it('theater: stages advance while the generate call is in flight', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     // Fake timers before the press so the theater mounts onto the fake clock.
     jest.useFakeTimers();
@@ -224,17 +245,14 @@ describe('ScoreScreen', () => {
       jest.advanceTimersByTime(2500);
     });
 
-    expect(screen.getByTestId('theater-stage-0-done')).toBeTruthy();
-    expect(screen.getByTestId('theater-stage-1-current')).toBeTruthy();
-    expect(screen.getByTestId('theater-stage-2-pending')).toBeTruthy();
-    expect(screen.getByTestId('theater-stage-3-pending')).toBeTruthy();
+    expect(screen.getByLabelText('Working')).toBeTruthy();
   });
 
   it('ring: after generate succeeds, the score ring counts up to the score', async () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     jest.useFakeTimers();
     await press(screen.getByText('Generate my score'));
@@ -268,7 +286,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     jest.useFakeTimers();
     await press(screen.getByText('Generate my score'));
@@ -300,7 +318,7 @@ describe('ScoreScreen', () => {
 
   it('cached reopen: scorecard renders directly, no theater or ring', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.queryByTestId('analysis-theater')).toBeNull();
     expect(screen.queryByTestId('score-ring')).toBeNull();
@@ -333,7 +351,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     jest.useFakeTimers();
     await press(screen.getByTestId('score-refresh'));
@@ -370,7 +388,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
     await press(screen.getByText('Generate my score'));
     expect(screen.getByTestId('analysis-theater')).toBeTruthy();
 
@@ -392,7 +410,7 @@ describe('ScoreScreen', () => {
   it('generic error: inline retry strip above the empty state', async () => {
     const refresh = jest.fn();
     setLatest({ error: 'Network request failed', refresh });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     expect(screen.getByText(/Couldn’t load your score/)).toBeTruthy();
     await press(screen.getByText('Retry'));
@@ -403,7 +421,7 @@ describe('ScoreScreen', () => {
 
   it('share: captures the hidden 9:16 card and opens the OS sheet', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     await press(screen.getByText('Share my score'));
 
@@ -419,7 +437,7 @@ describe('ScoreScreen', () => {
 
   it('share card content: hero score + label + mark only, no private metrics', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     const card = within(screen.getByTestId('share-card'));
     expect(card.getByText('72')).toBeTruthy();
@@ -433,7 +451,7 @@ describe('ScoreScreen', () => {
   it('share failure: friendly inline message, CTA stays retryable', async () => {
     mockCaptureRef.mockRejectedValueOnce(new Error('boom'));
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     await press(screen.getByText('Share my score'));
 
@@ -448,7 +466,7 @@ describe('ScoreScreen', () => {
   it('share unavailable: named error maps to a device-specific message', async () => {
     mockShareAvailable.mockResolvedValueOnce(false);
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreScreen />);
+    await render(<ScoreSheet />);
 
     await press(screen.getByText('Share my score'));
 

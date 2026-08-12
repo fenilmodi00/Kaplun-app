@@ -1,13 +1,11 @@
 /**
  * Score ceremony components (ticket 06).
- * Phase A: AnalysisTheater, Phase B: ScoreRing, Phase C: StaggeredCard.
+ * Phase A: AnalysisCeremony, Phase B: ScoreRing, Phase C: StaggeredCard.
  */
 import React, { useEffect, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-
 import { View, useCSSVariable } from '@/tw';
 import { AnimatedView } from '@/tw/animated';
-import { Card, Spinner, Text } from 'panelui-native';
+import { Card, Plan, Shimmer, Text, ThinkingOrb } from 'panelui-native';
 import { Reveal } from '@/components/ui/reveal';
 import {
   Easing,
@@ -38,17 +36,16 @@ export function StaggeredCard({
   );
 }
 
-const THEATER_STAGES: { label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { label: 'Reading your last posts…', icon: 'newspaper-outline' },
-  { label: 'Checking engagement & saves…', icon: 'pulse-outline' },
-  { label: 'Finding your best posting window…', icon: 'time-outline' },
-  { label: 'Writing your action plan…', icon: 'create-outline' },
+const THEATER_STAGES = [
+  { label: 'Reading your last posts…', orb: 'searching' as const },
+  { label: 'Checking engagement & saves…', orb: 'working' as const },
+  { label: 'Finding your best posting window…', orb: 'solving' as const },
+  { label: 'Writing your action plan…', orb: 'composing' as const },
 ];
+const ORB_STATES = ['searching', 'working', 'solving', 'composing'] as const;
 const THEATER_STAGE_MS = 2400;
 
-export function AnalysisTheater() {
-  const foreground = useCSSVariable('--color-foreground') as string;
-  const muted = useCSSVariable('--color-muted-foreground') as string;
+export function AnalysisCeremony() {
   const [stage, setStage] = useState(0);
 
   // Stages advance on the clock; the API landing (not this timer) ends the theater.
@@ -60,43 +57,25 @@ export function AnalysisTheater() {
     return () => clearInterval(id);
   }, []);
 
+  const orbState = ORB_STATES[stage] ?? 'composing';
+
   return (
     <Card className="gap-4 p-5" testID="analysis-theater">
       <View className="flex-row items-center gap-2.5">
-        <Ionicons name="sparkles" size={16} color={foreground} />
+        <ThinkingOrb state={orbState} size={32} />
         <Text size="lg" weight="semibold" className="tracking-tight">
           Analyzing your profile
         </Text>
       </View>
-      <View className="gap-3.5">
-        {THEATER_STAGES.map((s, i) => {
-          const status = i < stage ? 'done' : i === stage ? 'current' : 'pending';
-          return (
-            <View
-              key={s.label}
-              className="flex-row items-center gap-2.5"
-              style={{ opacity: status === 'pending' ? 0.45 : 1 }}
-              testID={`theater-stage-${i}`}
-            >
-              <View
-                className="w-5.5 items-center"
-                testID={`theater-stage-${i}-${status}`}
-              >
-                {status === 'done' ? (
-                  <Ionicons name="checkmark-circle" size={18} color={foreground} />
-                ) : status === 'current' ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <Ionicons name="ellipse-outline" size={18} color={muted} />
-                )}
-              </View>
-              <Text size="sm" className="flex-1">
-                {s.label}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
+      <Plan isStreaming={stage < THEATER_STAGES.length - 1}>
+        <Plan.Steps>
+          {THEATER_STAGES.map((s, i) => (
+            <Plan.Step key={s.label} status={i < stage ? 'done' : i === stage ? 'active' : 'pending'}>
+              {s.label}
+            </Plan.Step>
+          ))}
+        </Plan.Steps>
+      </Plan>
       <Text size="xs" muted>
         Crunching your stats — this can take up to a minute. Keep the app open.
       </Text>
@@ -126,6 +105,8 @@ export function ScoreRing({
   const primary = useCSSVariable('--color-primary') as string;
   const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   const border = useCSSVariable('--color-border') as string;
+  const mutedFg = useCSSVariable('--color-muted-foreground') as string;
+  const fg = useCSSVariable('--color-foreground') as string;
   const completed = !IS_REANIMATED_AVAILABLE;
   const progress = useSharedValue(completed ? score : 0);
   const contentOpacity = useSharedValue(completed ? 1 : 0);
@@ -255,9 +236,14 @@ export function ScoreRing({
           </View>
         ) : null}
         {summary ? (
-          <Text size="sm" muted className="max-w-70 text-center">
+          <Shimmer
+            once
+            baseColor={mutedFg}
+            shimmerColor={fg}
+            textClassName="text-sm max-w-70 text-center"
+          >
             {summary}
-          </Text>
+          </Shimmer>
         ) : null}
       </AnimatedView>
     </View>
