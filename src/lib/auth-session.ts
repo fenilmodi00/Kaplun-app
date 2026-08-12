@@ -38,24 +38,38 @@ export function extractSessionSecret(session: { secret?: string }): string {
 }
 
 /**
- * Restore an Appwrite session from secure storage.
+ * Classify an error as network-level (keep session) vs auth-level (sign out).
  *
- * Reads the stored session secret, calls `client.setSession(secret)`,
- * then validates with `account.get()`. Returns the secret on success,
- * or `null` after clearing the stored key on failure.
+ * TypeError = fetch failed to connect; AbortError = timeout;
+ * Appwrite SDK errors carry `code` (HTTP status) — ≥500 is server/network.
+ */
+export function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code: number }).code;
+    if (code >= 500) return true;
+  }
+  return false;
+}
+
+/**
+ * Restore an Appwrite session from secure storage — local only.
+ *
+ * Reads the stored session secret and calls `client.setSession(secret)`.
+ * Does NOT call `account.get()` or delete the secret on failure —
+ * the caller (SessionProvider) owns validation and invalidation.
  */
 export async function restoreSession(): Promise<string | null> {
   try {
     const secret = await SecureStore.getItemAsync(SESSION_KEY);
     if (!secret) return null;
     client.setSession(secret);
-    await account.get();
     return secret;
   } catch (err: unknown) {
     addLog(
       `[auth-session] restore failed: ${err instanceof Error ? err.message : String(err)}`,
     );
-    await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => {});
     return null;
   }
 }

@@ -30,7 +30,6 @@ export const persistOptions: Omit<PersistQueryClientOptions, 'queryClient'> = {
   buster: PERSIST_BUSTER,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {
-      if (query.queryKey[0] === 'appwrite-user') return false;
       return shouldPersistQuery(query);
     },
   },

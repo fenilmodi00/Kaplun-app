@@ -9,10 +9,11 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { client } from '@/lib/appwrite';
+import { account, client } from '@/lib/appwrite';
 import {
   clearStoredSession,
   getAppwriteJWT,
+  isNetworkError,
   persistSession,
   restoreSession,
 } from '@/lib/auth-session';
@@ -64,12 +65,37 @@ export function SessionProvider({ children }: PropsWithChildren) {
       .then((secret) => {
         if (cancelled) return;
         setSession(secret);
-        if (secret && !ensuredRef.current) {
-          ensuredRef.current = true;
-          fireEnsureProfile();
-        }
+        setIsLoading(false);
+        if (!secret) return;
+
+        // Background validation — does not block first paint.
+        account
+          .get()
+          .then(() => {
+            if (cancelled) return;
+            if (!ensuredRef.current) {
+              ensuredRef.current = true;
+              fireEnsureProfile();
+            }
+          })
+          .catch((err: unknown) => {
+            if (cancelled) return;
+            if (isNetworkError(err)) {
+              addLog(
+                `[session] background validate failed (network): ${err instanceof Error ? err.message : String(err)}`,
+              );
+              // keep session — offline
+            } else {
+              addLog(
+                `[session] background validate failed (auth): ${err instanceof Error ? err.message : String(err)}`,
+              );
+              clearStoredSession();
+              setSession(null);
+              queryClient.clear();
+            }
+          });
       })
-      .finally(() => {
+      .catch(() => {
         if (!cancelled) setIsLoading(false);
       });
     return () => {

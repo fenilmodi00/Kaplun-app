@@ -18,6 +18,7 @@ jest.mock('@/lib/auth-session', () => ({
   persistSession: jest.fn().mockResolvedValue(undefined),
   clearStoredSession: jest.fn().mockResolvedValue(undefined),
   getAppwriteJWT: jest.fn().mockResolvedValue('test-jwt'),
+  isNetworkError: jest.fn().mockReturnValue(false),
   extractSessionSecret: (session: { secret?: string }) => {
     if (session.secret) return session.secret;
     const raw = globalThis.localStorage?.getItem('cookieFallback');
@@ -495,6 +496,66 @@ jest.mock('panelui-native', () => {
     PANEL_THEMES: [mockFamily],
     PANEL_THEME_NAMES: ['light', 'dark'],
     PANEL_EXTRA_THEMES: [],
+    ThinkingOrb: (props: any) => {
+      const stateLabels: Record<string, string> = {
+        working: 'Working',
+        searching: 'Searching',
+        solving: 'Solving',
+        listening: 'Listening',
+        composing: 'Composing',
+        shaping: 'Shaping',
+      };
+      const label = props?.accessibilityLabel || stateLabels[props?.state] || 'Working';
+      return React.createElement(View, {
+        accessibilityRole: 'image',
+        accessibilityLabel: label,
+      });
+    },
+    Shimmer: (props: any) => {
+      const { children, duration, spread, mode, once, reverse, enabled, baseColor, shimmerColor, color, intensity, ...rest } = props;
+      if (typeof children === 'string') {
+        return React.createElement(RNText, rest, children);
+      }
+      return React.createElement(View, rest, children);
+    },
+    Plan: family({
+      Header: viewPassthrough,
+      Icon: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+      Action: viewPassthrough,
+      Progress: ({ value, total }: any) => {
+        if (value !== undefined && total !== undefined) {
+          return React.createElement(RNText, null, `${value} of ${total}`);
+        }
+        return null;
+      },
+      Trigger: viewPassthrough,
+      Content: viewPassthrough,
+      Steps: viewPassthrough,
+      Step: textPassthrough,
+      Footer: viewPassthrough,
+    }),
+    Task: Object.assign((props: any) => React.createElement(View, props, props?.children), {
+      Trigger: ({ title, children, ...props }: any) =>
+        React.createElement(View, props, title ? React.createElement(RNText, null, title) : children),
+      Content: viewPassthrough,
+      Item: textPassthrough,
+      File: textPassthrough,
+    }),
+    BottomSheet: Object.assign(
+      (props: any) => React.createElement(View, props, props?.children),
+      {
+        Content: viewPassthrough,
+        Header: ({ title, description }: any) =>
+          React.createElement(View, null,
+            React.createElement(RNText, null, title),
+            description ? React.createElement(RNText, null, description) : null,
+          ),
+        Body: viewPassthrough,
+        Footer: viewPassthrough,
+      },
+    ),
   };
 });
 

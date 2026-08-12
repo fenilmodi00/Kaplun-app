@@ -16,7 +16,9 @@ jest.mock('@/lib/appwrite', () => ({
   client: { setSession: jest.fn() },
 }));
 
-import { extractSessionSecret } from '@/lib/auth-session';
+import { extractSessionSecret, restoreSession, isNetworkError } from '@/lib/auth-session';
+import * as SecureStore from 'expo-secure-store';
+import { account, client } from '@/lib/appwrite';
 
 describe('extractSessionSecret', () => {
   const PROJECT_ID = 'proj-test';
@@ -52,5 +54,58 @@ describe('extractSessionSecret', () => {
 
   it('throws when neither secret nor cookieFallback is available', () => {
     expect(() => extractSessionSecret({ secret: '' })).toThrow('session_secret_missing');
+  });
+});
+
+describe('isNetworkError', () => {
+  it('returns true for TypeError', () => {
+    expect(isNetworkError(new TypeError('fetch failed'))).toBe(true);
+  });
+
+  it('returns true for AbortError', () => {
+    const err = new DOMException('aborted', 'AbortError');
+    expect(isNetworkError(err)).toBe(true);
+  });
+
+  it('returns true for Appwrite code >= 500', () => {
+    expect(isNetworkError({ code: 500 })).toBe(true);
+    expect(isNetworkError({ code: 502 })).toBe(true);
+    expect(isNetworkError({ code: 503 })).toBe(true);
+  });
+
+  it('returns false for Appwrite code 401', () => {
+    expect(isNetworkError({ code: 401 })).toBe(false);
+  });
+
+  it('returns false for a generic Error', () => {
+    expect(isNetworkError(new Error('something'))).toBe(false);
+  });
+});
+
+describe('restoreSession', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('reads secret, calls setSession, and returns the secret — without calling account.get', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('secret-123');
+
+    const result = await restoreSession();
+
+    expect(result).toBe('secret-123');
+    expect(client.setSession).toHaveBeenCalledWith('secret-123');
+    expect(account.get).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('returns null and skips setSession when no secret is stored', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
+
+    const result = await restoreSession();
+
+    expect(result).toBeNull();
+    expect(client.setSession).not.toHaveBeenCalled();
+    expect(account.get).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 });
