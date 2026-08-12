@@ -295,10 +295,19 @@ jest.mock('uniwind', () => {
   };
 });
 
-// Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner
+// Mock panelui-native — PanelUIProvider, useThemeMode, useTheme, Spinner, and
+// pass-through component mocks (Text/Button/Card/Surface/Avatar/Badge/Alert/
+// Skeleton) so migrated screens render in tests. Text-bearing parts render a
+// real RN Text so getByText queries keep working.
 jest.mock('panelui-native', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { View, Text: RNText, Pressable } = require('react-native');
+  const viewPassthrough = (props: any) => React.createElement(View, props, props?.children);
+  const textPassthrough = (props: any) => React.createElement(RNText, props, props?.children);
+  const wrapTextChild = (child: unknown) =>
+    typeof child === 'string' || typeof child === 'number'
+      ? React.createElement(RNText, null, child)
+      : child;
   const mockFamily = {
     id: 'panel',
     name: 'Panel',
@@ -322,6 +331,32 @@ jest.mock('panelui-native', () => {
       setTheme: jest.fn(),
     }),
     Spinner: (props: any) => React.createElement(View, props),
+    Text: textPassthrough,
+    Button: ({ children, startContent, endContent, loading, ...props }: any) =>
+      React.createElement(
+        Pressable,
+        props,
+        loading ? null : startContent,
+        wrapTextChild(children),
+        endContent,
+      ),
+    Card: Object.assign(viewPassthrough, {
+      Header: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+      Content: viewPassthrough,
+      Footer: viewPassthrough,
+    }),
+    Surface: viewPassthrough,
+    Avatar: viewPassthrough,
+    Badge: ({ children, count, ...props }: any) =>
+      React.createElement(View, props, wrapTextChild(count !== undefined ? String(count) : children)),
+    Alert: Object.assign(viewPassthrough, {
+      Indicator: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+    }),
+    Skeleton: viewPassthrough,
     PANEL_THEMES: [mockFamily],
     PANEL_THEME_NAMES: ['light', 'dark'],
     PANEL_EXTRA_THEMES: [],

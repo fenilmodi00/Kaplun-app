@@ -1,12 +1,20 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { View, Text, Pressable } from '@/tw';
+import { View, Pressable, useCSSVariable } from '@/tw';
+import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Skeleton,
+  Surface,
+  Text,
+} from 'panelui-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Image } from '@/tw/image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ScreenShell } from '@/components/screen-shell';
 import {
   BottomSheetModal,
@@ -21,15 +29,17 @@ import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
 import { startInstagramOAuth } from '@/lib/instagram-oauth';
 import { addLog } from '@/lib/logger';
 import { getCreatorByClerkId } from '@/lib/repository';
-import { useThemeColors } from '@/lib/theme';
 import { getGreeting, profileFromCreator, hasUsableToken, getInitials } from './utils';
 import { ErrorShake, Reveal } from './components';
+
+// PanelUI has no Instagram brand glyph — Ionicons keeps it. Brand glyph colours
+// on the IG gradient are Instagram's palette, not Kaplun tokens.
+const IG_BRAND_GLYPH = '#ffffff';
 
 // ── Sub-components ───────────────────────────────────────────────────
 
 function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
   const router = useRouter();
-  const t = useThemeColors();
   return (
     <Pressable
       onPress={() => router.push('/(tabs)/(profile)' as never)}
@@ -37,45 +47,23 @@ function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
       accessibilityRole="button"
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <View
-        className="bg-brand-ochre items-center justify-center"
-        style={{
-          width: 38,
-          height: 38,
-          borderRadius: 19,
-          borderWidth: 1,
-          borderColor: t.hairline,
-          overflow: 'hidden',
-        }}
-      >
-        {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={{ width: 38, height: 38 }} />
-        ) : (
-          <Text className="font-semibold text-ink" style={{ fontSize: 15 }}>
-            {getInitials(name)}
-          </Text>
-        )}
-      </View>
+      <Avatar
+        source={imageUrl ? { uri: imageUrl } : undefined}
+        fallback={getInitials(name)}
+        className="border border-border"
+      />
     </Pressable>
   );
 }
 
 function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
   return (
-    <View className="flex-row items-center gap-[11px]">
-      <View
-        className="items-center justify-center"
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 10,
-          backgroundColor: 'rgba(255,255,255,0.7)',
-        }}
-      >
-        <Ionicons name={icon} size={16} color={t.ink} />
+    <View className="flex-row items-center gap-3">
+      <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
+        <Ionicons name={icon} size={16} color={foreground} />
       </View>
-      <Text className="font-medium text-ink" style={{ fontSize: 14.5, lineHeight: 20 }}>
+      <Text size="sm" weight="medium" className="flex-1">
         {text}
       </Text>
     </View>
@@ -83,34 +71,17 @@ function ValueBullet({ icon, text }: { icon: React.ComponentProps<typeof Ionicon
 }
 
 function ErrorStrip({ message }: { message: string }) {
-  const t = useThemeColors();
   return (
     <ErrorShake>
-      <View
-        className="flex-row items-start gap-[9px] rounded-md"
-        style={{
-          backgroundColor: 'rgba(239,68,68,0.1)',
-          borderWidth: 1,
-          borderColor: 'rgba(239,68,68,0.5)',
-          padding: 11,
-          paddingHorizontal: 12,
-          marginBottom: 14,
-        }}
-      >
-        <Ionicons name="alert-circle-outline" size={15} color="#ef4444" style={{ marginTop: 1 }} />
-        <Text className="text-[13px] leading-[1.45]" style={{ color: t.bodyStrong, flex: 1 }}>
-          <Text className="font-semibold" style={{ color: t.bodyStrong }}>
-            Instagram connection failed.
-          </Text>{' '}
-          {message}
-        </Text>
-      </View>
+      <Alert variant="destructive" className="mb-3.5">
+        <Alert.Title>Instagram connection failed.</Alert.Title>
+        <Alert.Description>{message}</Alert.Description>
+      </Alert>
     </ErrorShake>
   );
 }
 
 function PermissionsPanel({ open }: { open: boolean }) {
-  const t = useThemeColors();
   if (!open) return null;
 
   const scopes = [
@@ -121,68 +92,44 @@ function PermissionsPanel({ open }: { open: boolean }) {
   ];
 
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-lg"
-      style={{ padding: 16, marginTop: 12 }}
-    >
-      <Text
-        className="font-semibold uppercase text-muted"
-        style={{ fontSize: 13, letterSpacing: 1.2, marginBottom: 12 }}
-      >
+    <Surface variant="secondary" className="mt-3">
+      <Text size="xs" weight="semibold" muted className="mb-3 uppercase tracking-wider">
         What Kaplun can do
       </Text>
-      <View className="gap-[10px]" style={{ marginBottom: 14 }}>
+      <View className="gap-2.5 mb-3.5">
         {scopes.map((s) => (
-          <View key={s.code} className="flex-row gap-[10px] items-start">
-            <View
-              className="bg-brand-lavender"
-              style={{ width: 7, height: 7, borderRadius: 3.5, marginTop: 5 }}
-            />
+          <View key={s.code} className="flex-row gap-2.5 items-start">
+            <View className="mt-1.5 h-2 w-2 rounded-full bg-primary" />
             <View className="flex-1">
-              <Text className="text-[13.5px] leading-[1.4]" style={{ color: t.ink }}>
-                {s.label}
-              </Text>
-              <Text
-                style={{
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                  fontSize: 11,
-                  color: t.muted,
-                  marginTop: 1,
-                }}
-              >
+              <Text size="sm">{s.label}</Text>
+              <Text size="xs" muted className="mt-0.5 font-mono">
                 {s.code}
               </Text>
             </View>
           </View>
         ))}
       </View>
-      <View
-        style={{ borderTopWidth: 1, borderTopColor: t.hairline, paddingTop: 12 }}
-      >
-        <Text className="text-[12.5px] leading-[1.5] text-muted">
+      <View className="border-t border-border pt-3">
+        <Text size="xs" muted className="leading-5">
           Secure sign-in via Meta. Kaplun never sees your password. Disconnect anytime from Profile.
         </Text>
-        <Text className="text-[12.5px] leading-[1.5] text-muted" style={{ marginTop: 8 }}>
-          Requires an Instagram Business or Creator account.{" "}
-          <Text style={{ color: t.ink, fontWeight: '500' }}>How to switch</Text>
+        <Text size="xs" muted className="mt-2 leading-5">
+          Requires an Instagram Business or Creator account.{' '}
+          <Text size="xs" weight="medium">How to switch</Text>
         </Text>
       </View>
-    </View>
+    </Surface>
   );
 }
 
 function ConnectionChip({ profile }: { profile: InstagramProfileResponse }) {
-  const t = useThemeColors();
   return (
-    <View
-      className="flex-row items-center gap-[11px] bg-surface-card border border-hairline"
-      style={{
-        borderRadius: 9999,
-        padding: 8,
-        paddingRight: 16,
-        marginBottom: 16,
-      }}
+    <Surface
+      padding="none"
+      bordered
+      className="mb-4 flex-row items-center gap-3 rounded-full p-2 pr-4"
     >
+      {/* Instagram brand gradient — IG palette, not Kaplun tokens */}
       <LinearGradient
         colors={['#f9ce34', '#ee2a7b', '#6228d7']}
         start={{ x: 0, y: 1 }}
@@ -195,21 +142,18 @@ function ConnectionChip({ profile }: { profile: InstagramProfileResponse }) {
           justifyContent: 'center',
         }}
       >
-        <Ionicons name="logo-instagram" size={17} color={t.onPrimary} />
+        <Ionicons name="logo-instagram" size={17} color={IG_BRAND_GLYPH} />
       </LinearGradient>
-      <View className="flex-1" style={{ minWidth: 0 }}>
-        <Text className="font-semibold text-ink" style={{ fontSize: 14.5, letterSpacing: -0.2 }}>
+      <View className="flex-1 min-w-0">
+        <Text weight="semibold" numberOfLines={1}>
           @{profile.username}
         </Text>
-        <Text className="text-[12px] text-muted">Instagram Business</Text>
-      </View>
-      <View className="flex-row items-center gap-[6px]">
-        <View className="bg-success" style={{ width: 8, height: 8, borderRadius: 4 }} />
-        <Text className="font-semibold text-[12.5px]" style={{ color: '#15803d' }}>
-          Connected
+        <Text size="xs" muted>
+          Instagram Business
         </Text>
       </View>
-    </View>
+      <Badge variant="success">Connected</Badge>
+    </Surface>
   );
 }
 
@@ -220,7 +164,7 @@ function Module({
   emptyBody,
   buttonText,
   buttonRoute,
-  bgClass,
+  tintClass,
 }: {
   title: string;
   subtitle: string;
@@ -228,79 +172,52 @@ function Module({
   emptyBody: string;
   buttonText: string;
   buttonRoute: string;
-  bgClass: string;
+  tintClass: string;
 }) {
   const router = useRouter();
   return (
-    <View className={`${bgClass} rounded-xl`} style={{ padding: 20, marginBottom: 14 }}>
-      <Text
-        className="font-semibold text-white"
-        style={{ fontSize: 19, letterSpacing: -0.3, marginBottom: 4 }}
-      >
-        {title}
-      </Text>
-      <Text className="text-[13px] text-white" style={{ opacity: 0.82, marginBottom: 16 }}>
-        {subtitle}
-      </Text>
-      <View
-        className="items-center"
-        style={{
-          borderWidth: 1.5,
-          borderStyle: 'dashed',
-          borderColor: 'rgba(255,255,255,0.65)',
-          borderRadius: 16,
-          padding: 16,
-          paddingHorizontal: 14,
-        }}
-      >
-        <Text className="font-semibold text-white" style={{ fontSize: 14.5, marginBottom: 3 }}>
-          {emptyTitle}
-        </Text>
-        <Text className="text-[12.5px] text-white" style={{ opacity: 0.8, lineHeight: 18, textAlign: 'center' }}>
-          {emptyBody}
-        </Text>
-      </View>
-      <Pressable
-        onPress={() => router.push(buttonRoute as never)}
-        className="flex-row items-center self-start gap-[7px] text-white"
-        style={{
-          marginTop: 14,
-          backgroundColor: 'rgba(255,255,255,0.12)',
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.3)',
-          borderRadius: 12,
-          paddingVertical: 9,
-          paddingHorizontal: 14,
-          minHeight: 44,
-        }}
-      >
-        <Text className="font-semibold text-white" style={{ fontSize: 13.5 }}>
+    <Card className={cn('mb-3.5', tintClass)}>
+      <Card.Header>
+        <Card.Title>{title}</Card.Title>
+        <Card.Description>{subtitle}</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <View className="items-center gap-1 rounded-2xl border border-dashed border-border p-4">
+          <Text size="sm" weight="semibold">
+            {emptyTitle}
+          </Text>
+          <Text size="xs" muted className="text-center leading-5">
+            {emptyBody}
+          </Text>
+        </View>
+      </Card.Content>
+      <Card.Footer>
+        <Button variant="secondary" size="sm" onPress={() => router.push(buttonRoute as never)}>
           {buttonText}
-        </Text>
-      </Pressable>
-    </View>
+        </Button>
+      </Card.Footer>
+    </Card>
   );
 }
 
 function QuickActions() {
   const router = useRouter();
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
   const actions = [
     { label: 'Reply to DMs', icon: 'chatbubble-outline' as const, route: '/(tabs)/(messages)' },
     { label: 'View insights', icon: 'stats-chart-outline' as const, route: '/(tabs)/(insights)' },
   ];
 
   return (
-    <View className="flex-row gap-[9px]">
+    <View className="flex-row gap-2.5">
       {actions.map((a) => (
         <Pressable
           key={a.label}
           onPress={() => router.push(a.route as never)}
-          className="flex-1 items-center justify-center bg-surface-card border border-hairline"
-          style={{ borderRadius: 12, minHeight: 64, gap: 6 }}
+          className="min-h-16 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-card"
         >
-          <Ionicons name={a.icon} size={17} color={t.ink} />
-          <Text className="font-semibold text-ink" style={{ fontSize: 12 }}>
+          <Ionicons name={a.icon} size={17} color={foreground} />
+          <Text size="xs" weight="semibold">
             {a.label}
           </Text>
         </Pressable>
@@ -314,10 +231,11 @@ function QuickActions() {
 export default function HomeScreen() {
   const { data: user } = useAppwriteUser();
   const { isReady: bridgeReady } = useBridge();
-  const router = useRouter();
-  const t = useThemeColors();
   const insets = useSafeAreaInsets();
   const placeholderSheetRef = useRef<BottomSheetMethods>(null);
+  const mutedForeground = useCSSVariable('--color-muted-foreground') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
+  const foreground = useCSSVariable('--color-foreground') as string;
 
   const [profile, setProfile] = useState<InstagramProfileResponse | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
@@ -434,27 +352,18 @@ export default function HomeScreen() {
   if ((isCheckingConnection || !bridgeReady) && !profile && !skipped) {
     return (
       <ScreenShell>
-        <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
-          <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
+        <View className="flex-row items-center justify-between mb-3.5">
+          <Text size="xl" weight="semibold" className="tracking-tight">
             Kaplun
           </Text>
         </View>
-        <View
-          className="bg-surface-card/60 border border-hairline"
-          style={{ height: 28, width: '55%', borderRadius: 8, marginBottom: 18 }}
-        />
-        <View
-          className="bg-surface-card border border-hairline"
-          style={{ height: 120, borderRadius: 16, marginBottom: 14 }}
-        />
-        <View
-          className="bg-surface-card border border-hairline"
-          style={{ height: 88, borderRadius: 16, marginBottom: 14 }}
-        />
-        <View className="flex-row" style={{ gap: 10 }}>
-          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
-          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
-          <View className="flex-1 bg-surface-card border border-hairline" style={{ height: 64, borderRadius: 12 }} />
+        <Skeleton className="h-7 w-[55%] mb-4" />
+        <Skeleton className="h-28 rounded-2xl mb-3.5" />
+        <Skeleton className="h-24 rounded-2xl mb-3.5" />
+        <View className="flex-row gap-2.5">
+          <Skeleton className="h-16 flex-1 rounded-xl" />
+          <Skeleton className="h-16 flex-1 rounded-xl" />
+          <Skeleton className="h-16 flex-1 rounded-xl" />
         </View>
       </ScreenShell>
     );
@@ -468,8 +377,8 @@ export default function HomeScreen() {
 
       {/* Header */}
       <Reveal delay={0} style={{ width: '100%' }}>
-        <View className="flex-row items-center justify-between" style={{ marginBottom: 14 }}>
-          <Text className="font-semibold text-ink" style={{ fontSize: 21, letterSpacing: -0.4 }}>
+        <View className="flex-row items-center justify-between mb-3.5">
+          <Text size="xl" weight="semibold" className="tracking-tight">
             Kaplun
           </Text>
           <HeaderAvatar name={displayName} imageUrl={profile?.profile_picture_url} />
@@ -478,85 +387,57 @@ export default function HomeScreen() {
 
       {/* Greeting */}
       <Reveal delay={50} style={{ width: '100%' }}>
-        <View style={{ marginBottom: 16 }}>
-          <Text className="text-[13px] text-muted" style={{ marginBottom: 2 }}>
+        <View className="mb-4">
+          <Text size="sm" muted className="mb-0.5">
             {getGreeting()}
           </Text>
-          <Text className="font-medium text-ink" style={{ fontSize: 24, letterSpacing: -0.5 }}>
+          <Text size="2xl" weight="medium" className="tracking-tight">
             {firstName}
           </Text>
         </View>
       </Reveal>
 
       <Reveal delay={75} style={{ width: '100%' }}>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="outline"
+          fullWidth
           accessibilityLabel="Open bottom sheet"
           onPress={() => placeholderSheetRef.current?.present()}
-          className="mb-4 h-11 items-center justify-center rounded-md border border-hairline bg-surface-card"
+          className="mb-4"
         >
-          <Text className="font-medium text-body-md text-ink">Open bottom sheet</Text>
-        </Pressable>
+          Open bottom sheet
+        </Button>
       </Reveal>
 
       {!isConnected ? (
         <Reveal delay={100} style={{ width: '100%' }}>
           {/* Connect hero card */}
-          <View
-            className="bg-brand-lavender rounded-xl"
-            style={{ padding: 18, opacity: isConnecting ? 0.78 : 1 }}
-          >
+          <Surface bordered padding="lg" className={cn(isConnecting && 'opacity-75')}>
             {/* Hero visual placeholder */}
-            <View
-              className="items-center justify-center"
-              style={{
-                height: 118,
-                borderRadius: 16,
-                borderWidth: 1.5,
-                borderStyle: 'dashed',
-                borderColor: 'rgba(10,10,10,0.38)',
-                backgroundColor: 'rgba(255,255,255,0.55)',
-                marginBottom: 16,
-                gap: 8,
-              }}
-            >
-              <Ionicons name="logo-instagram" size={34} color="rgba(10,10,10,0.6)" />
-              <Text className="font-medium" style={{ fontSize: 11.5, letterSpacing: 0.2, color: 'rgba(10,10,10,0.6)' }}>
+            <View className="mb-4 h-28 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-secondary">
+              <Ionicons name="logo-instagram" size={34} color={mutedForeground} />
+              <Text size="xs" muted>
                 TODO: hero visual — clay phone with Instagram glyph
               </Text>
             </View>
 
             {/* Eyebrow */}
-            <Text
-              className="font-semibold uppercase"
-              style={{
-                fontSize: 11,
-                letterSpacing: 1.5,
-                color: 'rgba(10,10,10,0.62)',
-                marginBottom: 8,
-              }}
-            >
+            <Text size="xs" weight="semibold" muted className="mb-2 uppercase tracking-widest">
               Step 1 of 1
             </Text>
 
             {/* H1 */}
-            <Text
-              className="font-medium text-ink"
-              style={{ fontSize: 29, lineHeight: 32.5, letterSpacing: -0.5, marginBottom: 8 }}
-            >
+            <Text size="3xl" weight="medium" className="mb-2 tracking-tight">
               Connect your Instagram
             </Text>
 
             {/* Lede */}
-            <Text
-              className="text-body-strong"
-              style={{ fontSize: 15, lineHeight: 22.5, marginBottom: 14 }}
-            >
+            <Text className="mb-3.5 leading-6">
               Kaplun reads your DMs, insights and posts so your creator workspace comes alive.
             </Text>
 
             {/* Value bullets */}
-            <View className="gap-[11px]" style={{ marginBottom: 18 }}>
+            <View className="gap-3 mb-5">
               <ValueBullet
                 icon="chatbubble-outline"
                 text="Answer Instagram DMs from one inbox"
@@ -571,70 +452,57 @@ export default function HomeScreen() {
             {error && <ErrorStrip message={error} />}
 
             {/* CTA */}
-            <ClayAnimatedButton
-              variant="primary"
+            <Button
               fullWidth
+              size="lg"
               loading={isConnecting}
               onPress={handleConnect}
-              height={50}
+              startContent={<Ionicons name="logo-instagram" size={17} color={primaryForeground} />}
             >
-              <View className="flex-row items-center gap-[9px]">
-                <Ionicons name="logo-instagram" size={17} color={t.onPrimary} />
-                <Text className="font-semibold text-white" style={{ fontSize: 15, letterSpacing: -0.2 }}>
-                  {error ? 'Try again' : isConnecting ? 'Waiting for Instagram…' : 'Connect Instagram'}
-                </Text>
-              </View>
-            </ClayAnimatedButton>
+              {error ? 'Try again' : isConnecting ? 'Waiting for Instagram…' : 'Connect Instagram'}
+            </Button>
 
             {/* CTA caption */}
-            <Text
-              className="text-center"
-              style={{
-                fontSize: 12.5,
-                color: 'rgba(10,10,10,0.65)',
-                marginTop: 10,
-              }}
-            >
+            <Text size="xs" muted className="mt-2.5 text-center">
               {isConnecting
                 ? 'Complete sign-in in the Instagram window to continue.'
                 : 'Secure sign-in via Meta · takes about 30 seconds'}
             </Text>
 
             {/* Why we ask toggle */}
-            <Pressable
+            <Button
+              variant="ghost"
+              size="sm"
               onPress={() => setShowPermissions((p) => !p)}
-              className="self-center"
-              style={{ marginTop: 13, paddingVertical: 6, paddingHorizontal: 8 }}
+              className="mt-3 self-center"
+              labelClassName="underline"
+              accessibilityState={{ expanded: showPermissions }}
+              endContent={
+                <Ionicons
+                  name="chevron-down"
+                  size={14}
+                  color={foreground}
+                  style={{ transform: [{ rotate: showPermissions ? '180deg' : '0deg' }] }}
+                />
+              }
             >
-              <Text
-                className="font-medium text-ink"
-                style={{ fontSize: 14, textDecorationLine: 'underline' }}
-              >
-                Why we ask for this{' '}
-                <Text style={{ transform: [{ rotate: showPermissions ? '180deg' : '0deg' }] }}>
-                  ▾
-                </Text>
-              </Text>
-            </Pressable>
-          </View>
+              Why we ask for this
+            </Button>
+          </Surface>
 
           {/* Permissions panel */}
           <PermissionsPanel open={showPermissions} />
 
           {/* Skip block */}
-          <View className="items-center" style={{ marginTop: 16 }}>
-            <Pressable
+          <View className="items-center mt-4">
+            <Button
+              variant="ghost"
               onPress={() => setSkipped(true)}
-              style={{ paddingVertical: 10, paddingHorizontal: 14, minHeight: 44 }}
+              labelClassName="text-muted-foreground"
             >
-              <Text className="font-medium text-muted" style={{ fontSize: 14 }}>
-                Continue without Instagram
-              </Text>
-            </Pressable>
-            <Text
-              className="text-center text-muted-soft"
-              style={{ fontSize: 12, lineHeight: 17.4, paddingHorizontal: 22 }}
-            >
+              Continue without Instagram
+            </Button>
+            <Text size="xs" muted className="mt-1 px-6 text-center leading-5">
               You can connect later from Profile. Some features stay locked.
             </Text>
           </View>
@@ -651,7 +519,7 @@ export default function HomeScreen() {
             emptyBody="Unread threads will appear here as soon as your messages finish syncing."
             buttonText="Open Messages"
             buttonRoute="/(tabs)/(messages)"
-            bgClass="bg-brand-pink"
+            tintClass="bg-info-soft"
           />
 
           <Module
@@ -661,7 +529,7 @@ export default function HomeScreen() {
             emptyBody="Share a post on Instagram and its performance will land here."
             buttonText="View insights"
             buttonRoute="/(tabs)/(insights)"
-            bgClass="bg-brand-teal"
+            tintClass="bg-success-soft"
           />
 
           <QuickActions />
@@ -676,7 +544,7 @@ export default function HomeScreen() {
               subtitle="Swap this for real actions later"
               onClose={() => placeholderSheetRef.current?.dismiss()}
             />
-            <Text className="text-body-md text-body">
+            <Text>
               Bottom sheet is wired on Home. Swipe down or tap Close to dismiss.
             </Text>
           </View>

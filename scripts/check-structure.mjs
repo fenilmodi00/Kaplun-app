@@ -20,6 +20,10 @@ const EXCEPTIONS = new Set([
   'src/components/clay/ClaySpinner.web.tsx',
   'src/components/auth/AuthScreen.tsx',
   'src/components/edge-blur.tsx',
+  // Bottom sheet is KEEP-custom infrastructure (spec: 2026-08-12-panelui-migration-design) —
+  // RN Animated/StyleSheet are the sheet mechanics, replaced only by its Phase 2 mini-rebuild.
+  'src/components/ui/bottomsheet/index.tsx',
+  'src/components/ui/bottomsheet/backdrop.tsx',
   // Screens — raw RN + StyleSheet (moved from routes, documented escape hatches)
   'src/screens/automate/detail/index.tsx',
   'src/screens/automate/detail/components.tsx',
