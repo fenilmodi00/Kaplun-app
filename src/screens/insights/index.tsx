@@ -8,7 +8,6 @@ import { Image } from '@/tw/image';
 import { ScreenShell } from '@/components/screen-shell';
 import {
   Alert,
-  BarChart,
   Button,
   Card,
   Chip,
@@ -119,6 +118,7 @@ function ReachChartCard({
   );
 
   const muted = useCSSVariable('--color-muted-foreground') as string;
+  const primary = useCSSVariable('--color-primary') as string;
   return (
     <Card className="gap-3.5 p-4.5">
       <View className="flex-row items-end justify-between">
@@ -141,21 +141,38 @@ function ReachChartCard({
       </View>
 
       {hasData ? (
-        <BarChart
-          data={chartData}
-          xDataKey="day"
-          aspectRatio={2.6}
-          minBarLength={3}
-          cornerRadius={windowDays <= 7 ? 6 : 3}
-          accessibilityLabel={`Reach over the last ${windowDays} days, total ${formatCompact(total)}`}
-          onActiveIndexChange={(index) => {
-            if (index >= 0) setSelectedIdx(index);
-          }}
-        >
-          <BarChart.Bar dataKey="value" colorIndex={1} />
-          <BarChart.XAxis ticks={4} />
-          <BarChart.Tooltip formatValue={(v) => formatCompact(v)} />
-        </BarChart>
+        <View className="gap-1">
+          <View className="flex-row items-end gap-0.5" style={{ height: 120 }}>
+            {chartData.map((d, i) => {
+              const max = Math.max(...chartData.map((c) => c.value), 1);
+              const h = Math.max((d.value / max) * 100, 3);
+              const isSelected = selectedIdx === i;
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => setSelectedIdx(selectedIdx === i ? null : i)}
+                  className="flex-1 items-center justify-end"
+                  style={{ height: '100%' }}
+                >
+                  <View
+                    className="w-full rounded-t-sm"
+                    style={{
+                      height: `${h}%`,
+                      backgroundColor: isSelected ? primary : muted,
+                      opacity: isSelected ? 1 : 0.5,
+                    }}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+          {chartData.length > 0 && (
+            <View className="flex-row justify-between">
+              <Text size="xs" muted>{chartData[0].day}</Text>
+              <Text size="xs" muted>{chartData[chartData.length - 1].day}</Text>
+            </View>
+          )}
+        </View>
       ) : (
         <View className="h-30 items-center justify-center gap-1.5">
           <Ionicons name="stats-chart-outline" size={22} color={muted} />
@@ -183,11 +200,8 @@ function FollowersCard({
   const delta =
     series.length >= 2 ? series[series.length - 1].value - series[0].value : null;
 
-  // Line sparkline, not bars: a bar chart's zero-baseline domain would render
-  // 1490→1500 as identical full-height bars. Lines may crop, bars may not.
-  const sparkData = useMemo(() => series.map((p) => ({ value: p.value })), [series]);
-
   const muted = useCSSVariable('--color-muted-foreground') as string;
+  const primary = useCSSVariable('--color-primary') as string;
   return (
     <Kpi surface={false} colorIndex={3} className="gap-2 rounded-2xl bg-success-soft p-4">
       <Kpi.Header>
@@ -207,7 +221,25 @@ function FollowersCard({
       </Kpi.Value>
 
       {series.length >= 2 ? (
-        <Kpi.Chart data={sparkData} dataKey="value" height={44} colorIndex={3} />
+        <View className="flex-row items-end gap-px" style={{ height: 44 }}>
+          {series.map((p, i) => {
+            const max = Math.max(...series.map((s) => s.value), 1);
+            const min = Math.min(...series.map((s) => s.value), 0);
+            const range = max - min || 1;
+            const h = Math.max(((p.value - min) / range) * 100, 4);
+            return (
+              <View
+                key={i}
+                className="flex-1 rounded-sm"
+                style={{
+                  height: `${h}%`,
+                  backgroundColor: primary,
+                  opacity: 0.4 + (i / series.length) * 0.6,
+                }}
+              />
+            );
+          })}
+        </View>
       ) : (
         <View className="flex-row items-center gap-2">
           <Ionicons name="lock-closed-outline" size={13} color={muted} />
