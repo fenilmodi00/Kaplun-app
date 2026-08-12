@@ -77,7 +77,7 @@ export default function ScoreScreen() {
   const genericError = generateError && !sessionExpired ? generateError : null;
 
   return (
-    <ScreenShell contentContainerStyle={{ gap: 16 }} testID="score-screen">
+    <ScreenShell contentContainerStyle={{ gap: 12 }} testID="score-screen">
       {/* Header */}
       <View style={{ gap: 6 }}>
         <Text

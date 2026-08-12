@@ -530,7 +530,7 @@ export default function InsightsScreen() {
       : null;
 
   return (
-    <ScreenShell contentContainerStyle={{ gap: 16 }}>
+    <ScreenShell contentContainerStyle={{ gap: 12 }}>
       {/* Header */}
       <Reveal delay={0} style={{ width: '100%' }}>
         <View style={{ gap: 6 }}>

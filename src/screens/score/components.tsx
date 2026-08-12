@@ -45,7 +45,7 @@ export function GateCard({
   return (
     <View
       className="bg-surface-card border border-hairline rounded-xl items-center"
-      style={{ padding: 24, gap: 12 }}
+      style={{ padding: 20, gap: 12 }}
     >
       <View
         className="bg-brand-lavender items-center justify-center"
@@ -105,7 +105,7 @@ export function EmptyState({
   return (
     <View
       className="bg-surface-card border border-hairline rounded-xl items-center"
-      style={{ padding: 28, gap: 14 }}
+      style={{ padding: 20, gap: 12 }}
     >
       <View
         className="bg-brand-teal items-center justify-center"

@@ -7,7 +7,7 @@ import { useEntranceAnimation, usePressAnimation } from '@/hooks/useClayAnimatio
 export function ClayAnimatedCard({
   children, onPress, delay = 0,
   backgroundColor = 'bg-canvas', borderRadius = 'rounded-lg',
-  padding = 'p-6', borderWidth = 1, borderColor = 'border-hairline',
+  padding = 'p-5', borderWidth = 1, borderColor = 'border-hairline',
 }: {
   children: React.ReactNode; onPress?: () => void; delay?: number;
   backgroundColor?: string; borderRadius?: string;

@@ -25,7 +25,7 @@ export function ClayFeatureCard({
   title,
   description,
   delay = 0,
-  padding = 'p-8',
+  padding = 'p-6',
 }: {
   children?: React.ReactNode;
   color: Color;

@@ -349,7 +349,7 @@ function buildStyles(t: ThemeColors) {
     backgroundColor: t.canvas,
   },
   scrollContent: {
-    gap: 16,
+    gap: 12,
   },
   centerState: {
     flex: 1,
