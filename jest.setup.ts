@@ -360,6 +360,25 @@ jest.mock('panelui-native', () => {
       Description: textPassthrough,
     }),
     Skeleton: viewPassthrough,
+    EmptyState: Object.assign(viewPassthrough, {
+      Header: viewPassthrough,
+      Media: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+      Content: viewPassthrough,
+    }),
+    Item: Object.assign((props: any) =>
+      React.createElement(props.onPress ? Pressable : View, props, props?.children), {
+      Group: viewPassthrough,
+      Separator: viewPassthrough,
+      Media: viewPassthrough,
+      Content: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+      Actions: viewPassthrough,
+      Header: viewPassthrough,
+      Footer: viewPassthrough,
+    }),
     Kpi: Object.assign(viewPassthrough, {
       Header: viewPassthrough,
       Icon: viewPassthrough,
