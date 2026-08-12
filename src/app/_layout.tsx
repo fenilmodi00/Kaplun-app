@@ -20,9 +20,9 @@ import * as SystemUI from 'expo-system-ui';
 import { useClayFonts } from '@/lib/fonts';
 import { hydrateThemePreference } from '@/lib/theme';
 import { PanelUIProvider, Spinner, useThemeMode } from 'panelui-native';
-import { useCSSVariable } from '@/tw';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
 import { SessionProvider, useSession } from '@/lib/session-context';
+import { useCSSVariable } from '@/tw';
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
