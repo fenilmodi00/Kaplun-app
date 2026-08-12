@@ -7,9 +7,9 @@ jest.mock('@/lib/bridge-context', () => ({
 }));
 
 jest.mock('@/lib/instagram', () => ({
-  fetchProfile: jest.fn(() => new Promise(() => {})),
-  fetchAccountInsights: jest.fn(() => new Promise(() => {})),
-  fetchMedia: jest.fn(() => new Promise(() => {})),
+  fetchProfile: jest.fn().mockResolvedValue(null),
+  fetchAccountInsights: jest.fn().mockResolvedValue(null),
+  fetchMedia: jest.fn().mockResolvedValue([]),
 }));
 
 import React from 'react';
