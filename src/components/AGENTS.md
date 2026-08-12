@@ -6,7 +6,8 @@ Scope: the `ui/` form kit, `auth/`, `automation/`, and 3 root-level components. 
 
 | Path | Role |
 |------|------|
-| `ui/` (11 primitives) | Self-made form/display kit: `card`, `badge`, `input`, `textarea`, `switch`, `radio`, `toggle-card`, `collapsible`, `reveal`, `glass-surface`, `error-state` |
+| `ui/` (11 primitives + kits) | Self-made form/display kit: `card`, `badge`, `input`, `textarea`, `switch`, `radio`, `toggle-card`, `collapsible`, `reveal`, `glass-surface`, `error-state`, plus `ui/bottomsheet/` |
+| `ui/bottomsheet/` | Native modal bottom sheet (`index.tsx`, `header.tsx`, `backdrop.tsx`). Import `@/components/ui/bottomsheet` only — not `@expo/ui` directly. |
 | `auth/AuthScreen.tsx` | Login/signup OTP screen, 761 lines. Internal pieces: `CapsuleToggle`, `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
 | `automation/AutomationDmPreview.tsx` | Simulated IG DM inbox preview for the automation builder; `{username}` substitution; hardcoded IG colors by design |
 | `edge-blur.tsx` | Canvas scrim — plain `LinearGradient`, NOT a real blur (native `expo-blur` crashed Android on transitions; `blurTarget`/`intensity` props kept for call-site compat) |
@@ -14,11 +15,25 @@ Scope: the `ui/` form kit, `auth/`, `automation/`, and 3 root-level components. 
 | `symbol-icon.tsx` | SF Symbol wrapper used by the tab bar |
 | `ui/error-state.tsx` | Shared error state: centered message + optional Retry button with mount-time shake. Consolidates per-screen private copies |
 
+## FOLDER RULE — multi-file kits inside `ui/`
+
+**New multi-file component families live in `src/components/ui/<name>/`**, not as loose files crowding `ui/` root.
+
+| Put at `ui/<file>.tsx` | Put in `ui/<name>/` |
+|------------------------|---------------------|
+| Single-file primitives (input, switch, badge) | 2+ related files (main + header + backdrop + tests) |
+| Stateless form/display atoms | Composite kits with re-exports |
+
+- Folder name: kebab-case (`bottomsheet/`, not `BottomSheet/`).
+- Public import: `@/components/ui/<name>` via `index.tsx` barrel.
+- Colocate tests beside the barrel (`index.test.tsx`).
+
 ## NAMING CONVENTIONS
 
 | Directory | Convention | Examples |
 |-----------|-----------|----------|
 | `ui/` | kebab-case | `toggle-card.tsx`, `error-state.tsx`, `glass-surface.tsx` |
+| `ui/<kit>/` | kebab-case files | `bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx` |
 | `clay/` | PascalCase | `ClayAnimatedButton.tsx`, `ClaySpinner.tsx`, `TabBar.tsx` |
 | `auth/` | PascalCase | `AuthScreen.tsx` |
 | `automation/` | PascalCase | `AutomationDmPreview.tsx` |
@@ -36,6 +51,15 @@ Existing files are grandfathered. New files must follow the convention for their
 - **Reanimated only via `@/lib/reanimated-platform`** — `collapsible.tsx`/`reveal.tsx` guard web with `IS_REANIMATED_AVAILABLE` (web inits at final state).
 - **Accessibility** — `accessibilityRole`/`accessibilityState`/`accessibilityLabel`/`testID` throughout (see `radio.tsx` for the pattern).
 - **`glass-surface.tsx`** — iOS 26+: `LiquidGlassView` with `glassType="clear"`, no tint; Android/older iOS: `BlurView blurType="dark"` directly — do NOT route Android through `LiquidGlassView`, its hardcoded `regular` fallback is a ~14% white frost that turns the pill milky. Pure clear glass in BOTH schemes (intentional); `#151517` survives only as the reduced-transparency fallback; floating chrome only, never full-screen cards.
+
+## `ui/bottomsheet/` CONVENTIONS
+
+- **Import path:** `@/components/ui/bottomsheet` only. Never `@expo/ui/community/bottom-sheet` from screens.
+- **Native-only** (iOS/Android dev client). No `.web.tsx` variant.
+- **Panel:** solid `canvas` background (AMOLED `#000000` dark, cream light) — not glass/blur on the sheet itself.
+- **Backdrop:** blurred + dimmed scrim via `@sbaiahmed1/react-native-blur` when open (Expo ignores `backdropComponent` on native).
+- **Re-exports:** scroll helpers, `useBottomSheet`, types. `sheetContent` padding utility lives in `@/tw/cn`.
+- **Companion:** `BottomSheetHeader` for title/subtitle/close row.
 
 ## GOTCHAS
 

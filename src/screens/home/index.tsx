@@ -1,12 +1,20 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { View, Text, Pressable } from '@/tw';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Image } from '@/tw/image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
 import { ScreenShell } from '@/components/screen-shell';
+import {
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetHeader,
+  type BottomSheetMethods,
+} from '@/components/ui/bottomsheet';
+import { sheetContent, cn } from '@/tw/cn';
 import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
 import { fetchProfile, type InstagramProfileResponse } from '@/lib/instagram';
@@ -308,6 +316,8 @@ export default function HomeScreen() {
   const { isReady: bridgeReady } = useBridge();
   const router = useRouter();
   const t = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const placeholderSheetRef = useRef<BottomSheetMethods>(null);
 
   const [profile, setProfile] = useState<InstagramProfileResponse | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
@@ -478,6 +488,17 @@ export default function HomeScreen() {
         </View>
       </Reveal>
 
+      <Reveal delay={75} style={{ width: '100%' }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open bottom sheet"
+          onPress={() => placeholderSheetRef.current?.present()}
+          className="mb-4 h-11 items-center justify-center rounded-md border border-hairline bg-surface-card"
+        >
+          <Text className="font-medium text-body-md text-ink">Open bottom sheet</Text>
+        </Pressable>
+      </Reveal>
+
       {!isConnected ? (
         <Reveal delay={100} style={{ width: '100%' }}>
           {/* Connect hero card */}
@@ -646,6 +667,21 @@ export default function HomeScreen() {
           <QuickActions />
         </Reveal>
       )}
+
+      <BottomSheetModal ref={placeholderSheetRef} snapPoints={['40%', '75%']}>
+        <BottomSheetView style={{ paddingBottom: insets.bottom + 8 }}>
+          <View className={cn(sheetContent)}>
+            <BottomSheetHeader
+              title="Placeholder sheet"
+              subtitle="Swap this for real actions later"
+              onClose={() => placeholderSheetRef.current?.dismiss()}
+            />
+            <Text className="text-body-md text-body">
+              Bottom sheet is wired on Home. Swipe down or tap Close to dismiss.
+            </Text>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </ScreenShell>
   );
 }
