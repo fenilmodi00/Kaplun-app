@@ -1,12 +1,11 @@
 import React, { useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemeColors } from '@/lib/theme';
+import { useCSSVariable } from 'uniwind';
 import type { InstagramMediaResponse } from '@/lib/instagram';
 import { View, Text, Pressable, ScrollView } from '@/tw';
 import { Image } from '@/tw/image';
 import { cn } from '@/tw/cn';
 import { AnimatedView } from '@/tw/animated';
-import { Badge, BadgeText } from '@/components/ui/badge';
 import { Pop } from '@/components/ui/reveal';
 import { usePressFeedback } from './hooks';
 
@@ -51,16 +50,14 @@ export function PressableScale({
 
 export function KeywordChip({ keyword, onRemove }: { keyword: string; onRemove: () => void }) {
   return (
-    <Badge action="info" variant="solid" size="sm" className="h-[30px] px-3">
-      <BadgeText action="info" variant="solid" className="font-medium text-on-primary">
-        {keyword}
-      </BadgeText>
+    <View className="h-[30px] flex-row items-center rounded-full bg-primary px-3">
+      <Text className="font-medium text-primary-foreground" style={{ fontSize: 13 }}>{keyword}</Text>
       <PressableScale onPress={onRemove} hitSlop={8} accessibilityLabel={`Remove ${keyword}`} style={{ marginLeft: 4 }}>
-        <Text className="font-semibold text-on-primary" style={{ fontSize: 15, lineHeight: 18 }}>
+        <Text className="font-semibold text-primary-foreground" style={{ fontSize: 15, lineHeight: 18 }}>
           ×
         </Text>
       </PressableScale>
-    </Badge>
+    </View>
   );
 }
 
@@ -73,7 +70,7 @@ export function MediaCarousel({
   selectedIds: string[];
   onToggle: (id: string) => void;
 }) {
-  const t = useThemeColors();
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   return (
     <ScrollView
       horizontal
@@ -91,7 +88,7 @@ export function MediaCarousel({
             style={{ width: 108, height: 192 }}
             className={cn(
               'relative overflow-hidden rounded-xl',
-              selected ? 'border-2 border-brand-lavender' : 'border-2 border-transparent'
+              selected ? 'border-2 border-primary' : 'border-2 border-transparent'
             )}
             accessibilityLabel={item.caption ?? 'Media thumbnail'}
           >
@@ -103,20 +100,20 @@ export function MediaCarousel({
                 accessibilityLabel=""
               />
             ) : (
-              <View className="h-full w-full items-center justify-center bg-surface-soft">
-                <Text className="text-muted" style={{ fontSize: 12 }}>No img</Text>
+              <View className="h-full w-full items-center justify-center bg-muted">
+                <Text className="text-muted-foreground" style={{ fontSize: 12 }}>No img</Text>
               </View>
             )}
             {isReel && (
-              <View className="absolute left-2 top-2 rounded bg-ink/70 px-1.5 py-0.5">
-                <Text className="font-semibold text-on-primary" style={{ fontSize: 10 }}>REELS</Text>
+              <View className="absolute left-2 top-2 rounded bg-foreground/70 px-1.5 py-0.5">
+                <Text className="font-semibold text-primary-foreground" style={{ fontSize: 10 }}>REELS</Text>
               </View>
             )}
             {selected && (
-              <View className="absolute inset-0 items-center justify-center bg-brand-lavender/40">
+              <View className="absolute inset-0 items-center justify-center bg-primary/40">
                 <Pop>
-                  <View className="h-7 w-7 items-center justify-center rounded-pill bg-brand-lavender shadow-sm">
-                    <Ionicons name="checkmark" size={18} color={t.onPrimary} />
+                  <View className="h-7 w-7 items-center justify-center rounded-full bg-primary shadow-sm">
+                    <Ionicons name="checkmark" size={18} color={primaryForeground} />
                   </View>
                 </Pop>
               </View>

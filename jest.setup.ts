@@ -411,6 +411,7 @@ jest.mock('panelui-native', () => {
       Legend: () => null,
     }),
     Input: (props: any) => React.createElement(TextInput, props),
+    Textarea: (props: any) => React.createElement(TextInput, { ...props, multiline: true }),
     Switch: (props: any) =>
       React.createElement(View, { accessible: true, accessibilityRole: 'switch', ...props }, props?.children),
     // Stateful mock mirroring the real component: Trigger/Close clone their

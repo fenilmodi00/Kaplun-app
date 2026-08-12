@@ -251,7 +251,7 @@ describe('NewAutomationScreen', () => {
     const { getByLabelText, queryByLabelText } = await renderScreen();
     expect(queryByLabelText('Public reply message')).toBeNull();
 
-    await fireEvent(getByLabelText('Enable public reply'), 'valueChange', true);
+    await fireEvent(getByLabelText('Enable public reply'), 'press');
 
     expect(getByLabelText('Public reply message')).toBeTruthy();
   });
@@ -270,7 +270,7 @@ describe('NewAutomationScreen', () => {
     await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Hi!');
 
-    await fireEvent(getByLabelText('Enable public reply'), 'valueChange', true);
+    await fireEvent(getByLabelText('Enable public reply'), 'press');
 
     await fireEvent(getByText('Go Live'), 'press');
     expect(mockCreate).not.toHaveBeenCalled();
