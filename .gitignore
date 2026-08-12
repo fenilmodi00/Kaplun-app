@@ -54,3 +54,6 @@ __pycache__/
 # Go build artifacts
 api-go/server.exe
 *.exe
+
+# Scratch/planning workspace
+.scratch/
