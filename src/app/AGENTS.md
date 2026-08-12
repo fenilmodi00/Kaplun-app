@@ -49,11 +49,11 @@ This preserves the default-export import contract that test suites rely on. Scre
 
 ## ROOT LAYOUT (`_layout.tsx`)
 
-Provider stack, outer → inner: `GestureHandlerRootView` → `SafeAreaProvider` → `PersistQueryClientProvider` (`queryClient` + `persistOptions`) → `SessionProvider` → `BridgeProvider` → `ThemeVariablesProvider` (NativeWind `VariableContextProvider` fed by `cssVariablesForScheme()`; no-op on web) → `RootNavigator`. Module-level React Query `onlineManager` (NetInfo) + `focusManager` (AppState) live at the top of `_layout.tsx`.
+Provider stack, outer → inner: `PanelUIProvider` → `SafeAreaProvider` → `ThemeProvider` (expo-router, fed from PanelUI tokens via `useCSSVariable`) → `PersistQueryClientProvider` (`queryClient` + `persistOptions`) → `SessionProvider` → `BridgeProvider` → `RootNavigator`. Module-level React Query `onlineManager` (NetInfo) + `focusManager` (AppState) live at the top of `_layout.tsx`.
 
 - **Auth gate** — `Stack.Protected guard={!!session}` for `(tabs)`, `guard={!session}` for `sign-in`. No imperative `<Redirect>` logic.
 - **Splash** — while fonts/session load, renders a centered `ClaySpinner` on the canvas color. No `expo-splash-screen` native control.
-- **System chrome** — `StatusBar` / `NavigationBar` / `SystemUI` background are set here only, keyed off `useThemeScheme()` + `useThemeColors()`. Never set them in screens.
+- **System chrome** — `StatusBar` / `NavigationBar` / `SystemUI` background are set here only, keyed off `useThemeMode().mode` + `useCSSVariable('--color-background')`. Never set them in screens.
 
 ## CONVENTIONS
 
@@ -62,10 +62,10 @@ Provider stack, outer → inner: `GestureHandlerRootView` → `SafeAreaProvider`
 - **No native headers** — screens render their own back chevron + `useRouter().back()`.
 - **Safe-area padding** — `useSafeAreaInsets()` + `TAB_BAR_OVERLAY` (from `@/components/screen-shell`) added to bottom padding so content clears the floating glass tab bar.
 - **Dynamic params** — `useLocalSearchParams<{...}>()`; `[automationId]` also reads an optional `created` param (`'live' | 'paused'`) for post-creation banners.
-- **Two styling regimes** — `@/tw` className is the standard; raw RN + `StyleSheet.create()` + `useThemeColors()` is the documented escape hatch (`src/screens/automate/detail/index.tsx`, `src/screens/profile/index.tsx`) for Android `useCssElement` layout bugs. See `src/tw/AGENTS.md` for the full escape-hatch list.
+- **Two styling regimes** — `@/tw` className is the standard; raw RN + `StyleSheet.create()` is the documented escape hatch (`src/screens/automate/detail/index.tsx`, `src/screens/profile/index.tsx`) for Android layout stability. See `src/tw/AGENTS.md` for the full escape-hatch list.
 
 ## GOTCHAS
 
 - `src/screens/messages/thread.tsx` calls `tablesDB.getRow()` directly to fetch the `DealThread` — the only screen-level Appwrite call; repository-pattern smell (fix or consciously preserve). It also casts `Reanimated.SlideInUp as any`.
 - `src/screens/automate/new/index.tsx` at ~1112 lines is the top refactor candidate — prefer targeted edits.
-- The tab bar (`@/components/clay/TabBar`) hides entirely when the active automate nested route is `new`.
+- The tab bar (`@/components/tab-bar/TabBar`) hides entirely when the active automate nested route is `new`.

@@ -15,7 +15,6 @@
 | `useInsights` | `useInsights.ts` | Instagram via `@/lib/instagram` (`fetchProfile` + `fetchAccountInsights` + `fetchMedia`) | `useQueries` (parallel) | No | `{ profile, insights, topMedia, isLoading, error, refresh }`; takes `windowDays` (7/28), surfaces `'session_expired'` / `'insights_permission'` |
 | `useAutomations` | `useAutomations.ts` | Gin api-go via `@/lib/automations` | `useQuery` + `useMutation` | No | Automations CRUD + `useOverviewStats` / `useAutomationLogs` / `useAutomationStats` |
 | `useAutomationGate` | `useAutomationGate.ts` | Instagram OAuth | `useQuery` + `useMutation` | No | `{ connected, loading, connect }` |
-| `useClayAnimations` | `useClayAnimations.ts` | — | No | — | `usePressAnimation`, `useShakeAnimation`, `useEntranceAnimation` |
 
 ## WHERE TO LOOK
 
@@ -25,7 +24,6 @@
 | Add a write mutation | Follow `useMessages`: `useMutation({ mutationFn, onSuccess: (r) => queryClient.setQueryData(...) })` |
 | Add realtime to a hook | Follow `useThreads`: `Channel.tablesdb(DATABASE_ID).table(TABLES.X).row()` + `useRealtimeSubscription(channel, () => queryClient.invalidateQueries(...))` |
 | Add Instagram data | Follow `useCreatorProfile`: `useQuery({ queryKey, queryFn: () => fetchMedia(), staleTime, gcTime, retry: false })` — Instagram calls go through `@/lib/instagram` directly (no `withFreshSession`, no proxy) |
-| Add a new animation | `useClayAnimations.ts` — add a new `useXAnimation` hook returning `{ animatedStyle, ... }` |
 
 ## CONVENTIONS
 

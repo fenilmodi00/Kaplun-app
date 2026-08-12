@@ -21,7 +21,7 @@ jest.mock('@/components/symbol-icon', () => ({
 
 import React from 'react';
 import { render, fireEvent, screen, act } from '@testing-library/react-native';
-import { TabBar } from '@/components/clay/TabBar';
+import { TabBar } from '@/components/tab-bar/TabBar';
 import { reportTabBarScroll, subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 

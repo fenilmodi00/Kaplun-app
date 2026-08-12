@@ -30,7 +30,7 @@ import {
 } from '@/lib/reanimated-platform';
 import { Reveal } from '@/components/ui/reveal';
 import { useAuthFlow, AuthMode } from '@/hooks/useAuthFlow';
-import { useShakeAnimation } from '@/hooks/useClayAnimations';
+import { useShakeAnimation } from '@/tw/animated';
 
 const TOGGLE_WIDTH = 280;
 const PILL_WIDTH = TOGGLE_WIDTH / 2 - 3;

@@ -296,53 +296,52 @@ Focused state: border thickens to `#0a0a0a` ink.
 ## 7. Mobile React Native Implementation Mapping (`app/`)
 
 ### 7.1 Architecture & Stack
-- **Framework:** NativeWind v5 + Tailwind CSS v4 + `react-native-css`.
-- **Bridge:** `@/tw` primitives wrap React Native components with `useCssElement(Comp, props, { className: 'style' })`.
-- **CSS Tokens:** Defined in `src/global.css` `@theme` block and exposed as Tailwind utility classes (`bg-canvas`, `text-ink`, `rounded-xl`, `text-display-md`).
+- **Framework:** Uniwind + Tailwind CSS v4 + PanelUI (`panelui-native`).
+- **Bridge:** `@/tw` primitives are thin re-exports of React Native components. Uniwind resolves `className` natively on RN components — no bridge layer needed.
+- **CSS Tokens:** PanelUI `theme.css` defines the token palette; `src/global.css` adds custom AMOLED dark `#000000` override via `@variant dark`. Tokens exposed as Tailwind utility classes (`bg-background`, `text-foreground`, `rounded-xl`, etc.).
 
 ### 7.2 Compound Utilities (`src/tw/cn.ts`)
 
 ```ts
-import { cn, clayInput, clayCard, clayFeatureCardBase, clayButtonBase } from '@/tw/cn';
+import { cn, sheetContent } from '@/tw/cn';
 
-clayInput           // 'h-11 py-3 bg-canvas border border-hairline rounded-md px-4 text-body-md text-ink'
-clayCard            // 'bg-canvas border border-hairline rounded-lg p-6'
-clayFeatureCardBase // 'rounded-xl p-8 gap-3'
-clayButtonBase      // 'h-11 py-3 rounded-md px-5 flex-row items-center justify-center gap-2'
+cn('base', condition && 'extra')  // twMerge(clsx(inputs))
+sheetContent                      // 'px-5 pt-2 pb-6 gap-4' — bottom sheet interior padding
 ```
 
-### 7.3 Component Inventory (`src/components/clay/`)
+### 7.3 Component Library
 
-| Mobile Component | File | Primitives Path | Reanimated? | `.web.tsx`? | Role / Behavior |
-|---|---|---|---|---|---|
-| `TabBar` | `TabBar.tsx` | `@/tw` (View, Pressable) | Yes (via `@/lib/reanimated-platform`) | No | icon-only liquid-glass floating tab bar, minimizes on scroll |
-| `ClayAnimatedButton` | `ClayAnimatedButton.tsx` | Raw RN (`StyleSheet`) | Yes (`usePressAnimation`) | Yes (`.web.tsx`) | 4 variants (`primary`, `secondary`, `on-color`, `text-link`), press scale animation |
-| `ClayAnimatedCard` | `ClayAnimatedCard.tsx` | `@/tw` (View, Pressable) | Yes (entrance + press) | No | Pressable card with entrance fade-in + press scale-down |
-| `ClayFeatureCard` | `ClayFeatureCard.tsx` | `@/tw` (View, Text) | Yes (`useEntranceAnimation`) | No | Saturated single-color card (`pink`, `teal`, `lavender`, `peach`, `ochre`, `cream`) |
-| `ClayAvatar` | `ClayAvatar.tsx` | `@/tw/image` | No | No | Circular avatar with placeholder fallback |
-| `ClaySpinner` | `ClaySpinner.tsx` | Raw RN (`StyleSheet`) | Yes (`withRepeat`) | Yes (`.web.tsx`) | Loading spinner with optional label |
+PanelUI (`panelui-native`) is the primary component library. Import directly: `import { Button, Card, Input, Text, Spinner, Surface, ... } from 'panelui-native'`.
+
+Custom components kept outside PanelUI:
+- `src/components/tab-bar/TabBar.tsx` — floating liquid-glass tab bar with scroll-driven scale animation
+- `src/components/ui/bottomsheet/` — custom modal bottom sheet (gesture-handler + Reanimated)
+- `src/components/ui/reveal.tsx` — entrance/pop animation wrappers
+- `src/components/auth/AuthScreen.tsx` — auth flow with OTP input
+- `src/components/screen-shell.tsx` — standard scrollable screen shell
+- `src/components/symbol-icon.tsx` — Ionicons wrapper
 
 ### 7.4 The `@/tw` vs Raw-RN Convention
 - **Use `@/tw` primitives** by default (`View`, `Text`, `Pressable` from `@/tw`) for standard screens to consume CSS theme tokens automatically.
-- **Use Raw RN (`StyleSheet.create`)** for animation-critical components or components avoiding NativeWind Android layout bugs (e.g. `ClayAnimatedButton`, `ClaySpinner`, `AuthScreen`). Document duplicated hex values with a comment `// from --color-X`.
+- **Use Raw RN (`StyleSheet.create`)** for animation-critical components or components needing platform-specific APIs (e.g. `AuthScreen`, `bottomsheet/`). Use `useCSSVariable('--color-*')` for raw-RN color access.
+- **Use PanelUI components** for buttons, cards, inputs, switches, dialogs, etc. — `import { Button, Card, ... } from 'panelui-native'`.
 
 ### 7.5 Dual Reanimated Web Strategy (.web.tsx)
-Any component using Reanimated provides a `.web.tsx` variant (e.g. `ClayAnimatedButton.web.tsx`, `ClaySpinner.web.tsx`, `src/tw/animated.web.tsx`). In addition, `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to stubs on web (`src/lib/reanimated-web-stub.js`) to avoid web crashes (#8285).
+Any component using Reanimated provides a `.web.tsx` variant (e.g. `src/tw/animated.web.tsx`). `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to stubs on web to avoid web crashes (#8285).
 
 ---
 
 ## 8. Mobile Screen Design Decision Tree
 
 When creating or updating screens in `src/app/(tabs)/`:
-1. **Background:** Root element must use `bg-canvas` (`#fffaf0`). Android nav bar set to match in `_layout.tsx`.
-2. **Headlines:** `font-display text-display-sm` (32px) or `text-display-md` (40px) for mobile screen titles.
-3. **Body Copy:** `font-sans text-body-md text-body`. Secondary text: `text-muted`. Captions: `text-muted-soft`.
-4. **Cards (Data/Content):** `ClayAnimatedCard` (interactive) or `clayCard` compound class on a `View` (static). `bg-canvas border-hairline rounded-lg p-6`.
-5. **Feature Cards (Highlights):** `ClayFeatureCard` with `color="pink|teal|lavender|peach|ochre|cream"`. **Cycle colors** across lists — never repeat the same color twice sequentially.
-6. **Buttons:** `ClayAnimatedButton` with `variant="primary|secondary|on-color|text-link"`.
-7. **Inputs:** `clayInput` compound class on a `TextInput` from `@/tw`.
-8. **Navigation:** Use `TabBar` — never default expo-router tab bar.
-9. **Animations:** Import from `@/hooks/useClayAnimations` — NEVER import `react-native-reanimated` directly in screens.
+1. **Background:** Root element must use `bg-background` (PanelUI token; AMOLED `#000000` in dark, cream in light). Android nav bar set to match in `_layout.tsx`.
+2. **Headlines:** Use PanelUI `Text` with `weight="semibold"` and appropriate `size` prop.
+3. **Body Copy:** PanelUI `Text` with `size="sm"` and `muted` for secondary text.
+4. **Cards:** PanelUI `Card` with `Card.Header` / `Card.Body` / `Card.Footer` compound parts.
+5. **Buttons:** PanelUI `Button` with appropriate `variant`.
+6. **Inputs:** PanelUI `Input`, `Textarea`, `OtpInput`.
+7. **Navigation:** Use `TabBar` from `@/components/tab-bar/TabBar` — never default expo-router tab bar.
+8. **Animations:** Import from `@/tw/animated` or `@/lib/reanimated-platform` — NEVER import `react-native-reanimated` directly in screens.
 
 ---
 
@@ -352,17 +351,14 @@ When creating or updating screens in `src/app/(tabs)/`:
 - Anchor every page and mobile screen on the cream canvas (`--color-canvas` — `#fffaf0`).
 - Cycle saturated feature cards across pages (Pink → Teal → Lavender → Peach → Ochre → Cream Card).
 - Use Inter 500 (`font-display`) with negative letter-spacing for mobile headlines as the substitute for Plain Black / Nunito 700.
-- Use `ClayAnimatedButton` with press scale animations (0.97) for all CTAs.
+- Use PanelUI `Button` with press feedback for all CTAs.
 - Use cream footers and soft-tinted closing CTA bands — warm throughout pacing.
 - Ensure top nav on web is fixed top with bottom rounded corners (`rounded-b-2xl`).
 
 ### Don't
-- Don't use cool gray backgrounds. Cream `#fffaf0` is non-negotiable.
-- Don't introduce a 7th brand-color card. Stick strictly to the 6-color palette.
+- Don't use cool gray backgrounds. Cream `#fffaf0` (light) / AMOLED `#000000` (dark) is non-negotiable.
 - Don't bold display headlines beyond weight 500-600.
-- Don't repeat the same feature card background color twice in a row.
-- Don't use a dark navy footer.
-- Don't import `react-native-reanimated` directly in screens — use `@/hooks/useClayAnimations`.
+- Don't import `react-native-reanimated` directly in screens — use `@/tw/animated` or `@/lib/reanimated-platform`.
 
 ---
 
@@ -370,13 +366,14 @@ When creating or updating screens in `src/app/(tabs)/`:
 
 *Rules for automated AI coding agents (OpenCode RAG / OpenAgent) working on this codebase:*
 
-1. **Token Reference First**: When adding new UI elements, always use existing `--color-*`, `--radius-*`, `--spacing-*`, and typography utilities defined in `src/global.css`. Never add arbitrary hex colors in `@/tw` components.
+1. **Token Reference First**: When adding new UI elements, always use PanelUI semantic tokens (`bg-background`, `text-foreground`, `border-border`, etc.) defined in `src/global.css`. Never add arbitrary hex colors in `@/tw` components.
 2. **Import Paths**:
    - `View`, `Text`, `Pressable`, `ScrollView` from `@/tw`
    - `Image` from `@/tw/image` (NOT `react-native` or `expo-image`)
-   - `AnimatedView` from `@/tw/animated`
-   - `cn` and compound utilities from `@/tw/cn`
-   - Animation hooks from `@/hooks/useClayAnimations`
+   - `AnimatedView`, `useShakeAnimation` from `@/tw/animated`
+   - `cn` from `@/tw/cn`
+   - PanelUI components (`Button`, `Card`, `Input`, `Text`, `Spinner`, etc.) from `panelui-native`
+   - Animation utilities from `@/lib/reanimated-platform`
 3. **No Direct Reanimated Imports in Screens**: Always use `@/hooks/useClayAnimations` or `@/lib/reanimated-platform`.
 4. **Web Safety (.web.tsx)**: When creating an animated component using Reanimated, you MUST create a matching `.web.tsx` file that uses plain React Native components for web stability (#8285).
 5. **No `as any` or Bare `catch {}`**: Keep TypeScript strict mode clean (`tsc --noEmit`).

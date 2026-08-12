@@ -13,9 +13,9 @@ Remaining suites are colocated: `src/lib/` (8), `src/hooks/` (4), `src/screens/`
 
 ## MOCK BOUNDARY (the key convention)
 
-- **`jest.setup.ts` (~315 lines) = infrastructure mocks only** — `expo-router` (incl. `Stack.Protected`, `useFocusEffect` runs once), `@/tw` passthrough, `react-native-reanimated` full stub, `@/lib/appwrite` (tablesDB/account/realtime), safe-area (zero insets), AsyncStorage, expo-font (loaded), expo-blur + `@sbaiah1/react-native-blur` (View), nativewind/react-native-css, `@/tw/cn`, `@/lib/auth-session`, `@/lib/realtime`, `@/hooks/useDashboard`. Env vars are set at the top before any import.
+- **`jest.setup.ts` (~315 lines) = infrastructure mocks only** — `expo-router` (incl. `Stack.Protected`, `useFocusEffect` runs once), `@/tw` passthrough, `react-native-reanimated` full stub, `@/lib/appwrite` (tablesDB/account/realtime), safe-area (zero insets), AsyncStorage, expo-font (loaded), expo-blur + `@sbaiah1/react-native-blur` (View), uniwind/panelui-native, `@/tw/cn`, `@/lib/auth-session`, `@/lib/realtime`, `@/hooks/useDashboard`. Env vars are set at the top before any import.
 - **Per-file `jest.mock()` = screen-specific data** — hooks (`useAutomations`, `useAutomationGate`, `useAppwriteUser`), `@/lib/repository`, `@/lib/instagram`, `@/lib/instagram-oauth`, `@/lib/bridge-context`, `expo-linear-gradient`. Check `jest.setup.ts` BEFORE adding a per-file mock — duplicating a global mock causes subtle divergences.
-- **`__mocks__/@expo/ui/`** — manual mocks (`Host`, `Switch`, `TextInput`, `useNativeState`, community `SegmentedControl`) because `@expo/ui` pulls native modules that break jest.
+- **`__mocks__/@expo/ui/`** — (DELETED in Phase 3 — `@expo/ui` package removed, all importers migrated to PanelUI).
 
 ## TWO RENDER FLAVORS
 

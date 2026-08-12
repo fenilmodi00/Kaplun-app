@@ -11,20 +11,12 @@ const ALLOWED_RN = new Set([
 
 // Reviewer-verified raw-RN escape hatches (see src/tw/AGENTS.md anti-patterns).
 const EXCEPTIONS = new Set([
-  // Components — StyleSheet / Animated from RN (Android layout stability)
-  'src/components/ui/input.tsx',
-  'src/components/ui/textarea.tsx',
-  'src/components/clay/ClayAnimatedButton.tsx',
-  'src/components/clay/ClayAnimatedButton.web.tsx',
-  'src/components/clay/ClaySpinner.tsx',
-  'src/components/clay/ClaySpinner.web.tsx',
+  // AuthScreen — UIManager + useWindowDimensions for platform layout animations
   'src/components/auth/AuthScreen.tsx',
-  'src/components/edge-blur.tsx',
-  // Bottom sheet is KEEP-custom infrastructure (spec: 2026-08-12-panelui-migration-design) —
-  // RN Animated/StyleSheet are the sheet mechanics, replaced only by its Phase 2 mini-rebuild.
+  // Bottom sheet — RN Animated/StyleSheet/useWindowDimensions are the sheet mechanics
   'src/components/ui/bottomsheet/index.tsx',
   'src/components/ui/bottomsheet/backdrop.tsx',
-  // Screens — raw RN + StyleSheet (moved from routes, documented escape hatches)
+  // automate/new — Keyboard, LayoutAnimation, UIManager for form layout animations
   'src/screens/automate/new/index.tsx',
 ]);
 

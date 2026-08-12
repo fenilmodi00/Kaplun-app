@@ -269,13 +269,16 @@ jest.mock('@/tw/image', () => {
 // Mock @/tw/animated
 jest.mock('@/tw/animated', () => {
   const Reanimated = require('react-native-reanimated');
-  return { AnimatedView: Reanimated.View || Reanimated.default?.View || Reanimated };
+  return {
+    AnimatedView: Reanimated.View || Reanimated.default?.View || Reanimated,
+    useShakeAnimation: () => ({ shake: jest.fn(), animatedStyle: {} }),
+  };
 });
 
 // Mock @/tw/cn
 jest.mock('@/tw/cn', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
-  clayInput: '', clayCard: '', clayFeatureCardBase: '', clayButtonBase: '',
+  sheetContent: '',
 }));
 
 // Mock uniwind — provides useCSSVariable, useResolveClassNames, Uniwind, useUniwind

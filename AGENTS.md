@@ -27,8 +27,8 @@ Key architectural decisions:
 | Mobile framework | Expo SDK 57, React Native 0.86, React 19.2 | File-based routing via `expo-router`. |
 | Language | TypeScript 5.9 | Strict mode enabled (`tsconfig.json`). |
 | Package manager | Bun 1.3+ | `bun.lock` is the lockfile. `expo install` excludes TypeScript. |
-| Styling | NativeWind v5, Tailwind CSS v4, `react-native-css` | `useCssElement` bridge in `src/tw/`. |
-| Theming | `src/lib/theme.ts` + `src/global.css` | Dark default; `useThemeColors()` for raw-RN islands; `VariableContextProvider` runtime override; web is light-only. |
+| Styling | Uniwind, Tailwind CSS v4, PanelUI tokens | `useCSSVariable` for raw-RN islands; `className` on RN components via Uniwind. |
+| Theming | `src/global.css` + PanelUI `theme.css` | Dark AMOLED default (`#000000`); `useThemeMode()` from PanelUI; `useCSSVariable()` for system chrome. |
 | Animations | React Native Reanimated 4.5.0 | Imported only via `@/lib/reanimated-platform` or `@/tw/animated`. Web uses no-op stubs. |
 | State / data | TanStack React Query 5 | Persisted to AsyncStorage for 24h. |
 | Auth | Appwrite (`appwrite`) | Appwrite account + JWT verified by Go backend. |
@@ -62,9 +62,10 @@ Key architectural decisions:
 │   │   ├── (messages)/     # Threads + thread detail
 │   │   ├── (insights)/     # Instagram insights
 │   │   └── (profile)/      # Creator profile + theme toggle; NOT a tab — pushed from home avatar
-│   ├── components/         # UI components
-│   │   ├── clay/           # Clay design-system components
-│   │   ├── ui/             # Form primitives (input, switch, badge, etc.)
+│   ├── components/           # UI components
+│   │   ├── clay/           # (DELETED — Phase 3 PanelUI migration)
+│   │   ├── ui/             # Bottom sheet (custom), reveal animation
+│   │   ├── tab-bar/        # Floating tab bar (moved from clay/)
 │   │   └── auth/           # AuthScreen
 │   ├── hooks/              # React Query data hooks
 │   ├── lib/                # Infrastructure (Appwrite, repository, session, theme, Instagram, etc.)
@@ -97,8 +98,7 @@ Subdirectory guides (read these before editing the relevant area):
 - `src/lib/AGENTS.md` — Appwrite, repository, session, theme, Instagram, resilience, realtime.
 - `src/hooks/AGENTS.md` — React Query hooks, repository pattern, realtime invalidation.
 - `src/components/AGENTS.md` — non-Clay components: `ui/` kit, `auth/`, `automation/`, naming conventions, screen shell.
-- `src/components/clay/AGENTS.md` — Clay design system, `.web.tsx` variants, raw-RN exceptions.
-- `src/tw/AGENTS.md` — styling primitives, `useCssElement` bridge, raw-RN escape-hatch list.
+- `src/tw/AGENTS.md` — styling primitives, Uniwind bridge, raw-RN escape-hatch list.
 - `src/testing/AGENTS.md` — shared test infrastructure, mock boundary, render flavors, known failures.
 
 ### Route tree
@@ -313,8 +313,9 @@ Auth bridge:
 - **NO `as any` / `@ts-ignore` / `@ts-expect-error`** — prefer `unknown` + type guards.
 - **NO `console.log`/`console.warn`** — use `addLog()`.
 - **NO direct `react-native-reanimated` imports** — use `@/lib/reanimated-platform` or `@/tw/animated`.
-- **NO hardcoded hex colors** — add tokens to `src/global.css` `@theme` (+ the dark `@media` override) and mirror them in `src/lib/theme.ts`; `@/tw` components use Tailwind classes, raw-RN islands use `useThemeColors()`. `theme.test.ts` enforces palette parity.
+- **NO hardcoded hex colors** — use PanelUI semantic tokens via `useCSSVariable()` for raw-RN islands; `@/tw` components use Tailwind classes. `src/global.css` defines custom AMOLED dark override (`#000000`).
 - **NO OS-scheme branching** — `resolveScheme` ignores the system scheme by design (explicit Dark/Light preference, dark default). Web is hardcoded light.
+- **NO `useThemeColors()`** — removed in Phase 3. Use `useCSSVariable('--color-*')` from `@/tw` for raw-RN color access.
 - **NO hardcoded secrets** — env vars only.
 - **NO direct instagrapi / proxy** — Instagram calls go through `@/lib/instagram.ts`.
 - **NO `tablesDB.listRows()` outside `repository.ts`** — all Appwrite queries go through typed repository functions.
@@ -327,11 +328,11 @@ Auth bridge:
 
 - **Large-file hotspots** (prefer targeted edits): `src/components/auth/AuthScreen.tsx` (~761 lines), `api-go/internal/worker/comment_runner.go` (~1247 lines), `src/screens/automate/new/index.tsx` (~1112 lines, largest screen file). Route files are all 1-line re-exports now (≤5 lines each).
 - **`jest.setup.ts` is ~315 lines of global mocks** — check it before adding per-file mocks; conventions live in `src/testing/AGENTS.md`.
-- **`EdgeBlur` is not a blur** — it renders a plain `LinearGradient` canvas scrim because the real `expo-blur` layer crashed Android on screen transitions. The `blurTarget`/`intensity` props are kept only for call-site compatibility.
+- **`EdgeBlur` removed** — was a plain `LinearGradient` canvas scrim; replaced by inline `LinearGradient` in `TabBar.tsx` and `(tabs)/_layout.tsx` using `useCSSVariable('--color-background')`.
 - **api-go in-process loops** — sweeper, reconcile poller, token refresh, and insights sync all run inside the server process. No external scheduler is required.
 - **Reanimated web crash (#8285)** — `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to no-op stubs on web. `metro.config.js` also keeps `inlineRequires` lazy imports for worklets (#9445) — do not remove.
-- **Theme system** — four token representations must stay in sync: `src/global.css` `@theme` ↔ `src/global.css` dark `@media` block ↔ `lightColors`/`darkColors` ↔ `lightCssVariables`/`darkCssVariables` (both pairs in `src/lib/theme.ts`). `GlassSurface` is intentionally always dark charcoal in both schemes. `(profile)` is not a tab — it is pushed from the home avatar via `router.push('/(tabs)/(profile)' as never)`.
-- **Rule exceptions found in code** — `src/components/ui/input.tsx`/`textarea.tsx` use `StyleSheet.create()` (Android font-metric stability, intentional); `src/screens/profile/index.tsx` and `src/screens/automate/detail/index.tsx` use `StyleSheet.create()` as documented escape hatches; `src/screens/messages/thread.tsx` calls `tablesDB.getRow()` directly and casts `Reanimated.SlideInUp as any` (known smells, fix or consciously preserve).
+- **Theme system** — PanelUI tokens live in `src/global.css` (imports `panelui-native/theme.css` + custom AMOLED dark `#000000` override via `@variant dark`). System chrome reads `useCSSVariable('--color-*')` from `@/tw`. `useThemeMode()` from PanelUI drives light/dark switching. `setThemePreference()` calls `Uniwind.setTheme()`. `(profile)` is not a tab — it is pushed from the home avatar via `router.push('/(tabs)/(profile)' as never)`.
+- **Rule exceptions found in code** — `src/components/auth/AuthScreen.tsx` uses `StyleSheet.create()` (Android font-metric stability, intentional); `src/screens/profile/index.tsx` and `src/screens/automate/detail/index.tsx` use `StyleSheet.create()` as documented escape hatches; `src/screens/messages/thread.tsx` calls `tablesDB.getRow()` directly and casts `Reanimated.SlideInUp as any` (known smells, fix or consciously preserve).
 - **SplashLogger** — use `addLog()` + `SplashLogger` from `@/lib/logger` to debug startup crashes; it renders an on-screen terminal-like log.
 - **`lightningcss` pinned to 1.30.1** in `package.json` `resolutions`.
 - **OpenCode RAG** — this project uses `.opencode/rag_db` for semantic code search. Configuration is in `opencode-rag.json`. Do not commit API keys or the RAG database.

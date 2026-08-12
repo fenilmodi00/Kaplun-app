@@ -1,13 +1,17 @@
-import { View, Pressable } from '@/tw';
+import { Platform } from 'react-native';
+import { View, Pressable, useCSSVariable } from '@/tw';
 import { SymbolIcon, type SymbolName } from '@/components/symbol-icon';
-import { EdgeBlur } from '@/components/edge-blur';
 import { hapticSelection } from '@/lib/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView, LiquidGlassView } from '@sbaiahmed1/react-native-blur';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { GlassSurface } from '@/components/ui/glass-surface';
 import { useEffect, useRef } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from '@/lib/reanimated-platform';
 import { subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
+
+const HAS_NATIVE_GLASS =
+  Platform.OS === 'ios' &&
+  Number.parseInt(String(Platform.Version), 10) >= 26;
 
 // ponytail: on web, withTiming returns target instantly and useAnimatedStyle evaluates once,
 // so the pill stays at scale 1.1 (a static no-op). This is accepted — the animation only runs on native.
@@ -101,6 +105,7 @@ function TabButton({
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
   const minimize = useSharedValue(0);
   const accumulator = useRef(0);
+  const canvas = (useCSSVariable('--color-background') as string) ?? '#000000';
 
   useEffect(() => {
     const unsub = subscribeTabBarScroll((dy) => {
@@ -145,14 +150,16 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
     >
       {/*
         Cream gradient fade under the floating pill so scroll content softens
-        into the canvas. Kept as EdgeBlur (LinearGradient) — not native blur —
-        so remounting when the bar hides on `new` stays crash-safe.
+        into the canvas. LinearGradient — not native blur — so remounting
+        when the bar hides on `new` stays crash-safe.
       */}
-      <EdgeBlur
-        position="bottom"
-        height={insets.bottom + 8 + PILL_HEIGHT}
-        intensity={100}
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+      <LinearGradient
+        colors={[`${canvas}00`, `${canvas}73`, `${canvas}EB`]}
+        locations={[0, 0.6, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: insets.bottom + 8 + PILL_HEIGHT }}
+        pointerEvents="none"
       />
       {/*
         Specular rim (1px padding): tiny metallic glints at the TL / BR
@@ -183,31 +190,69 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
             elevation: 18,
           }}
         >
-          <GlassSurface borderRadius={9999}>
-            <View className="flex-row py-2 px-1.5">
-              {TABS.map((tab, index) => {
-                const isFocused = state.index === index;
-                return (
-                  <TabButton
-                    key={tab.name}
-                    isFocused={isFocused}
-                    tab={tab}
-                    onPress={() => {
-                      hapticSelection();
-                      const event = navigation.emit({
-                        type: 'tabPress',
-                        target: state.routes[index].key,
-                        canPreventDefault: true,
-                      });
-                      if (!isFocused && !event.defaultPrevented) {
-                        navigation.navigate(tab.name);
-                      }
-                    }}
-                  />
-                );
-              })}
-            </View>
-          </GlassSurface>
+          {HAS_NATIVE_GLASS ? (
+            <LiquidGlassView
+              glassType="clear"
+              glassTintColor="clear"
+              reducedTransparencyFallbackColor="#151517"
+              style={{ borderRadius: 9999, overflow: 'hidden' }}
+            >
+              <View className="flex-row py-2 px-1.5">
+                {TABS.map((tab, index) => {
+                  const isFocused = state.index === index;
+                  return (
+                    <TabButton
+                      key={tab.name}
+                      isFocused={isFocused}
+                      tab={tab}
+                      onPress={() => {
+                        hapticSelection();
+                        const event = navigation.emit({
+                          type: 'tabPress',
+                          target: state.routes[index].key,
+                          canPreventDefault: true,
+                        });
+                        if (!isFocused && !event.defaultPrevented) {
+                          navigation.navigate(tab.name);
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            </LiquidGlassView>
+          ) : (
+            <BlurView
+              blurType="extraDark"
+              blurAmount={10}
+              reducedTransparencyFallbackColor="#151517"
+              style={{ borderRadius: 9999, overflow: 'hidden' }}
+            >
+              <View className="flex-row py-2 px-1.5">
+                {TABS.map((tab, index) => {
+                  const isFocused = state.index === index;
+                  return (
+                    <TabButton
+                      key={tab.name}
+                      isFocused={isFocused}
+                      tab={tab}
+                      onPress={() => {
+                        hapticSelection();
+                        const event = navigation.emit({
+                          type: 'tabPress',
+                          target: state.routes[index].key,
+                          canPreventDefault: true,
+                        });
+                        if (!isFocused && !event.defaultPrevented) {
+                          navigation.navigate(tab.name);
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            </BlurView>
+          )}
         </LinearGradient>
       </Animated.View>
     </View>

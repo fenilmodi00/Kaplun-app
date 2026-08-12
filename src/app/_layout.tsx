@@ -18,7 +18,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { queryClient, persistOptions } from '@/lib/query-client';
 import * as SystemUI from 'expo-system-ui';
 import { useClayFonts } from '@/lib/fonts';
-import { useThemeColors, hydrateThemePreference } from '@/lib/theme';
+import { hydrateThemePreference } from '@/lib/theme';
 import { PanelUIProvider, Spinner, useThemeMode } from 'panelui-native';
 import { useCSSVariable } from '@/tw';
 import { BridgeProvider, useBridge } from '@/lib/bridge-context';
@@ -51,12 +51,11 @@ function RootNavigator() {
   const [fontsLoaded, fontsError] = useClayFonts();
   const { session, isLoading } = useSession();
   const { setStatus } = useBridge();
-  const theme = useThemeColors();
-  const background = useCSSVariable('--color-background') as string;
+  const background = (useCSSVariable('--color-background') as string) ?? '#000000';
 
   useEffect(() => {
-    applySystemChrome(background ?? theme.canvas);
-  }, [background, theme.canvas]);
+    applySystemChrome(background);
+  }, [background]);
 
   useEffect(() => {
     setStatus(isLoading ? 'bridging' : 'ready');
@@ -64,15 +63,15 @@ function RootNavigator() {
 
   if ((!fontsLoaded && !fontsError) || isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: background ?? theme.canvas, gap: 16, padding: 24 }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: background, gap: 16, padding: 24 }}>
         <Spinner size="md" />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: background ?? theme.canvas }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background ?? theme.canvas } }}>
+    <View style={{ flex: 1, backgroundColor: background }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>
@@ -85,10 +84,12 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  const theme = useThemeColors();
   const { mode } = useThemeMode();
-  const background = useCSSVariable('--color-background') as string;
-  const canvas = background ?? theme.canvas;
+  const canvas = (useCSSVariable('--color-background') as string) ?? '#000000';
+  const primary = (useCSSVariable('--color-primary') as string) ?? '#0a0a0a';
+  const ink = (useCSSVariable('--color-foreground') as string) ?? '#0a0a0a';
+  const hairline = (useCSSVariable('--color-border') as string) ?? '#e5e5e5';
+  const errorColor = (useCSSVariable('--color-destructive') as string) ?? '#ef4444';
 
   useEffect(() => {
     void hydrateThemePreference();
@@ -98,12 +99,12 @@ export default function RootLayout() {
   const navTheme = {
     dark: mode === 'dark',
     colors: {
-      primary: theme.primary,
+      primary,
       background: canvas,
       card: canvas,
-      text: theme.ink,
-      border: theme.hairline,
-      notification: theme.error,
+      text: ink,
+      border: hairline,
+      notification: errorColor,
     },
     fonts: {
       regular: { fontFamily: 'Inter_400Regular', fontWeight: 'normal' as const },

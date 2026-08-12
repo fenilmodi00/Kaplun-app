@@ -46,8 +46,6 @@ export const ScrollView = React.forwardRef<
   );
 });
 
-export const AnimatedScrollView = ScrollView;
-
 // TouchableHighlight — style flattening + underlayColor extraction
 export function TouchableHighlight(
   props: React.ComponentProps<typeof RNTouchableHighlight> & {

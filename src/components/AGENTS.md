@@ -1,16 +1,16 @@
 # src/components/ — Non-Clay Components
 
-Scope: the `ui/` form kit, `auth/`, `automation/`, and 3 root-level components. The Clay design system lives in `clay/AGENTS.md` — this doc covers everything else.
+Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, and root-level components. PanelUI (`panelui-native`) is the primary component library.
 
 ## STRUCTURE
 
 | Path | Role |
 |------|------|
-| `ui/` (11 primitives + kits) | Self-made form/display kit: `card`, `badge`, `input`, `textarea`, `switch`, `radio`, `toggle-card`, `collapsible`, `reveal`, `glass-surface`, `error-state`, plus `ui/bottomsheet/` |
+| `ui/` (bottomsheet + reveal) | Custom bottom sheet (`bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx`) and entrance/pop animation (`reveal.tsx`). Import `@/components/ui/bottomsheet` and `@/components/ui/reveal`. |
 | `ui/bottomsheet/` | Native modal bottom sheet (`index.tsx`, `header.tsx`, `backdrop.tsx`). Import `@/components/ui/bottomsheet` only — not `@expo/ui` directly. |
 | `auth/AuthScreen.tsx` | Login/signup OTP screen, 761 lines. Internal pieces: `CapsuleToggle`, `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
 | `automation/AutomationDmPreview.tsx` | Simulated IG DM inbox preview for the automation builder; `{username}` substitution; hardcoded IG colors by design |
-| `edge-blur.tsx` | Canvas scrim — plain `LinearGradient`, NOT a real blur (native `expo-blur` crashed Android on transitions; `blurTarget`/`intensity` props kept for call-site compat) |
+| `edge-blur.tsx` | (DELETED — replaced by inline `LinearGradient` in TabBar and `(tabs)/_layout.tsx`) |
 | `screen-shell.tsx` | Screen padding shell; exports `TAB_BAR_OVERLAY` used with `useSafeAreaInsets` so content clears the floating tab bar |
 | `symbol-icon.tsx` | SF Symbol wrapper used by the tab bar |
 | `ui/error-state.tsx` | Shared error state: centered message + optional Retry button with mount-time shake. Consolidates per-screen private copies |
@@ -34,10 +34,11 @@ Scope: the `ui/` form kit, `auth/`, `automation/`, and 3 root-level components. 
 |-----------|-----------|----------|
 | `ui/` | kebab-case | `toggle-card.tsx`, `error-state.tsx`, `glass-surface.tsx` |
 | `ui/<kit>/` | kebab-case files | `bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx` |
-| `clay/` | PascalCase | `ClayAnimatedButton.tsx`, `ClaySpinner.tsx`, `TabBar.tsx` |
+| `tab-bar/` | PascalCase | `TabBar.tsx` |
 | `auth/` | PascalCase | `AuthScreen.tsx` |
 | `automation/` | PascalCase | `AutomationDmPreview.tsx` |
-| root-level | kebab-case | `edge-blur.tsx`, `screen-shell.tsx`, `symbol-icon.tsx` |
+| `tab-bar/` | Floating tab bar (moved from `clay/` in Phase 3) |
+| root-level | kebab-case | `screen-shell.tsx`, `symbol-icon.tsx` |
 
 Existing files are grandfathered. New files must follow the convention for their directory.
 
@@ -47,10 +48,10 @@ Existing files are grandfathered. New files must follow the convention for their
 - **Compound components via context** — `Input`/`Textarea` provide variant+size+state to their field children; `RadioGroup` → `Radio` → `RadioIndicator`/`RadioLabel` throw outside the provider.
 - **`forwardRef` only on field inputs** — `InputField`/`TextareaInput` expose imperative `focus`/`blur`/`clear`/`setText`.
 - **StyleSheet exception is font-metric driven** — `input.tsx`/`textarea.tsx` use `StyleSheet.create()` because Tailwind typography tokens balloon line-height on Android. This is intentional, not debt.
-- **Theming** — raw-RN pieces read `useThemeColors()`; `@expo/ui` components must be wrapped in `<Host colorScheme={useThemeScheme()}>` (see `switch.tsx`) so native material follows the app scheme.
+- **Theming** — raw-RN pieces read `useCSSVariable('--color-*')` from `@/tw`; PanelUI components theme automatically via `PanelUIProvider`.
 - **Reanimated only via `@/lib/reanimated-platform`** — `collapsible.tsx`/`reveal.tsx` guard web with `IS_REANIMATED_AVAILABLE` (web inits at final state).
 - **Accessibility** — `accessibilityRole`/`accessibilityState`/`accessibilityLabel`/`testID` throughout (see `radio.tsx` for the pattern).
-- **`glass-surface.tsx`** — iOS 26+: `LiquidGlassView` with `glassType="clear"`, no tint; Android/older iOS: `BlurView blurType="dark"` directly — do NOT route Android through `LiquidGlassView`, its hardcoded `regular` fallback is a ~14% white frost that turns the pill milky. Pure clear glass in BOTH schemes (intentional); `#151517` survives only as the reduced-transparency fallback; floating chrome only, never full-screen cards.
+- **`glass-surface.tsx`** — (DELETED — replaced by inline `LiquidGlassView`/`BlurView` in `TabBar.tsx`).
 
 ## `ui/bottomsheet/` CONVENTIONS
 

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { AnimatedView } from '@/tw/animated';
-import { useShakeAnimation } from '@/hooks/useClayAnimations';
+import { useShakeAnimation } from '@/tw/animated';
 
 export { Reveal } from '@/components/ui/reveal';
 
