@@ -8,50 +8,44 @@ import React, {
   type ReactNode,
 } from 'react';
 import {
-  ActivityIndicator,
   findNodeHandle,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
   UIManager,
   useWindowDimensions,
-  View,
 } from 'react-native';
-import Animated, {
+import type { TextInput as RNTextInput, View as RNView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, Card, Input, OtpInput, Text } from 'panelui-native';
+import { Pressable, ScrollView, View, useCSSVariable } from '@/tw';
+import { AnimatedView } from '@/tw/animated';
+import { cn } from '@/tw/cn';
+import {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
-  FadeInDown,
-} from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
+} from '@/lib/reanimated-platform';
+import { Reveal } from '@/components/ui/reveal';
 import { useAuthFlow, AuthMode } from '@/hooks/useAuthFlow';
 import { useShakeAnimation } from '@/hooks/useClayAnimations';
-import { CLAY_FONTS } from '@/lib/fonts';
-import { useThemeColors } from '@/lib/theme';
 
 const TOGGLE_WIDTH = 280;
 const PILL_WIDTH = TOGGLE_WIDTH / 2 - 3;
-/** Standard Clay input height per DESIGN.md §5.2 */
+/** Field height (h-11). */
 const INPUT_HEIGHT = 44;
 /** Room for focused field + password field + submit button. */
 const FIELD_STACK = INPUT_HEIGHT + 12 + INPUT_HEIGHT + 16 + INPUT_HEIGHT;
 
 type AuthScrollApi = {
-  ensureVisible: (target: View | TextInput | null) => void;
+  ensureVisible: (target: RNView | RNTextInput | null) => void;
 };
 const AuthScrollContext = createContext<AuthScrollApi>({ ensureVisible: () => {} });
 
 // ─── Capsule Toggle ───
 function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthMode) => void }) {
-  const t = useThemeColors();
   const translateX = useSharedValue(mode === 'login' ? 0 : PILL_WIDTH);
 
   useEffect(() => {
@@ -66,17 +60,27 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
   }));
 
   return (
-    <View style={[styles.toggleTrack, { backgroundColor: t.surfaceCard }]}>
-      <Animated.View style={[styles.togglePill, pillStyle, { backgroundColor: t.primary }]} />
+    <View
+      style={{ width: TOGGLE_WIDTH }}
+      className="h-11 flex-row items-center self-center rounded-full bg-secondary p-[3px]"
+    >
+      <AnimatedView
+        style={[pillStyle, { width: PILL_WIDTH }]}
+        className="absolute left-[3px] h-[38px] rounded-full bg-primary"
+      />
       {(['login', 'signup'] as AuthMode[]).map((m) => (
         <Pressable
           key={m}
           onPress={() => onChange(m)}
-          style={styles.toggleTab}
+          className="z-10 h-[38px] flex-1 items-center justify-center"
           accessibilityRole="button"
           accessibilityState={{ selected: mode === m }}
         >
-          <Text style={[styles.toggleLabel, { color: mode === m ? t.onPrimary : t.bodyStrong }]}>
+          <Text
+            size="sm"
+            weight="semibold"
+            className={mode === m ? 'text-primary-foreground' : undefined}
+          >
             {m === 'login' ? 'Log In' : 'Sign Up'}
           </Text>
         </Pressable>
@@ -87,13 +91,11 @@ function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthM
 
 // ─── Email Input ───
 function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
-  const t = useThemeColors();
-  const inputRef = useRef<TextInput>(null);
-  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<RNTextInput>(null);
   const { ensureVisible } = useContext(AuthScrollContext);
 
   return (
-    <TextInput
+    <Input
       ref={inputRef}
       placeholder="Email address"
       value={value}
@@ -102,129 +104,41 @@ function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: 
       keyboardType="email-address"
       autoComplete="email"
       textContentType="emailAddress"
-      placeholderTextColor={t.mutedSoft}
-      style={[
-        styles.input,
-        { backgroundColor: t.canvas, borderColor: t.hairline, color: t.ink },
-        focused && [styles.inputFocused, { borderColor: t.ink }],
-      ]}
-      onFocus={() => {
-        setFocused(true);
-        ensureVisible(inputRef.current);
-      }}
-      onBlur={() => setFocused(false)}
+      className="h-11 rounded-xl"
+      onFocus={() => ensureVisible(inputRef.current)}
     />
   );
 }
 
 // ─── Password Input ───
 function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
-  const t = useThemeColors();
   const [visible, setVisible] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<RNTextInput>(null);
   const { ensureVisible } = useContext(AuthScrollContext);
+  const muted = useCSSVariable('--color-muted-foreground') as string;
 
   return (
-    <View style={styles.passwordWrap}>
-      <TextInput
-        ref={inputRef}
-        placeholder="Password (min 8 characters)"
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={!visible}
-        autoCapitalize="none"
-        autoComplete="new-password"
-        textContentType="newPassword"
-        placeholderTextColor={t.mutedSoft}
-        style={[
-          styles.input,
-          styles.passwordInput,
-          { backgroundColor: t.canvas, borderColor: t.hairline, color: t.ink },
-          focused && [styles.inputFocused, { borderColor: t.ink }],
-        ]}
-        onFocus={() => {
-          setFocused(true);
-          ensureVisible(inputRef.current);
-        }}
-        onBlur={() => setFocused(false)}
-      />
-      <Pressable
-        onPress={() => setVisible((v) => !v)}
-        style={styles.eyeButton}
-        accessibilityLabel={visible ? 'Hide password' : 'Show password'}
-      >
-        <Ionicons name={visible ? 'eye-off' : 'eye'} size={20} color={t.muted} />
-      </Pressable>
-    </View>
-  );
-}
-
-// ─── OTP Input ───
-function OTPInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (c: string) => void;
-  disabled: boolean;
-}) {
-  const t = useThemeColors();
-  const inputs = useRef<(TextInput | null)[]>([]);
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-  const { ensureVisible } = useContext(AuthScrollContext);
-  const digits = value.split('');
-  while (digits.length < 6) digits.push('');
-
-  function handleChange(text: string, index: number) {
-    if (disabled) return;
-    const clean = text.replace(/\D/g, '').slice(-1);
-    const newDigits = [...digits];
-    newDigits[index] = clean;
-    onChange(newDigits.join('').slice(0, 6));
-    if (clean && index < 5) inputs.current[index + 1]?.focus();
-  }
-
-  function handleKeyPress(e: { nativeEvent: { key: string } }, index: number) {
-    if (e.nativeEvent.key === 'Backspace' && !digits[index] && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  }
-
-  return (
-    <View style={styles.otpRow}>
-      {digits.map((digit, index) => (
-        <View
-          key={index}
-          style={[
-            styles.otpCell,
-            { borderColor: t.hairline, backgroundColor: t.canvas },
-            digit && { borderColor: t.primary },
-            focusedIndex === index && { borderColor: t.primary, borderWidth: 2 },
-          ]}
+    <Input
+      ref={inputRef}
+      placeholder="Password (min 8 characters)"
+      value={value}
+      onChangeText={onChangeText}
+      secureTextEntry={!visible}
+      autoCapitalize="none"
+      autoComplete="new-password"
+      textContentType="newPassword"
+      className="h-11 rounded-xl"
+      onFocus={() => ensureVisible(inputRef.current)}
+      endContent={
+        <Pressable
+          onPress={() => setVisible((v) => !v)}
+          className="h-11 w-11 items-center justify-center"
+          accessibilityLabel={visible ? 'Hide password' : 'Show password'}
         >
-          <TextInput
-            ref={(ref) => {
-              inputs.current[index] = ref;
-            }}
-            value={digit}
-            onChangeText={(text) => handleChange(text, index)}
-            onKeyPress={(e) => handleKeyPress(e, index)}
-            onFocus={() => {
-              setFocusedIndex(index);
-              ensureVisible(inputs.current[index]);
-            }}
-            onBlur={() => setFocusedIndex(null)}
-            keyboardType="number-pad"
-            maxLength={1}
-            editable={!disabled}
-            selectTextOnFocus
-            style={[styles.otpInput, { color: t.ink }]}
-          />
-        </View>
-      ))}
-    </View>
+          <Ionicons name={visible ? 'eye-off' : 'eye'} size={20} color={muted} />
+        </Pressable>
+      }
+    />
   );
 }
 
@@ -242,8 +156,8 @@ function AuthShell({
   compact: boolean;
   safeTop: number;
 }) {
-  const t = useThemeColors();
-  const scrollRef = useRef<ScrollView>(null);
+  const canvas = useCSSVariable('--color-background') as string;
+  const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardHeightRef = useRef(0);
@@ -270,7 +184,7 @@ function AuthShell({
   }, []);
 
   const ensureVisible = useCallback(
-    (target: View | TextInput | null) => {
+    (target: RNView | RNTextInput | null) => {
       if (!target || !scrollRef.current) return;
 
       const node = findNodeHandle(target);
@@ -304,23 +218,20 @@ function AuthShell({
   return (
     <AuthScrollContext.Provider value={{ ensureVisible }}>
       <KeyboardAvoidingView
-        style={[styles.root, { backgroundColor: t.canvas }]}
+        style={{ flex: 1, backgroundColor: canvas }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? safeTop : 0}
       >
         <ScrollView
           ref={scrollRef}
-          style={styles.root}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: Math.max(topPad, safeTop + 12),
-              paddingBottom: bottomPad + keyboardHeight,
-              paddingHorizontal: compact ? 20 : 28,
-              justifyContent: 'center',
-              backgroundColor: t.canvas,
-            },
-          ]}
+          style={{ flex: 1 }}
+          contentContainerClassName="grow items-center justify-center"
+          contentContainerStyle={{
+            paddingTop: Math.max(topPad, safeTop + 12),
+            paddingBottom: bottomPad + keyboardHeight,
+            paddingHorizontal: compact ? 20 : 28,
+            backgroundColor: canvas,
+          }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
@@ -328,9 +239,9 @@ function AuthShell({
           bounces={false}
           overScrollMode="never"
         >
-          <Animated.View entering={FadeInDown.duration(400).springify()} style={styles.card}>
-            {children}
-          </Animated.View>
+          <Reveal style={{ alignSelf: 'center', width: '100%', maxWidth: 400 }}>
+            <Card className="w-full items-center p-6">{children}</Card>
+          </Reveal>
         </ScrollView>
       </KeyboardAvoidingView>
     </AuthScrollContext.Provider>
@@ -353,7 +264,6 @@ export default function AuthScreen() {
     resendOTP,
   } = useAuthFlow();
 
-  const t = useThemeColors();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [email, setEmail] = useState('');
@@ -392,7 +302,7 @@ export default function AuthScreen() {
   }, [mode, showOTP, loginOpacity, signupOpacity]);
 
   useEffect(() => {
-    // INPUT_HEIGHT + 6 (50px) matches inputContainer height (44px input + 3px top/bottom padding)
+    // Password row: field height + container vertical padding (3px top/bottom)
     passwordHeight.value = withTiming(showPassword ? INPUT_HEIGHT + 6 : 0, { duration: 300 });
     passwordOpacity.value = withTiming(showPassword ? 1 : 0, { duration: 300 });
   }, [showPassword, passwordHeight, passwordOpacity]);
@@ -454,46 +364,75 @@ export default function AuthScreen() {
         compact={isCompact}
         safeTop={insets.top}
       >
-        <Text style={[styles.title, isCompact && styles.titleCompact, { color: t.ink }]}>Verify your email</Text>
-        <Text style={[styles.subtitle, styles.mb20, { color: t.muted }]}>
+        <Text
+          weight="semibold"
+          className={cn(
+            'mb-2.5 text-center tracking-tight',
+            isCompact ? 'text-[22px] leading-7' : 'text-2xl',
+          )}
+        >
+          Verify your email
+        </Text>
+        <Text muted className="mb-5 px-2 text-center">
           Enter the 6-digit code sent to{' '}
-          <Text style={[styles.subtitleStrong, { color: t.bodyStrong }]}>{otpEmail || 'your email'}</Text>
+          <Text weight="semibold" muted={false}>
+            {otpEmail || 'your email'}
+          </Text>
         </Text>
 
-        <Animated.View style={[styles.formWidth, styles.mb20, shakeStyle]}>
-          <OTPInput value={otpCode} onChange={setOtpCode} disabled={isLoading} />
-        </Animated.View>
+        <AnimatedView style={shakeStyle} className="mb-5 w-full max-w-[340px] items-center self-center">
+          <OtpInput
+            value={otpCode}
+            onChangeText={setOtpCode}
+            disabled={isLoading}
+            accessibilityLabel="Verification code"
+          />
+        </AnimatedView>
 
-        {error ? <Text style={[styles.error, { color: t.error }]}>{error}</Text> : null}
+        {error ? (
+          <Text size="sm" className="mb-2 text-center text-destructive">
+            {error}
+          </Text>
+        ) : null}
 
-        <View style={[styles.formWidth, styles.mb20]}>
-          <ClayAnimatedButton
+        <View className="mb-5 w-full max-w-[340px] self-center">
+          <Button
             variant="primary"
+            size="lg"
+            fullWidth
             onPress={handleVerify}
             disabled={otpCode.length !== 6 || isLoading}
             loading={isLoading}
-            fullWidth
           >
             Verify & Continue
-          </ClayAnimatedButton>
+          </Button>
         </View>
 
-        <Text style={[styles.helper, { color: t.muted }]}>Didn't receive the code?</Text>
+        <Text size="sm" muted className="text-center">
+          Didn't receive the code?
+        </Text>
         {resendTimer > 0 ? (
-          <Text style={[styles.helperMuted, styles.mb16, { color: t.mutedSoft }]}>Resend in {resendTimer}s</Text>
+          <Text size="sm" muted className="mb-4 text-center">
+            Resend in {resendTimer}s
+          </Text>
         ) : (
-          <Pressable onPress={handleResend} style={styles.mb16}>
-            <Text style={[styles.resend, { color: t.brandTeal }]}>Resend code</Text>
+          <Pressable onPress={handleResend} className="mb-4 mt-2 py-2">
+            <Text size="sm" weight="semibold" className="text-center text-primary">
+              Resend code
+            </Text>
           </Pressable>
         )}
 
         <Pressable
+          className="py-2"
           onPress={() => {
             setOtpCode('');
             setMode(mode);
           }}
         >
-          <Text style={[styles.helper, { color: t.muted }]}>← Change email</Text>
+          <Text size="sm" muted className="text-center">
+            ← Change email
+          </Text>
         </Pressable>
       </AuthShell>
     );
@@ -507,316 +446,123 @@ export default function AuthScreen() {
       compact={isCompact}
       safeTop={insets.top}
     >
-      <Text style={[styles.brand, isCompact && styles.brandCompact, { color: t.ink }]}>Kaplun</Text>
+      <Text
+        weight="medium"
+        className={cn(
+          'mb-2.5 text-center tracking-tight',
+          isCompact ? 'text-3xl leading-[34px]' : 'text-4xl leading-10',
+        )}
+      >
+        Kaplun
+      </Text>
 
-      <View style={styles.subtitleSlot}>
-        <Animated.View style={[styles.absoluteCenter, loginFadeStyle]}>
-          <Text style={[styles.subtitle, { color: t.muted }]}>Welcome back! Sign in to continue.</Text>
-        </Animated.View>
-        <Animated.View style={[styles.absoluteCenter, signupFadeStyle]}>
-          <Text style={[styles.subtitle, { color: t.muted }]}>Create your account to get started.</Text>
-        </Animated.View>
+      <View className="mb-6 h-[52px] w-full items-center justify-center">
+        <AnimatedView style={loginFadeStyle} className="absolute inset-x-0 items-center justify-center">
+          <Text muted className="px-2 text-center">
+            Welcome back! Sign in to continue.
+          </Text>
+        </AnimatedView>
+        <AnimatedView style={signupFadeStyle} className="absolute inset-x-0 items-center justify-center">
+          <Text muted className="px-2 text-center">
+            Create your account to get started.
+          </Text>
+        </AnimatedView>
       </View>
 
-      <View style={styles.mb24}>
+      <View className="mb-6">
         <CapsuleToggle mode={mode} onChange={setMode} />
       </View>
 
-      <View style={styles.formWidth}>
-        <View style={styles.inputContainer}>
+      <View className="w-full max-w-[340px] self-center">
+        <View className="w-full px-[3px] py-[3px]">
           <EmailField value={email} onChangeText={setEmail} />
         </View>
 
-        <Animated.View
-          style={[
-            styles.inputContainer,
-            { overflow: 'hidden' },
-            passwordContainerStyle,
-          ]}
+        <AnimatedView
+          style={passwordContainerStyle}
+          className="w-full overflow-hidden px-[3px] py-[3px]"
         >
           <PasswordInput value={password} onChangeText={setPassword} />
-        </Animated.View>
+        </AnimatedView>
 
-        {error ? <Text style={[styles.error, styles.mt12, { color: t.error }]}>{error}</Text> : null}
+        {error ? (
+          <Text size="sm" className="mt-3 text-center text-destructive">
+            {error}
+          </Text>
+        ) : null}
 
-        <Pressable
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          testID="auth-continue"
+          className="mt-4"
           onPress={handleContinue}
           disabled={!canSubmit}
-          style={[styles.submitButton, { backgroundColor: t.primary }, !canSubmit && styles.submitDisabled]}
+          loading={isLoading}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={t.onPrimary} />
-          ) : (
-            <View style={styles.submitLabelSlot}>
-              <Animated.View style={[styles.absoluteCenter, loginFadeStyle]}>
-                <Text style={[styles.submitLabel, { color: t.onPrimary }]}>Continue with Email</Text>
-              </Animated.View>
-              <Animated.View style={[styles.absoluteCenter, signupFadeStyle]}>
-                <Text style={[styles.submitLabel, { color: t.onPrimary }]}>Create Account</Text>
-              </Animated.View>
+          {isLoading ? null : (
+            <View className="h-[22px] w-full items-center justify-center">
+              <AnimatedView
+                style={loginFadeStyle}
+                className="absolute inset-x-0 items-center justify-center"
+              >
+                <Text size="sm" weight="semibold" className="text-primary-foreground">
+                  Continue with Email
+                </Text>
+              </AnimatedView>
+              <AnimatedView
+                style={signupFadeStyle}
+                className="absolute inset-x-0 items-center justify-center"
+              >
+                <Text size="sm" weight="semibold" className="text-primary-foreground">
+                  Create Account
+                </Text>
+              </AnimatedView>
             </View>
           )}
-        </Pressable>
+        </Button>
       </View>
 
-      <View style={styles.dividerRow}>
-        <View style={[styles.dividerLine, { backgroundColor: t.hairline }]} />
-        <Text style={[styles.dividerText, { color: t.mutedSoft }]}>or</Text>
-        <View style={[styles.dividerLine, { backgroundColor: t.hairline }]} />
+      <View className="my-6 w-full max-w-[340px] flex-row items-center">
+        <View className="h-px flex-1 bg-border" />
+        <Text size="sm" muted className="mx-4">
+          or
+        </Text>
+        <View className="h-px flex-1 bg-border" />
       </View>
 
-      <View style={[styles.formWidth, styles.mb20]}>
-        <ClayAnimatedButton
-          variant="secondary"
+      <View className="mb-5 w-full max-w-[340px] self-center">
+        <Button
+          variant="social"
+          size="lg"
+          fullWidth
           onPress={loginWithGoogle}
           disabled={isLoading}
           loading={isLoading}
-          fullWidth
         >
           Continue with Google
-        </ClayAnimatedButton>
+        </Button>
       </View>
 
-      <View style={styles.helperSlot}>
-        <Animated.View style={[styles.absoluteCenter, { paddingHorizontal: 24 }, loginFadeStyle]}>
-          <Text style={[styles.helperMuted, { color: t.mutedSoft }]}>We'll send you a verification code to sign in.</Text>
-        </Animated.View>
-        <Animated.View style={[styles.absoluteCenter, { paddingHorizontal: 24 }, signupFadeStyle]}>
-          <Text style={[styles.helperMuted, { color: t.mutedSoft }]}>
+      <View className="h-10 w-full items-center justify-center">
+        <AnimatedView
+          style={loginFadeStyle}
+          className="absolute inset-x-0 items-center justify-center px-6"
+        >
+          <Text size="sm" muted className="text-center">
+            We'll send you a verification code to sign in.
+          </Text>
+        </AnimatedView>
+        <AnimatedView
+          style={signupFadeStyle}
+          className="absolute inset-x-0 items-center justify-center px-6"
+        >
+          <Text size="sm" muted className="text-center">
             By signing up, you agree to our Terms and Privacy Policy.
           </Text>
-        </Animated.View>
+        </AnimatedView>
       </View>
     </AuthShell>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  formWidth: {
-    width: '100%',
-    maxWidth: 340,
-    alignSelf: 'center',
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  inputContainer: {
-    width: '100%',
-    paddingHorizontal: 3,
-    paddingVertical: 3,
-  },
-  absoluteCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    left: 0,
-    right: 0,
-  },
-  brand: {
-    fontFamily: CLAY_FONTS.medium,
-    fontSize: 36,
-    lineHeight: 40,
-    letterSpacing: -1,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  brandCompact: {
-    fontSize: 30,
-    lineHeight: 34,
-  },
-  title: {
-    fontFamily: CLAY_FONTS.semibold,
-    fontSize: 24,
-    lineHeight: 31,
-    letterSpacing: -0.3,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  titleCompact: {
-    fontSize: 22,
-    lineHeight: 28,
-  },
-  subtitle: {
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 16,
-    lineHeight: 25,
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
-  subtitleStrong: {
-    fontFamily: CLAY_FONTS.semibold,
-  },
-  subtitleSlot: {
-    height: 52,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  mb16: { marginBottom: 16 },
-  mb20: { marginBottom: 20 },
-  mb24: { marginBottom: 24 },
-  mt12: { marginTop: 12 },
-  toggleTrack: {
-    width: TOGGLE_WIDTH,
-    height: 44,
-    borderRadius: 9999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 3,
-    alignSelf: 'center',
-  },
-  togglePill: {
-    position: 'absolute',
-    left: 3,
-    width: PILL_WIDTH,
-    height: 38,
-    borderRadius: 9999,
-  },
-  toggleTab: {
-    flex: 1,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  toggleLabel: {
-    fontFamily: CLAY_FONTS.semibold,
-    fontSize: 14,
-    letterSpacing: -0.14,
-  },
-  input: {
-    width: '100%',
-    height: INPUT_HEIGHT,
-    borderWidth: 1,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    paddingHorizontal: 16,
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 16,
-  },
-  inputFocused: {
-    borderWidth: 1.5,
-  },
-  passwordWrap: {
-    width: '100%',
-    height: INPUT_HEIGHT,
-    position: 'relative',
-  },
-  passwordInput: {
-    paddingRight: 48,
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: 4,
-    top: 0,
-    bottom: 0,
-    width: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButton: {
-    marginTop: 16,
-    width: '100%',
-    height: 44,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitDisabled: {
-    opacity: 0.45,
-  },
-  submitLabelSlot: {
-    height: 22,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitLabel: {
-    fontFamily: CLAY_FONTS.semibold,
-    fontSize: 14,
-    lineHeight: 18,
-    letterSpacing: -0.14,
-    includeFontPadding: false,
-  },
-  dividerRow: {
-    width: '100%',
-    maxWidth: 340,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-  },
-  dividerText: {
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 13,
-    marginHorizontal: 16,
-  },
-  helperSlot: {
-    height: 40,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  helper: {
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  helperMuted: {
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  resend: {
-    fontFamily: CLAY_FONTS.semibold,
-    fontSize: 13,
-    marginTop: 8,
-  },
-  error: {
-    fontFamily: CLAY_FONTS.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  otpRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  otpCell: {
-    width: 44,
-    height: 52,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  otpInput: {
-    width: 44,
-    height: 52,
-    textAlign: 'center',
-    fontSize: 22,
-    fontFamily: CLAY_FONTS.semibold,
-  },
-});
