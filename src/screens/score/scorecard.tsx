@@ -2,23 +2,23 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { View as RNView } from 'react-native';
 
-import { View, Text, Pressable } from '@/tw';
-import { cn } from '@/tw/cn';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
-import { ClayFeatureCard } from '@/components/clay/ClayFeatureCard';
+import { View, Pressable, useCSSVariable } from '@/tw';
+import { Badge, Button, Card, Kpi, Text } from 'panelui-native';
 import { addLog } from '@/lib/logger';
-import { useThemeColors } from '@/lib/theme';
 import type { ActionPriority, ProfileReport, ReportMeta } from '@/lib/profile-score';
 import { SectionLabel } from './components';
 import { StaggeredCard } from './ceremony';
+import { Reveal } from '@/components/ui/reveal';
 import { ShareCard } from './share-card';
 import { shareScoreCard } from './share';
 
-const PRIORITY_STYLE: Record<ActionPriority, { bg: string; text: string; label: string }> = {
-  high: { bg: 'bg-brand-pink', text: 'text-on-dark', label: 'High' },
-  medium: { bg: 'bg-brand-ochre', text: 'text-ink', label: 'Medium' },
-  low: { bg: 'bg-brand-lavender', text: 'text-on-dark', label: 'Low' },
+const PRIORITY_BADGE: Record<
+  ActionPriority,
+  { variant: 'destructive' | 'warning' | 'info'; label: string }
+> = {
+  high: { variant: 'destructive', label: 'High' },
+  medium: { variant: 'warning', label: 'Medium' },
+  low: { variant: 'info', label: 'Low' },
 };
 
 function BulletRows({
@@ -28,13 +28,13 @@ function BulletRows({
   icon: React.ComponentProps<typeof Ionicons>['name'];
   items: string[];
 }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
   return (
-    <View style={{ gap: 10 }}>
+    <View className="gap-2.5">
       {items.map((item, i) => (
-        <View key={i} className="flex-row items-start" style={{ gap: 8 }}>
-          <Ionicons name={icon} size={15} color={t.ink} style={{ marginTop: 2 }} />
-          <Text className="text-body-sm text-ink" style={{ flex: 1 }}>
+        <View key={i} className="flex-row items-start gap-2">
+          <Ionicons name={icon} size={15} color={foreground} style={{ marginTop: 2 }} />
+          <Text size="sm" className="flex-1">
             {item}
           </Text>
         </View>
@@ -54,7 +54,8 @@ export function Scorecard({
   ceremony: boolean;
   onRefresh: () => void;
 }) {
-  const t = useThemeColors();
+  const muted = useCSSVariable('--color-muted-foreground') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   const cardRef = useRef<RNView | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -90,66 +91,42 @@ export function Scorecard({
       </View>
 
       {/* Hero score */}
-      <ClayFeatureCard color="teal">
-        <View className="flex-row items-end" style={{ gap: 8 }}>
-          <Text
-            className="font-semibold"
-            style={{ fontSize: 56, lineHeight: 59, letterSpacing: -2, color: t.onPrimary }}
-          >
-            {report.overall_score}
-          </Text>
-          <Text className="text-white/60" style={{ fontSize: 16, marginBottom: 8 }}>
+      <Kpi surface={false} className="gap-2.5 rounded-2xl bg-success-soft p-5">
+        <View className="flex-row items-end gap-2">
+          <Kpi.Value className="text-5xl tracking-tighter">{report.overall_score}</Kpi.Value>
+          <Text size="base" muted className="mb-1.5">
             /100
           </Text>
         </View>
-        <View
-          className="bg-white/15"
-          style={{
-            alignSelf: 'flex-start',
-            borderRadius: 9999,
-            paddingVertical: 4,
-            paddingHorizontal: 10,
-          }}
-        >
-          <Text className="font-semibold" style={{ fontSize: 12, color: t.onPrimary }}>
-            {report.score_label}
-          </Text>
-        </View>
-        <Text className="text-body-sm text-white/85">
+        <Badge variant="success" className="self-start">
+          {report.score_label}
+        </Badge>
+        <Text size="sm" muted>
           {report.one_line_summary}
         </Text>
-      </ClayFeatureCard>
+      </Kpi>
 
       {/* Action plan */}
       {actionCount > 0 && (
-        <View style={{ gap: 10 }}>
+        <View className="gap-2.5">
           <SectionLabel>Do this next</SectionLabel>
           {report.action_plan.map((item, i) => {
-            const pill = PRIORITY_STYLE[item.priority] ?? PRIORITY_STYLE.medium;
+            const pill = PRIORITY_BADGE[item.priority] ?? PRIORITY_BADGE.medium;
             return (
               <StaggeredCard key={i} index={i} ceremony={ceremony} padding="p-5">
-                <View style={{ gap: 8 }}>
-                  <View
-                    className={cn(pill.bg, 'self-start')}
-                    style={{ borderRadius: 9999, paddingVertical: 3, paddingHorizontal: 9 }}
-                  >
-                    <Text
-                      className={cn(pill.text, 'font-semibold uppercase')}
-                      style={{ fontSize: 10.5, letterSpacing: 0.8 }}
-                    >
-                      {pill.label}
-                    </Text>
-                  </View>
-                  <Text
-                    className="font-semibold text-ink"
-                    style={{ fontSize: 16.5, letterSpacing: -0.2 }}
-                  >
+                <View className="gap-2">
+                  <Badge variant={pill.variant} className="self-start">
+                    {pill.label}
+                  </Badge>
+                  <Text size="lg" weight="semibold" className="tracking-tight">
                     {item.action}
                   </Text>
-                  <Text className="text-body-sm text-muted">{item.why}</Text>
-                  <View className="flex-row items-start" style={{ gap: 6 }}>
-                    <Ionicons name="time-outline" size={13} color={t.mutedSoft} style={{ marginTop: 1 }} />
-                    <Text className="text-muted-soft" style={{ fontSize: 12.5, flex: 1 }}>
+                  <Text size="sm" muted>
+                    {item.why}
+                  </Text>
+                  <View className="flex-row items-start gap-1.5">
+                    <Ionicons name="time-outline" size={13} color={muted} style={{ marginTop: 1 }} />
+                    <Text size="xs" muted className="flex-1">
                       {item.when_to_post}
                     </Text>
                   </View>
@@ -162,46 +139,41 @@ export function Scorecard({
 
       {/* Strengths */}
       {report.strengths.length > 0 && (
-        <ClayAnimatedCard delay={strengthsDelay}>
-          <View style={{ gap: 12 }}>
+        <Reveal delay={strengthsDelay}>
+          <Card className="gap-3 p-5">
             <SectionLabel>What’s working</SectionLabel>
             <BulletRows icon="checkmark-circle" items={report.strengths} />
-          </View>
-        </ClayAnimatedCard>
+          </Card>
+        </Reveal>
       )}
 
       {/* Weaknesses */}
       {report.weaknesses.length > 0 && (
-        <ClayAnimatedCard delay={weaknessesDelay}>
-          <View style={{ gap: 12 }}>
+        <Reveal delay={weaknessesDelay}>
+          <Card className="gap-3 p-5">
             <SectionLabel>What to fix</SectionLabel>
             <BulletRows icon="alert-circle-outline" items={report.weaknesses} />
-          </View>
-        </ClayAnimatedCard>
+          </Card>
+        </Reveal>
       )}
 
       {meta ? (
-        <Text className="text-muted-soft text-center" style={{ fontSize: 12 }}>
+        <Text size="xs" muted className="text-center">
           Generated {new Date(meta.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
         </Text>
       ) : null}
 
-      <ClayAnimatedButton
+      <Button
         variant="primary"
         fullWidth
         loading={sharing}
         onPress={handleShare}
-        height={48}
+        startContent={<Ionicons name="share-social-outline" size={16} color={primaryForeground} />}
       >
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <Ionicons name="share-social-outline" size={16} color={t.onPrimary} />
-          <Text className="font-semibold text-white" style={{ fontSize: 14.5 }}>
-            Share my score
-          </Text>
-        </View>
-      </ClayAnimatedButton>
+        Share my score
+      </Button>
       {shareError ? (
-        <Text className="text-center" style={{ color: t.error, fontSize: 12.5 }}>
+        <Text size="sm" className="text-center text-destructive">
           {shareError}
         </Text>
       ) : null}
@@ -209,12 +181,11 @@ export function Scorecard({
       <Pressable
         onPress={onRefresh}
         hitSlop={10}
-        className="flex-row items-center self-center"
-        style={{ gap: 6, paddingVertical: 8, paddingHorizontal: 12 }}
+        className="flex-row items-center self-center gap-1.5 px-3 py-2"
         testID="score-refresh"
       >
-        <Ionicons name="refresh-outline" size={14} color={t.muted} />
-        <Text className="text-muted" style={{ fontSize: 12.5 }}>
+        <Ionicons name="refresh-outline" size={14} color={muted} />
+        <Text size="xs" muted>
           Refresh analysis
         </Text>
       </Pressable>

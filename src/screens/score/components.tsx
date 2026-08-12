@@ -1,16 +1,12 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 
-import { View, Text, Pressable } from '@/tw';
-import { ClayAnimatedButton } from '@/components/clay/ClayAnimatedButton';
-import { useThemeColors } from '@/lib/theme';
+import { View, useCSSVariable } from '@/tw';
+import { Alert, Button, Card, Skeleton, Text } from 'panelui-native';
 
 export function SectionLabel({ children }: { children: string }) {
   return (
-    <Text
-      className="font-semibold uppercase text-muted"
-      style={{ fontSize: 11, letterSpacing: 1.2 }}
-    >
+    <Text size="xs" weight="semibold" muted className="uppercase tracking-wider">
       {children}
     </Text>
   );
@@ -18,10 +14,10 @@ export function SectionLabel({ children }: { children: string }) {
 
 export function ScoreSkeleton() {
   return (
-    <View style={{ gap: 16 }}>
-      <View className="bg-surface-card border border-hairline rounded-xl" style={{ height: 190 }} />
-      <View className="bg-surface-card border border-hairline rounded-xl" style={{ height: 120 }} />
-      <View className="bg-surface-card border border-hairline rounded-xl" style={{ height: 200 }} />
+    <View className="gap-4">
+      <Skeleton className="h-48 rounded-2xl" />
+      <Skeleton className="h-30 rounded-2xl" />
+      <Skeleton className="h-50 rounded-2xl" />
     </View>
   );
 }
@@ -41,56 +37,45 @@ export function GateCard({
   loading: boolean;
   onPress: () => void;
 }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-xl items-center"
-      style={{ padding: 20, gap: 12 }}
-    >
-      <View
-        className="bg-brand-lavender items-center justify-center"
-        style={{ width: 52, height: 52, borderRadius: 26 }}
-      >
-        <Ionicons name={icon} size={24} color={t.ink} />
+    <Card className="items-center gap-3 p-5">
+      <View className="h-13 w-13 items-center justify-center rounded-full bg-info-soft">
+        <Ionicons name={icon} size={24} color={foreground} />
       </View>
-      <Text
-        className="font-semibold text-ink text-center"
-        style={{ fontSize: 19, letterSpacing: -0.3 }}
-      >
+      <Text size="lg" weight="semibold" className="text-center tracking-tight">
         {title}
       </Text>
-      <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 280 }}>
+      <Text size="sm" muted className="max-w-70 text-center">
         {body}
       </Text>
-      <ClayAnimatedButton variant="primary" fullWidth loading={loading} onPress={onPress} height={48}>
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <Ionicons name="logo-instagram" size={16} color={t.onPrimary} />
-          <Text className="font-semibold text-white" style={{ fontSize: 14.5 }}>
-            {ctaLabel}
-          </Text>
-        </View>
-      </ClayAnimatedButton>
-    </View>
+      <Button
+        variant="primary"
+        fullWidth
+        loading={loading}
+        onPress={onPress}
+        startContent={<Ionicons name="logo-instagram" size={16} color={primaryForeground} />}
+      >
+        {ctaLabel}
+      </Button>
+    </Card>
   );
 }
 
 export function InlineErrorStrip({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const t = useThemeColors();
   return (
-    <View
-      className="flex-row items-center bg-surface-card border border-hairline rounded-lg"
-      style={{ padding: 12, gap: 10 }}
-    >
-      <Ionicons name="alert-circle-outline" size={16} color={t.error} />
-      <Text className="text-muted" style={{ fontSize: 12.5, flex: 1 }} numberOfLines={2}>
-        Couldn’t load your score — {message}
-      </Text>
-      <Pressable onPress={onRetry} style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
-        <Text className="font-semibold text-ink" style={{ fontSize: 12.5 }}>
-          Retry
-        </Text>
-      </Pressable>
-    </View>
+    <Alert variant="destructive" className="items-center">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Description numberOfLines={2}>
+          Couldn’t load your score — {message}
+        </Alert.Description>
+      </Alert.Content>
+      <Button variant="secondary" size="sm" onPress={onRetry}>
+        Retry
+      </Button>
+    </Alert>
   );
 }
 
@@ -101,41 +86,26 @@ export function EmptyState({
   generating: boolean;
   onGenerate: () => void;
 }) {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-xl items-center"
-      style={{ padding: 20, gap: 12 }}
-    >
-      <View
-        className="bg-brand-teal items-center justify-center"
-        style={{ width: 52, height: 52, borderRadius: 26 }}
-      >
-        <Ionicons name="speedometer" size={24} color={t.onPrimary} />
+    <Card className="items-center gap-3 p-5">
+      <View className="h-13 w-13 items-center justify-center rounded-full bg-success-soft">
+        <Ionicons name="speedometer" size={24} color={foreground} />
       </View>
-      <Text
-        className="font-semibold text-ink text-center"
-        style={{ fontSize: 19, letterSpacing: -0.3 }}
-      >
+      <Text size="lg" weight="semibold" className="text-center tracking-tight">
         Get your AI Profile Score
       </Text>
-      <Text className="text-body-sm text-muted text-center" style={{ maxWidth: 280 }}>
+      <Text size="sm" muted className="max-w-70 text-center">
         One score from your last 30 days — engagement, posting rhythm, growth — plus the 3 moves to make next.
       </Text>
-      <ClayAnimatedButton
-        variant="primary"
-        fullWidth
-        loading={generating}
-        onPress={onGenerate}
-        height={48}
-      >
+      <Button variant="primary" fullWidth loading={generating} onPress={onGenerate}>
         Generate my score
-      </ClayAnimatedButton>
+      </Button>
       {generating ? (
-        <Text className="text-muted-soft text-center" style={{ fontSize: 12 }}>
+        <Text size="xs" muted className="text-center">
           Crunching your stats — this can take up to a minute. Keep the app open.
         </Text>
       ) : null}
-    </View>
+    </Card>
   );
 }

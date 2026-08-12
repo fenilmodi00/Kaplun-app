@@ -5,10 +5,10 @@
 import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 
-import { View, Text } from '@/tw';
+import { View, useCSSVariable } from '@/tw';
 import { AnimatedView } from '@/tw/animated';
-import { ClayAnimatedCard } from '@/components/clay/ClayAnimatedCard';
-import { ClaySpinner } from '@/components/clay/ClaySpinner';
+import { Card, Spinner, Text } from 'panelui-native';
+import { Reveal } from '@/components/ui/reveal';
 import {
   Easing,
   IS_REANIMATED_AVAILABLE,
@@ -18,7 +18,6 @@ import {
   withSpring,
   withTiming,
 } from '@/lib/reanimated-platform';
-import { useThemeColors } from '@/lib/theme';
 
 /** Action card that cascades in during the ceremony; cached view uses the quick ramp. */
 export function StaggeredCard({
@@ -33,9 +32,9 @@ export function StaggeredCard({
   children: React.ReactNode;
 }) {
   return (
-    <ClayAnimatedCard delay={ceremony ? index * 100 : 60 + index * 40} padding={padding}>
-      {children}
-    </ClayAnimatedCard>
+    <Reveal delay={ceremony ? index * 100 : 60 + index * 40}>
+      <Card className={padding}>{children}</Card>
+    </Reveal>
   );
 }
 
@@ -48,7 +47,8 @@ const THEATER_STAGES: { label: string; icon: React.ComponentProps<typeof Ionicon
 const THEATER_STAGE_MS = 2400;
 
 export function AnalysisTheater() {
-  const t = useThemeColors();
+  const foreground = useCSSVariable('--color-foreground') as string;
+  const muted = useCSSVariable('--color-muted-foreground') as string;
   const [stage, setStage] = useState(0);
 
   // Stages advance on the clock; the API landing (not this timer) ends the theater.
@@ -61,50 +61,46 @@ export function AnalysisTheater() {
   }, []);
 
   return (
-    <View
-      className="bg-surface-card border border-hairline rounded-xl"
-      style={{ padding: 20, gap: 16 }}
-      testID="analysis-theater"
-    >
-      <View className="flex-row items-center" style={{ gap: 10 }}>
-        <Ionicons name="sparkles" size={16} color={t.ink} />
-        <Text className="font-semibold text-ink" style={{ fontSize: 19, letterSpacing: -0.3 }}>
+    <Card className="gap-4 p-5" testID="analysis-theater">
+      <View className="flex-row items-center gap-2.5">
+        <Ionicons name="sparkles" size={16} color={foreground} />
+        <Text size="lg" weight="semibold" className="tracking-tight">
           Analyzing your profile
         </Text>
       </View>
-      <View style={{ gap: 14 }}>
+      <View className="gap-3.5">
         {THEATER_STAGES.map((s, i) => {
           const status = i < stage ? 'done' : i === stage ? 'current' : 'pending';
           return (
             <View
               key={s.label}
-              className="flex-row items-center"
-              style={{ gap: 10, opacity: status === 'pending' ? 0.45 : 1 }}
+              className="flex-row items-center gap-2.5"
+              style={{ opacity: status === 'pending' ? 0.45 : 1 }}
               testID={`theater-stage-${i}`}
             >
               <View
-                style={{ width: 22, alignItems: 'center' }}
+                className="w-5.5 items-center"
                 testID={`theater-stage-${i}-${status}`}
               >
                 {status === 'done' ? (
-                  <Ionicons name="checkmark-circle" size={18} color={t.ink} />
+                  <Ionicons name="checkmark-circle" size={18} color={foreground} />
                 ) : status === 'current' ? (
-                  <ClaySpinner size={18} color="primary" />
+                  <Spinner size="sm" />
                 ) : (
-                  <Ionicons name="ellipse-outline" size={18} color={t.mutedSoft} />
+                  <Ionicons name="ellipse-outline" size={18} color={muted} />
                 )}
               </View>
-              <Text className="text-body-sm text-ink" style={{ flex: 1 }}>
+              <Text size="sm" className="flex-1">
                 {s.label}
               </Text>
             </View>
           );
         })}
       </View>
-      <Text className="text-muted-soft" style={{ fontSize: 12 }}>
+      <Text size="xs" muted>
         Crunching your stats — this can take up to a minute. Keep the app open.
       </Text>
-    </View>
+    </Card>
   );
 }
 
@@ -127,7 +123,9 @@ export function ScoreRing({
   label?: string;
   summary?: string;
 }) {
-  const t = useThemeColors();
+  const primary = useCSSVariable('--color-primary') as string;
+  const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
+  const border = useCSSVariable('--color-border') as string;
   const completed = !IS_REANIMATED_AVAILABLE;
   const progress = useSharedValue(completed ? score : 0);
   const contentOpacity = useSharedValue(completed ? 1 : 0);
@@ -166,8 +164,8 @@ export function ScoreRing({
     height: RING_SIZE,
     borderRadius: RING_SIZE / 2,
     borderWidth: RING_STROKE,
-    borderTopColor: t.primary,
-    borderRightColor: t.primary,
+    borderTopColor: primary,
+    borderRightColor: primary,
     borderBottomColor: 'transparent',
     borderLeftColor: 'transparent',
   });
@@ -191,7 +189,7 @@ export function ScoreRing({
             height: RING_SIZE,
             borderRadius: RING_SIZE / 2,
             borderWidth: RING_STROKE,
-            borderColor: t.hairline,
+            borderColor: border,
           }}
         />
         <View
@@ -230,12 +228,12 @@ export function ScoreRing({
           }}
         >
           <Text
-            className="font-semibold text-ink"
+            weight="semibold"
             style={{ fontSize: 64, lineHeight: 68, letterSpacing: -2 }}
           >
             {shown}
           </Text>
-          <Text className="text-muted-soft" style={{ fontSize: 14 }}>
+          <Text size="sm" muted>
             /100
           </Text>
         </View>
@@ -245,23 +243,19 @@ export function ScoreRing({
       >
         {label ? (
           <View
-            style={{
-              backgroundColor: t.primary,
-              borderRadius: 9999,
-              paddingVertical: 4,
-              paddingHorizontal: 10,
-            }}
+            className="rounded-full bg-primary px-2.5 py-1"
           >
-            <Text className="font-semibold" style={{ fontSize: 12, color: t.onPrimary }}>
+            <Text
+              size="xs"
+              weight="semibold"
+              style={{ color: primaryForeground }}
+            >
               {label}
             </Text>
           </View>
         ) : null}
         {summary ? (
-          <Text
-            className="text-body-sm text-muted text-center"
-            style={{ maxWidth: 280 }}
-          >
+          <Text size="sm" muted className="max-w-70 text-center">
             {summary}
           </Text>
         ) : null}

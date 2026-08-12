@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { View, Text } from '@/tw';
+import { View } from '@/tw';
+import { Text } from 'panelui-native';
 import { ScreenShell } from '@/components/screen-shell';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { useGenerateScore, useLatestScore } from '@/hooks/useProfileScore';
@@ -80,13 +81,10 @@ export default function ScoreScreen() {
     <ScreenShell contentContainerStyle={{ gap: 12 }} testID="score-screen">
       {/* Header */}
       <View style={{ gap: 6 }}>
-        <Text
-          className="font-medium text-ink"
-          style={{ fontSize: 32, lineHeight: 37, letterSpacing: -0.5 }}
-        >
+        <Text size="3xl" weight="medium" className="tracking-tight">
           Score
         </Text>
-        <Text className="text-muted" style={{ fontSize: 13 }}>
+        <Text size="sm" muted>
           Your AI read on the last 30 days — refreshed weekly
         </Text>
       </View>
