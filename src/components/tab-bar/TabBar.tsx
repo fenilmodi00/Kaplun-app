@@ -130,8 +130,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
   // After Home's first paint, mount Insights off-screen so the first tap is a
   // visibility switch — not a JS parse of BarChart + a Graph round-trip.
   useEffect(() => {
-    const id = setTimeout(() => navigation.preload('(insights)'));
-    return () => clearTimeout(id);
+    navigation.preload('(insights)');
   }, [navigation]);
 
   // Instagram-style whole-pill scale: REST_SCALE at rest, MIN_SCALE on scroll down,

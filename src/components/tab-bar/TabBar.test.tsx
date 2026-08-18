@@ -20,7 +20,7 @@ jest.mock('@/components/symbol-icon', () => ({
 }));
 
 import React from 'react';
-import { render, fireEvent, screen, act, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, screen, act } from '@testing-library/react-native';
 import { TabBar } from '@/components/tab-bar/TabBar';
 import { reportTabBarScroll, subscribeTabBarScroll } from '@/lib/tab-bar-scroll';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
@@ -138,9 +138,7 @@ describe('TabBar', () => {
   it('preloads Insights after mount so the first tap is not a cold start', async () => {
     const props = createMockProps();
     await render(<TabBar {...props} />);
-    await waitFor(() => {
-      expect(props.navigation.preload).toHaveBeenCalledWith('(insights)');
-    });
+    expect(props.navigation.preload).toHaveBeenCalledWith('(insights)');
   });
 
   it('all 4 Pressables expose the tab role', async () => {

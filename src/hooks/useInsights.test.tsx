@@ -14,7 +14,7 @@ jest.mock('@/lib/instagram', () => ({
 
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import { useInsights } from '@/hooks/useInsights';
 import type { InstagramAccountInsights } from '@/lib/instagram';
 
@@ -33,7 +33,7 @@ describe('useInsights cache', () => {
     });
     client.setQueryData(['insightsAccount', 'u1', 28], cachedInsights);
 
-    const { result } = await renderHook(() => useInsights(28), {
+    const { result, unmount } = await renderHook(() => useInsights(28), {
       wrapper: ({ children }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
@@ -41,5 +41,10 @@ describe('useInsights cache', () => {
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.insights).toEqual(cachedInsights);
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    unmount();
+    client.clear();
   });
 });

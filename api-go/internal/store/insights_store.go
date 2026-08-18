@@ -516,21 +516,21 @@ func mediaData(creatorRowID string, item insights.MediaItemWithInsights, nowISO,
 		"thumbnail_url":      m.ThumbnailURL,
 		"permalink":          m.Permalink,
 		"posted_at":          m.Timestamp,
-		"like_count":         m.LikeCount,
-		"comments_count":     m.CommentsCount,
+		"like_count":         clampInt32(m.LikeCount),
+		"comments_count":     clampInt32(m.CommentsCount),
 		"insights_synced_at": nowISO,
 		"last_seen_at":       nowISO,
 	}
 	if ins := item.Insights; ins != nil {
-		data["views"] = ins.Views
-		data["reach"] = ins.Reach
-		data["saved"] = ins.Saved
-		data["shares"] = ins.Shares
-		data["reposts"] = ins.Reposts
-		data["total_interactions"] = ins.TotalInteractions
-		data["follows"] = ins.Follows
-		data["profile_visits"] = ins.ProfileVisits
-		data["reels_avg_watch_time_ms"] = ins.ReelsAvgWatchTimeMs
+		data["views"] = clampInt32(ins.Views)
+		data["reach"] = clampInt32(ins.Reach)
+		data["saved"] = clampInt32(ins.Saved)
+		data["shares"] = clampInt32(ins.Shares)
+		data["reposts"] = clampInt32(ins.Reposts)
+		data["total_interactions"] = clampInt32(ins.TotalInteractions)
+		data["follows"] = clampInt32(ins.Follows)
+		data["profile_visits"] = clampInt32(ins.ProfileVisits)
+		data["reels_avg_watch_time_ms"] = clampInt32(ins.ReelsAvgWatchTimeMs)
 		data["reels_video_view_total_time_ms"] = ins.ReelsVideoViewTotalTimeMs
 		data["reels_skip_rate"] = ins.ReelsSkipRate
 		data["facebook_views"] = optInt64(ins.FacebookViews)
@@ -549,4 +549,18 @@ func optInt64(v *int64) any {
 		return nil
 	}
 	return *v
+}
+
+// clampInt32 guards 32-bit integer columns against Meta values that exceed
+// the int32 range (e.g. total watch time on viral reels). The creator_media
+// table's integer columns are 32-bit; only reels_video_view_total_time_ms
+// was migrated to bigint, so all others still need this clamp.
+func clampInt32(v int64) int64 {
+	if v > 2147483647 {
+		return 2147483647
+	}
+	if v < -2147483648 {
+		return -2147483648
+	}
+	return v
 }
