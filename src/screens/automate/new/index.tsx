@@ -9,46 +9,21 @@
  * Raw KeyboardAvoidingView is the documented escape hatch.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Dimensions,
-  Keyboard,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Platform,
-  UIManager,
   View as RNView,
-  ScrollView as RNScrollView,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type LayoutChangeEvent,
 } from 'react-native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-function animateFormLayout() {
-  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-}
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
 import { Button, Card, Input, Textarea, Switch } from 'panelui-native';
-import { useAutomations } from '@/hooks/useAutomations';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
-import {
-  validateAutomationDraft,
-  type AutomationDraft,
-} from '@/lib/automation-validation';
-import type {
-  CreateAutomationInput,
-  TargetType,
-  MatchMode,
-  CampaignTemplate,
-} from '@/lib/automations';
+import { useAutomationDraft } from '@/hooks/useAutomationDraft';
+import { useScrollRevealLayout } from '@/hooks/useScrollRevealLayout';
+import type { TargetType, MatchMode, CampaignTemplate } from '@/lib/automations';
 import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
 import { View, Text, Pressable, ScrollView } from '@/tw';
@@ -81,6 +56,8 @@ const STEPS = [
   { id: 'extras', label: 'Extras' },
 ] as const;
 
+const SECTION_IDS = STEPS.map((s) => s.id);
+
 const TEMPLATE_PALETTE = [
   { bg: 'bg-primary', text: 'text-primary-foreground', border: 'border-primary' },
   { bg: 'bg-secondary', text: 'text-secondary-foreground', border: 'border-secondary' },
@@ -90,173 +67,91 @@ const TEMPLATE_PALETTE = [
   { bg: 'bg-secondary', text: 'text-foreground', border: 'border-secondary' },
 ];
 
-type Measurable = {
-  measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
-};
-
 export default function NewAutomationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const { createAutomation, creating } = useAutomations();
   const { connect: connectInstagram } = useAutomationGate();
   const foregroundColor = useCSSVariable('--color-foreground') as string;
 
-  // ── Form state ───────────────────────────────────────────────────────────
-  const [name, setName] = useState('');
-  const [targetType, setTargetType] = useState<TargetType>('specific_posts');
-  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [keywordInput, setKeywordInput] = useState('');
-  const [matchMode, setMatchMode] = useState<MatchMode>('whole_word');
-  const [matchAnyWord, setMatchAnyWord] = useState(false);
-  const [dmMessage, setDmMessage] = useState('');
-  const [openingDmMode, setOpeningDmMode] = useState<'direct' | 'button'>('direct');
-  const [buttonText, setButtonText] = useState('');
-  const [revealMessage, setRevealMessage] = useState('');
-  const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
-  const [publicReplyMessage, setPublicReplyMessage] = useState('');
-  const [publicReplyMessages, setPublicReplyMessages] = useState<string[]>([]);
-  const [requireFollow, setRequireFollow] = useState(false);
-  const [followPromptMessage, setFollowPromptMessage] = useState('');
-  const [followPromptButtonLabel, setFollowPromptButtonLabel] = useState('');
-  const [followUpEnabled, setFollowUpEnabled] = useState(false);
-  const [followUpMessage, setFollowUpMessage] = useState('');
-  const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(1440);
-  const [dmTriggerEnabled, setDmTriggerEnabled] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [isConnectingIg, setIsConnectingIg] = useState(false);
-  const [savingPaused, setSavingPaused] = useState(false);
-
   // ── Stepper state ────────────────────────────────────────────────────────
-  const [currentStep, setCurrentStep] = useState('trigger');
-  const currentStepRef = useRef<(typeof STEPS)[number]['id']>('trigger');
-  const sectionPositions = useRef<Record<string, number>>({});
-  const scrollContentRef = useRef<RNView>(null);
-  const sectionRefs = useRef<Partial<Record<string, RNView | null>>>({});
-
-  const remeasureSections = useCallback(() => {
-    const container = scrollContentRef.current;
-    if (!container) return;
-    for (const step of STEPS) {
-      const node = sectionRefs.current[step.id];
-      if (!node) continue;
-      node.measureLayout(
-        container,
-        (_x, y) => {
-          sectionPositions.current[step.id] = y;
-        },
-        () => {}
-      );
-    }
-  }, []);
+  const {
+    activeSection: currentStep,
+    scrollRef,
+    scrollContentRef,
+    handleScroll,
+    handleSectionLayout,
+    bindSectionRef,
+    registerRef,
+    scrollToSection,
+    remeasureSections,
+    handleInputFocus,
+    handleInputBlur,
+    dismissKeyboard,
+    animateFormLayout,
+  } = useScrollRevealLayout(SECTION_IDS);
 
   // ── Template picker state ────────────────────────────────────────────────
   const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [selectedTemplateSlug, setSelectedTemplateSlug] = useState<string | null>(null);
 
   const { media, loading: mediaLoading, error: mediaError, hasLoaded: mediaHasLoaded, loadMedia } = useMediaPicker();
 
-  // ── Scroll-focused-input-into-view ──────────────────────────────────────
-  const scrollRef = useRef<RNScrollView>(null);
-  const scrollYRef = useRef(0);
-  const keyboardHeightRef = useRef(0);
-  const focusedInputRef = useRef<Measurable | null>(null);
-  const focusScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const {
+    name,
+    setName,
+    targetType,
+    setTargetType,
+    selectedMediaIds,
+    setSelectedMediaIds,
+    keywords,
+    keywordInput,
+    matchMode,
+    setMatchMode,
+    matchAnyWord,
+    setMatchAnyWord,
+    dmMessage,
+    setDmMessage,
+    buttonText,
+    setButtonText,
+    revealMessage,
+    setRevealMessage,
+    publicReplyEnabled,
+    setPublicReplyEnabled,
+    publicReplyMessage,
+    setPublicReplyMessage,
+    publicReplyMessages,
+    setPublicReplyMessages,
+    requireFollow,
+    setRequireFollow,
+    followPromptMessage,
+    setFollowPromptMessage,
+    followPromptButtonLabel,
+    setFollowPromptButtonLabel,
+    followUpEnabled,
+    setFollowUpEnabled,
+    followUpMessage,
+    setFollowUpMessage,
+    followUpDelayMinutes,
+    setFollowUpDelayMinutes,
+    dmTriggerEnabled,
+    setDmTriggerEnabled,
+    submitError,
+    submitAttempted,
+    savingPaused,
+    creating,
+    selectedTemplateSlug,
+    validationErrors,
+    isValid,
+    handleSubmit,
+    handleKeywordInputChange,
+    addExampleKeyword,
+    handleRemoveKeyword,
+    toggleMedia,
+    applyTemplate,
+    selectedPreviewMedia,
+  } = useAutomationDraft(templates, media);
 
-  const scrollFocusedInputIntoView = useCallback(() => {
-    if (focusScrollTimerRef.current) clearTimeout(focusScrollTimerRef.current);
-    focusScrollTimerRef.current = setTimeout(() => {
-      const input = focusedInputRef.current;
-      if (!input) return;
-      input.measureInWindow((_x, y, _w, h) => {
-        const visibleBottom =
-          Dimensions.get('window').height - keyboardHeightRef.current - 24;
-        const overflow = (y + h) - visibleBottom;
-        if (overflow > 0) {
-          scrollRef.current?.scrollTo({ y: scrollYRef.current + overflow, animated: true });
-        }
-      });
-    }, 250);
-  }, []);
-
-  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
-    scrollYRef.current = y;
-
-    const viewportAnchor = y + 160;
-
-    let active: (typeof STEPS)[number]['id'] = STEPS[0].id;
-    for (let i = STEPS.length - 1; i >= 0; i--) {
-      const pos = sectionPositions.current[STEPS[i].id];
-      if (pos !== undefined && viewportAnchor >= pos) {
-        active = STEPS[i].id;
-        break;
-      }
-    }
-    if (currentStepRef.current !== active) {
-      currentStepRef.current = active;
-      setCurrentStep(active);
-    }
-  }, []);
-
-  const handleSectionLayout = useCallback((id: string) => (e: LayoutChangeEvent) => {
-    sectionPositions.current[id] = e.nativeEvent.layout.y;
-  }, []);
-
-  const bindSectionRef = useCallback(
-    (id: string) => (node: RNView | null) => {
-      sectionRefs.current[id] = node;
-    },
-    []
-  );
-
-  const scrollToSection = useCallback((id: string) => {
-    const y = sectionPositions.current[id];
-    if (y !== undefined && scrollRef.current) {
-      scrollRef.current.scrollTo({ y: Math.max(0, y - 120), animated: true });
-    }
-  }, []);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      keyboardHeightRef.current = e.endCoordinates.height;
-      scrollFocusedInputIntoView();
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      keyboardHeightRef.current = 0;
-      focusedInputRef.current = null;
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-      if (focusScrollTimerRef.current) clearTimeout(focusScrollTimerRef.current);
-    };
-  }, [scrollFocusedInputIntoView]);
-
-  const handleInputFocus = useCallback((wrapRef: React.RefObject<RNView | null>) => {
-    focusedInputRef.current = wrapRef.current as unknown as Measurable | null;
-    scrollFocusedInputIntoView();
-  }, [scrollFocusedInputIntoView]);
-
-  const handleInputBlur = useCallback(() => {
-    focusedInputRef.current = null;
-  }, []);
-
-  // Measurement wrapper refs for each input
-  const nameWrapRef = useRef<RNView>(null);
-  const keywordInputWrapRef = useRef<RNView>(null);
-  const dmMessageWrapRef = useRef<RNView>(null);
-  const buttonTextWrapRef = useRef<RNView>(null);
-  const followPromptMessageWrapRef = useRef<RNView>(null);
-  const followPromptButtonLabelWrapRef = useRef<RNView>(null);
-  const revealMessageWrapRef = useRef<RNView>(null);
-  const publicReplyMessageWrapRef = useRef<RNView>(null);
-  const publicReplyMessagesWrapRef = useRef<RNView>(null);
-  const followUpMessageWrapRef = useRef<RNView>(null);
-  const followUpDelayMinutesWrapRef = useRef<RNView>(null);
+  const [isConnectingIg, setIsConnectingIg] = useState(false);
 
   // Load media when target switches to specific_posts
   useEffect(() => {
@@ -265,10 +160,9 @@ export default function NewAutomationScreen() {
     }
   }, [targetType, media.length, mediaLoading, mediaHasLoaded, loadMedia]);
 
-  // Derive opening DM mode from button text presence
+  // Reflow layout when the button-text presence flips (opening DM mode is derived in the hook)
   const hadButtonTextRef = useRef(false);
   useEffect(() => {
-    setOpeningDmMode(buttonText.trim() ? 'button' : 'direct');
     const hasButton = buttonText.trim().length > 0;
     if (hasButton !== hadButtonTextRef.current) {
       hadButtonTextRef.current = hasButton;
@@ -297,177 +191,6 @@ export default function NewAutomationScreen() {
     const timer = setTimeout(remeasureSections, 350);
     return () => clearTimeout(timer);
   }, [remeasureSections, templatesLoading, media.length, targetType, matchAnyWord, buttonText, publicReplyEnabled, followUpEnabled]);
-
-  const applyTemplate = useCallback((slug: string | null) => {
-    setSelectedTemplateSlug(slug);
-    setMatchAnyWord(false);
-    if (slug === null) {
-      setName('');
-      setKeywords([]);
-      setKeywordInput('');
-      setDmMessage('');
-      setButtonText('');
-      setRevealMessage('');
-      return;
-    }
-    const tmpl = templates.find((t) => t.slug === slug);
-    if (!tmpl) return;
-    setName(tmpl.title);
-    const lowerKeywords = tmpl.keywords.map((k) => k.toLowerCase());
-    setKeywords(lowerKeywords);
-    const kwInput = lowerKeywords.join(', ');
-    setKeywordInput(kwInput);
-    setDmMessage(tmpl.dm_message);
-  }, [templates]);
-
-  const syncKeywordsFromInput = useCallback((text: string) => {
-    const parsed = text
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    setKeywords([...new Set(parsed)]);
-  }, []);
-
-  const handleKeywordInputChange = useCallback((text: string) => {
-    setKeywordInput(text);
-    syncKeywordsFromInput(text);
-  }, [syncKeywordsFromInput]);
-
-  const addExampleKeyword = useCallback((kw: string) => {
-    const current = keywordInput
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (current.includes(kw.toLowerCase())) return;
-    const next = [...current, kw].join(', ');
-    setKeywordInput(next);
-    syncKeywordsFromInput(next);
-  }, [keywordInput, syncKeywordsFromInput]);
-
-  const handleRemoveKeyword = useCallback((kw: string) => {
-    const next = keywords.filter((k) => k !== kw).join(', ');
-    setKeywordInput(next);
-    syncKeywordsFromInput(next);
-  }, [keywords, syncKeywordsFromInput]);
-
-  const toggleMedia = useCallback((id: string) => {
-    setSelectedMediaIds((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
-    );
-  }, []);
-
-  const draft: AutomationDraft = useMemo(
-    () => ({
-      name,
-      targetType,
-      selectedMediaIds,
-      keywords,
-      matchMode,
-      matchAnyWord,
-      dmMessage,
-      openingDmMode,
-      buttonText,
-      revealMessage,
-      publicReplyEnabled,
-      publicReplyMessage,
-      publicReplyMessages,
-      requireFollow,
-      followPromptMessage,
-      followPromptButtonLabel,
-      followUpEnabled,
-      followUpMessage,
-      followUpDelayMinutes,
-      dmTriggerEnabled,
-    }),
-    [name, targetType, selectedMediaIds, keywords, matchMode, matchAnyWord, dmMessage, openingDmMode, buttonText, revealMessage, publicReplyEnabled, publicReplyMessage, publicReplyMessages, requireFollow, followPromptMessage, followPromptButtonLabel, followUpEnabled, followUpMessage, followUpDelayMinutes, dmTriggerEnabled]
-  );
-
-  const validationErrors = useMemo(() => validateAutomationDraft(draft), [draft]);
-  const isValid = validationErrors.length === 0;
-
-  const handleSubmit = useCallback(async (goLive: boolean) => {
-    setSubmitAttempted(true);
-    if (!isValid || creating || savingPaused) return;
-    setSubmitError(null);
-
-    const input: CreateAutomationInput = {
-      name: name.trim(),
-      target_type: targetType,
-      keywords: matchAnyWord ? [] : keywords,
-      match_mode: matchMode,
-      match_any_word: matchAnyWord,
-      dm_message: dmMessage.trim(),
-      opening_dm_mode: openingDmMode,
-      ...(openingDmMode === 'button'
-        ? { button_text: buttonText.trim(), reveal_message: revealMessage.trim() }
-        : { button_text: null, reveal_message: null }),
-      public_reply_enabled: publicReplyEnabled,
-      require_follow: requireFollow,
-      ...(requireFollow
-        ? {
-            follow_prompt_message: followPromptMessage.trim() || null,
-            follow_prompt_button_label: followPromptButtonLabel.trim() || null,
-          }
-        : { follow_prompt_message: null, follow_prompt_button_label: null }),
-      dm_trigger_enabled: dmTriggerEnabled,
-      follow_up_enabled: followUpEnabled,
-      ...(followUpEnabled
-        ? {
-            follow_up_message: followUpMessage.trim() || null,
-            follow_up_delay_minutes: followUpDelayMinutes,
-          }
-        : { follow_up_message: null, follow_up_delay_minutes: null }),
-      ...(targetType === 'specific_posts' ? { media_ids: selectedMediaIds } : {}),
-      ...(publicReplyEnabled
-        ? {
-            public_reply_message: publicReplyMessage.trim() || null,
-            public_reply_messages: publicReplyMessages.filter((m) => m.trim()),
-          }
-        : { public_reply_message: null, public_reply_messages: [] }),
-      status: goLive ? 'active' : 'paused',
-    };
-
-    if (!goLive) setSavingPaused(true);
-    try {
-      const created = await createAutomation(input);
-      if (!created?.$id) {
-        setSubmitError('Automation created, but the server returned no id — open it from the list.');
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ['automations'] });
-      router.dismissTo(
-        `/(tabs)/(automate)/${created.$id}?created=${goLive ? 'live' : 'paused'}` as never,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create automation';
-      addLog(`Create automation error: ${message}`);
-      if (message.includes('409') || message.includes('instagram_not_connected')) {
-        setSubmitError('instagram_not_connected');
-      } else {
-        setSubmitError(message);
-      }
-    } finally {
-      setSavingPaused(false);
-    }
-  }, [
-    isValid, creating, savingPaused, name, targetType, keywords, matchAnyWord, matchMode, dmMessage,
-    openingDmMode, buttonText, revealMessage,
-    publicReplyEnabled, publicReplyMessage, publicReplyMessages, selectedMediaIds,
-    requireFollow, followPromptMessage, followPromptButtonLabel,
-    followUpEnabled, followUpMessage, followUpDelayMinutes, dmTriggerEnabled,
-    createAutomation, queryClient, router,
-  ]);
-
-  const selectedPreviewMedia = useMemo(() => {
-    if (targetType !== 'specific_posts' || selectedMediaIds.length === 0) return null;
-    const firstId = selectedMediaIds[0];
-    return media.find((m) => m.id === firstId) ?? null;
-  }, [targetType, selectedMediaIds, media]);
-
-  const dismissKeyboard = useCallback(() => {
-    Keyboard.dismiss();
-    focusedInputRef.current = null;
-  }, []);
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 56}>
@@ -606,12 +329,12 @@ export default function NewAutomationScreen() {
               <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                 Campaign name
               </Text>
-              <RNView ref={nameWrapRef}>
+              <RNView ref={registerRef('name')}>
                 <Input
                   value={name}
                   placeholder="e.g. Product Link Drop"
                   onChangeText={setName}
-                  onFocus={() => handleInputFocus(nameWrapRef)}
+                  onFocus={() => handleInputFocus('name')}
                   onBlur={handleInputBlur}
                   accessibilityLabel="Automation name"
                 />
@@ -763,12 +486,12 @@ export default function NewAutomationScreen() {
                   </Pressable>
                   {!matchAnyWord ? (
                     <View className="gap-2.5">
-                      <RNView ref={keywordInputWrapRef}>
+                      <RNView ref={registerRef('keywordInput')}>
                         <Input
-                          value={keywordInput}
+                      value={keywordInput}
                           placeholder="Enter a word or multiple"
                           onChangeText={handleKeywordInputChange}
-                          onFocus={() => handleInputFocus(keywordInputWrapRef)}
+                          onFocus={() => handleInputFocus('keywordInput')}
                           onBlur={handleInputBlur}
                           accessibilityLabel="Keywords"
                         />
@@ -880,12 +603,12 @@ export default function NewAutomationScreen() {
                 <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                   We'll replace {'{username}'} with the commenter's name
                 </Text>
-                <RNView ref={dmMessageWrapRef}>
+                <RNView ref={registerRef('dmMessage')}>
                   <Textarea
                     value={dmMessage}
                     placeholder="Hey there! I'm so happy you're here..."
                     onChangeText={setDmMessage}
-                    onFocus={() => handleInputFocus(dmMessageWrapRef)}
+                    onFocus={() => handleInputFocus('dmMessage')}
                     onBlur={handleInputBlur}
                     maxLength={DM_MAX_LENGTH}
                     accessibilityLabel="DM message"
@@ -901,12 +624,12 @@ export default function NewAutomationScreen() {
                   {dmMessage.length}/{DM_MAX_LENGTH}
                 </Text>
 
-                <RNView ref={buttonTextWrapRef}>
+                <RNView ref={registerRef('buttonText')}>
                   <Input
                     value={buttonText}
                     placeholder="Button text (e.g. Send me the link)"
                     onChangeText={setButtonText}
-                    onFocus={() => handleInputFocus(buttonTextWrapRef)}
+                    onFocus={() => handleInputFocus('buttonText')}
                     onBlur={handleInputBlur}
                     maxLength={BUTTON_TEXT_MAX_LENGTH}
                     accessibilityLabel="Button text"
@@ -937,22 +660,22 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       Message shown to non-followers (we'll replace {'{username}'} with their name)
                     </Text>
-                    <RNView ref={followPromptMessageWrapRef}>
+                    <RNView ref={registerRef('followPromptMessage')}>
                       <Textarea
                         value={followPromptMessage}
                         placeholder="Follow me to unlock the link!"
                         onChangeText={setFollowPromptMessage}
-                        onFocus={() => handleInputFocus(followPromptMessageWrapRef)}
+                        onFocus={() => handleInputFocus('followPromptMessage')}
                         onBlur={handleInputBlur}
                         accessibilityLabel="Follow prompt message"
                       />
                     </RNView>
-                    <RNView ref={followPromptButtonLabelWrapRef}>
+                    <RNView ref={registerRef('followPromptButtonLabel')}>
                       <Input
                         value={followPromptButtonLabel}
                         placeholder="Button label (e.g. Follow)"
                         onChangeText={setFollowPromptButtonLabel}
-                        onFocus={() => handleInputFocus(followPromptButtonLabelWrapRef)}
+                        onFocus={() => handleInputFocus('followPromptButtonLabel')}
                         onBlur={handleInputBlur}
                         maxLength={20}
                         accessibilityLabel="Follow prompt button label"
@@ -974,12 +697,12 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       Message revealed after the button is tapped
                     </Text>
-                    <RNView ref={revealMessageWrapRef}>
+                    <RNView ref={registerRef('revealMessage')}>
                       <Textarea
                         value={revealMessage}
                         placeholder="Write the message with the link..."
                         onChangeText={setRevealMessage}
-                        onFocus={() => handleInputFocus(revealMessageWrapRef)}
+                        onFocus={() => handleInputFocus('revealMessage')}
                         onBlur={handleInputBlur}
                         maxLength={REVEAL_MAX_LENGTH}
                         accessibilityLabel="Link DM message"
@@ -1018,12 +741,12 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       We'll replace {'{username}'} with the commenter's name
                     </Text>
-                    <RNView ref={publicReplyMessageWrapRef}>
+                    <RNView ref={registerRef('publicReplyMessage')}>
                       <Textarea
                         value={publicReplyMessage}
                         placeholder="Write your public reply…"
                         onChangeText={setPublicReplyMessage}
-                        onFocus={() => handleInputFocus(publicReplyMessageWrapRef)}
+                        onFocus={() => handleInputFocus('publicReplyMessage')}
                         onBlur={handleInputBlur}
                         accessibilityLabel="Public reply message"
                       />
@@ -1031,11 +754,11 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       Add more replies (one per line) — one will be randomly selected each time
                     </Text>
-                    <RNView ref={publicReplyMessagesWrapRef}>
+                    <RNView ref={registerRef('publicReplyMessages')}>
                       <Textarea
                         placeholder="Thanks for commenting!&#10;Glad you liked it!&#10;Appreciate the support!"
                         onChangeText={(text) => setPublicReplyMessages(text.split('\n'))}
-                        onFocus={() => handleInputFocus(publicReplyMessagesWrapRef)}
+                        onFocus={() => handleInputFocus('publicReplyMessages')}
                         onBlur={handleInputBlur}
                         accessibilityLabel="Additional public reply messages"
                       />
@@ -1076,12 +799,12 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       We'll replace {'{username}'} with the commenter's name
                     </Text>
-                    <RNView ref={followUpMessageWrapRef}>
+                    <RNView ref={registerRef('followUpMessage')}>
                       <Textarea
                         value={followUpMessage}
                         placeholder="Thanks for your interest! Let me know if you have any questions 😊"
                         onChangeText={setFollowUpMessage}
-                        onFocus={() => handleInputFocus(followUpMessageWrapRef)}
+                        onFocus={() => handleInputFocus('followUpMessage')}
                         onBlur={handleInputBlur}
                         accessibilityLabel="Follow-up message"
                       />
@@ -1089,7 +812,7 @@ export default function NewAutomationScreen() {
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       Delay before sending (in minutes)
                     </Text>
-                    <RNView ref={followUpDelayMinutesWrapRef}>
+                    <RNView ref={registerRef('followUpDelayMinutes')}>
                       <Input
                         value={followUpDelayMinutes ? String(followUpDelayMinutes) : ''}
                         placeholder="1440 (24 hours)"
@@ -1101,7 +824,7 @@ export default function NewAutomationScreen() {
                             setFollowUpDelayMinutes(0);
                           }
                         }}
-                        onFocus={() => handleInputFocus(followUpDelayMinutesWrapRef)}
+                        onFocus={() => handleInputFocus('followUpDelayMinutes')}
                         onBlur={() => {
                           handleInputBlur();
                           const num = parseInt(String(followUpDelayMinutes), 10);

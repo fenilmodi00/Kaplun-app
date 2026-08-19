@@ -1,13 +1,5 @@
 /** Gin/Go client for the comment-automation engine. Uses Appwrite JWT auth. */
-import { executeWithRetry } from './resilient';
-import { getAppwriteJWT } from './auth-session';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
-const FETCH_TIMEOUT_MS = 15_000;
-
-if (!API_BASE_URL) {
-  throw new Error('EXPO_PUBLIC_IG_API_BASE_URL is not set. Add it to your .env file.');
-}
+import { get, post, patch, del } from '@/lib/api-go-client';
 
 export type TargetType = 'all_posts' | 'specific_posts' | 'next_reel';
 export type MatchMode = 'whole_word' | 'partial';
@@ -89,71 +81,32 @@ export interface CampaignTemplate {
   dm_message: string;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function authHeaders(): Promise<HeadersInit> {
-  const token = await getAppwriteJWT();
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-}
-
-async function request<T>(
-  path: string,
-  init: RequestInit,
-  retry: boolean,
-): Promise<T> {
-  const call = async (): Promise<T> => {
-    const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: await authHeaders(),
-    });
-    if (res.status === 401) throw new Error('session_expired');
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`automations request failed (${res.status}): ${body.slice(0, 200)}`);
-    }
-    return (res.status === 204 ? null : await res.json()) as T;
-  };
-  return retry ? executeWithRetry(call) : call();
-}
-
 export async function listAutomations(): Promise<Automation[]> {
-  const data = await request<{ automations: Automation[] }>('/automations', { method: 'GET' }, true);
+  const data = await get<{ automations: Automation[] }>('/automations');
   return data.automations;
 }
 
 export async function createAutomation(input: CreateAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>('/automations', {
-    method: 'POST', body: JSON.stringify(input),
-  }, false);
+  const data = await post<{ automation: Automation }>('/automations', input);
   return data.automation;
 }
 
-export async function updateAutomation(id: string, patch: PatchAutomationInput): Promise<Automation> {
-  const data = await request<{ automation: Automation }>(`/automations/${id}`, {
-    method: 'PATCH', body: JSON.stringify(patch),
-  }, false);
+export async function updateAutomation(id: string, input: PatchAutomationInput): Promise<Automation> {
+  const data = await patch<{ automation: Automation }>(`/automations/${id}`, input);
   return data.automation;
 }
 
 export async function deleteAutomation(id: string): Promise<void> {
-  await request<null>(`/automations/${id}`, { method: 'DELETE' }, false);
+  await del(`/automations/${id}`);
 }
 
 export async function listAutomationLogs(id: string): Promise<AutomationLog[]> {
-  const data = await request<{ logs: AutomationLog[] }>(`/automations/${id}/logs`, { method: 'GET' }, true);
+  const data = await get<{ logs: AutomationLog[] }>(`/automations/${id}/logs`);
   return data.logs;
 }
 
 export async function listCampaignTemplates(): Promise<CampaignTemplate[]> {
-  const data = await request<{ templates: CampaignTemplate[] }>('/automations/templates', { method: 'GET' }, true);
+  const data = await get<{ templates: CampaignTemplate[] }>('/automations/templates');
   return data.templates;
 }
 
@@ -172,9 +125,9 @@ export interface OverviewStats {
 }
 
 export async function getAutomationStats(automationId: string): Promise<AutomationStats> {
-  return request<AutomationStats>(`/automations/${automationId}/stats`, { method: 'GET' }, true);
+  return get<AutomationStats>(`/automations/${automationId}/stats`);
 }
 
 export async function getOverviewStats(): Promise<OverviewStats> {
-  return request<OverviewStats>('/automations/stats/overview', { method: 'GET' }, true);
+  return get<OverviewStats>('/automations/stats/overview');
 }

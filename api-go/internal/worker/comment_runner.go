@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"os"
 	"regexp"
 	"slices"
@@ -15,7 +14,6 @@ import (
 
 	"kaplun/api-go/internal/platform/meta"
 	"kaplun/api-go/internal/services/keywords"
-	"kaplun/api-go/internal/services/ratelimit"
 )
 
 // ErrDuplicateKey mirrors Appwrite TablesDB unique-index conflicts (HTTP 409).
@@ -67,6 +65,8 @@ type CommentRunner struct {
 	PublicBaseURL string
 	Log           *slog.Logger
 	Now           func() time.Time
+	Matcher       *TriggerMatcher
+	Sender        *DMSender
 }
 
 // NewCommentRunner constructs a CommentRunner with UTC clock defaults.
@@ -75,11 +75,18 @@ func NewCommentRunner(store CommentStore, graph GraphSender) *CommentRunner {
 	if base == "" {
 		base = "https://api.example.com"
 	}
+	now := func() time.Time { return time.Now().UTC() }
+	matcher := NewTriggerMatcher(store)
+	matcher.Now = now
+	sender := NewDMSender(store, graph)
+	sender.Now = now
 	return &CommentRunner{
 		Store:         store,
 		Graph:         graph,
 		PublicBaseURL: strings.TrimRight(base, "/"),
-		Now:           func() time.Time { return time.Now().UTC() },
+		Now:           now,
+		Matcher:       matcher,
+		Sender:        sender,
 	}
 }
 
@@ -129,111 +136,29 @@ func (r *CommentRunner) ProcessCommentEvent(ctx context.Context, event map[strin
 	if r.Store == nil {
 		return "done", fmt.Errorf("comment store not configured")
 	}
+	if r.Matcher == nil {
+		return "done", fmt.Errorf("trigger matcher not configured")
+	}
 
-	igID := mapString(event, "instagram_account_id")
-	mediaID := mapString(event, "media_id")
-	commentID := mapString(event, "comment_id")
-	commentText := mapString(event, "comment_text")
-	commenterName := mapString(event, "commenter_name")
-
-	allActive, err := r.Store.ListActiveForIG(ctx, igID)
+	triggered, err := r.Matcher.Match(ctx, event)
 	if err != nil {
+		if errors.Is(err, ErrRequeue) {
+			return "requeue", nil
+		}
 		return "done", err
 	}
 
-	for _, auto := range filterAutomationsForMedia(allActive, mediaID) {
-		matchedKeyword := ""
-		if !mapBool(auto, "match_any_word") {
-			mode := mapString(auto, "match_mode")
-			wholeWord := mode == "" || mode == "whole_word"
-
-			m := keywords.MatchKeywords(commentText, mapStringSlice(auto, "keywords"), wholeWord)
-			if !m.Matched {
-				if err := r.failLog(ctx, nil, auto, event, "skipped_no_match"); err != nil {
-					return "done", err
-				}
-				continue
-			}
-			matchedKeyword = m.MatchedKeyword
-		}
-
-		existing, err := r.Store.FindLog(ctx, mapString(auto, "$id"), commentID)
+	commenterName := mapString(event, "commenter_name")
+	for _, t := range triggered {
+		creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(t.Automation, "clerk_user_id"))
 		if err != nil {
 			return "done", err
 		}
-		if existing != nil {
-			action := mapString(existing, "action")
-			if action == "dm_sent" || action == "button_dm_sent" || action == "skipped" || mapString(existing, "dm_sent_at") != "" {
-				continue
-			}
-		}
-
-		creator, err := r.Store.GetCreatorByClerkID(ctx, mapString(auto, "clerk_user_id"))
-		if err != nil {
-			return "done", err
-		}
-		if creator == nil || mapString(creator, "access_token") == "" {
-			if err := r.failLog(ctx, existing, auto, event, "no_access_token"); err != nil {
-				return "done", err
-			}
-			continue
-		}
-
-		rate, rateErr := ratelimit.CheckDMRate(ctx, r.Store, igID, requeueAttempt)
-		if rateErr != nil {
-			// Fail-open like the pre-ctx counter (which counted 0 on error),
-			// but never silently.
-			if r.Log != nil {
-				r.Log.WarnContext(ctx, "dm rate check failed, allowing send",
-					"automation_id", mapString(auto, "$id"),
-					"error", rateErr,
-				)
-			}
-			rate = ratelimit.RateDecision{Allowed: true}
-		}
-		if !rate.Allowed {
-			if rate.ShouldSkip {
-				if err := r.failLog(ctx, existing, auto, event, "skipped_rate_limit"); err != nil {
-					return "done", err
-				}
-				continue
-			}
-			return "requeue", nil
-		}
-
-		logRow := existing
-		if logRow == nil {
-			commentTrim := commentText
-			if len(commentTrim) > 1000 {
-				commentTrim = commentTrim[:1000]
-			}
-			created, cerr := r.Store.CreateLog(ctx, map[string]any{
-				"automation_id":      mapString(auto, "$id"),
-				"clerk_user_id":      mapString(auto, "clerk_user_id"),
-				"ig_user_id":         igID,
-				"media_id":           mediaID,
-				"comment_id":         commentID,
-				"commenter_id":       nilIfEmpty(mapString(event, "commenter_id")),
-				"commenter_username": nilIfEmpty(commenterName),
-				"comment_text":       commentTrim,
-				"matched_keyword":    nilIfEmpty(matchedKeyword),
-				"action":             "pending",
-				"created_at":         r.nowISO(),
-			})
-			if cerr != nil {
-				if IsDuplicateKey(cerr) {
-					continue
-				}
-				return "done", cerr
-			}
-			logRow = created
-		}
-
-		if err := r.sendWithFreshToken(ctx, auto, creator, func(token string) error {
-			return r.sendAutomationMessages(ctx, auto, event, logRow, token, commenterName)
+		if err := r.sendWithFreshToken(ctx, t.Automation, creator, func(token string) error {
+			return r.sendAutomationMessages(ctx, t.Automation, event, t.LogRow, token, commenterName)
 		}); err != nil {
 			if meta.IsTokenExpired(err) {
-				r.markTokenExpired(ctx, auto, logRow)
+				r.markTokenExpired(ctx, t.Automation, t.LogRow)
 				continue
 			}
 			if meta.IsGraphRateLimit(err) {
@@ -251,199 +176,10 @@ func (r *CommentRunner) sendAutomationMessages(
 	auto, event, logRow map[string]any,
 	token, commenterName string,
 ) error {
-	if r.Graph == nil {
-		return fmt.Errorf("graph sender not configured")
+	if r.Sender == nil {
+		return fmt.Errorf("dm sender not configured")
 	}
-
-	commentID := mapString(event, "comment_id")
-	igID := mapString(event, "instagram_account_id")
-	logID := mapString(logRow, "$id")
-
-	// STEP 7: public reply first — the log row already exists at this point, so
-	// a successful send is stamped (public_reply_sent_at) and never double-posts
-	// across job retries. ANY failure is recorded (public_reply_error) and never
-	// blocks the DM leg.
-	if mapBool(auto, "public_reply_enabled") && mapString(logRow, "public_reply_sent_at") == "" {
-		msg := ""
-		if msgs := mapStringSlice(auto, "public_reply_messages"); len(msgs) > 0 {
-			msg = msgs[rand.Intn(len(msgs))]
-		} else {
-			msg = mapString(auto, "public_reply_message")
-		}
-		if msg != "" {
-			if err := r.Graph.SendCommentReply(ctx, commentID, Personalize(msg, commenterName), token); err != nil {
-				if r.Log != nil {
-					r.Log.WarnContext(ctx, "public reply failed",
-						"automation_id", mapString(auto, "$id"),
-						"error", err,
-					)
-				}
-				reason := err.Error()
-				if len(reason) > 500 {
-					reason = reason[:500]
-				}
-				if uerr := r.Store.UpdateLog(ctx, logID, map[string]any{
-					"public_reply_error": reason,
-				}); uerr != nil && r.Log != nil {
-					r.Log.WarnContext(ctx, "failed to record public reply error",
-						"automation_id", mapString(auto, "$id"),
-						"error", uerr,
-					)
-				}
-			} else if uerr := r.Store.UpdateLog(ctx, logID, map[string]any{
-				"public_reply_sent_at": r.nowISO(),
-				"public_reply_error":   nil,
-			}); uerr != nil && r.Log != nil {
-				// The reply was posted; a missed stamp risks a re-post on retry,
-				// but failing the job here would guarantee one. Log only.
-				r.Log.WarnContext(ctx, "failed to stamp public_reply_sent_at",
-					"automation_id", mapString(auto, "$id"),
-					"error", uerr,
-				)
-			}
-		}
-	}
-
-	// Crash-safe dedup: dm_sent_at is stamped in the same UpdateLog that flips
-	// the action, so a set timestamp proves the DM leg already delivered.
-	if mapString(logRow, "dm_sent_at") != "" {
-		return nil
-	}
-
-	// Cross-campaign dedup: Meta allows exactly one private reply per comment.
-	// If another campaign already sent a DM for this comment, skip the DM leg
-	// but keep the public reply (which is per-campaign and not subject to the limit).
-	autoID := mapString(auto, "$id")
-	existingLogs, err := r.Store.FindLogByCommentID(ctx, commentID)
-	if err != nil {
-		return err
-	}
-	for _, other := range existingLogs {
-		if mapString(other, "automation_id") != autoID {
-			if r.Log != nil {
-				r.Log.InfoContext(ctx, "cross-campaign dedup",
-					"comment_id", commentID,
-					"automation_id", autoID,
-					"other_automation_id", mapString(other, "automation_id"),
-				)
-			}
-			// Appwrite enum only allows: pending|dm_sent|button_dm_sent|reveal_sent|reply_sent|skipped|failed.
-			// Put the specific skip cause in reason, not action.
-			return r.Store.UpdateLog(ctx, mapString(logRow, "$id"), map[string]any{
-				"action": "skipped",
-				"reason": "skipped_dedup",
-			})
-		}
-	}
-
-	dmText := mapString(auto, "dm_message")
-	revealText := mapString(auto, "reveal_message")
-
-	// Follow gate: if requireFollow is true and mode is NOT button, check follow status
-	// before sending the DM. If not following, send a follow prompt button instead.
-	if mapBool(auto, "require_follow") && mapString(auto, "opening_dm_mode") != "button" {
-		commenterID := mapString(event, "commenter_id")
-		if commenterID != "" {
-			following, fErr := r.Graph.GetUserFollowStatus(ctx, token, commenterID)
-			if fErr != nil {
-				// Log but fail-open — if we can't verify, send the DM anyway
-				if r.Log != nil {
-					r.Log.WarnContext(ctx, "follow status check failed, sending DM anyway",
-						"automation_id", mapString(auto, "$id"),
-						"error", fErr,
-					)
-				}
-			} else if following != nil && !*following {
-				// Not following — send follow prompt button
-				promptMsg := mapString(auto, "follow_prompt_message")
-				if promptMsg == "" {
-					promptMsg = "Follow me to unlock the link!"
-				}
-				btnLabel := mapString(auto, "follow_prompt_button_label")
-				if btnLabel == "" {
-					btnLabel = "Follow"
-				}
-				if err := r.Graph.SendPrivateReplyWithButton(
-					ctx,
-					igID,
-					commentID,
-					Personalize(promptMsg, commenterName),
-					btnLabel,
-					"followcheck:"+mapString(auto, "$id"),
-					token,
-				); err != nil {
-					return err
-				}
-				return r.Store.UpdateLog(ctx, logID, map[string]any{
-					"action":     "dm_sent",
-					"reason":     "follow_prompt_sent",
-					"dm_sent_at": r.nowISO(),
-				})
-			}
-		}
-	}
-
-	if mapString(auto, "opening_dm_mode") == "button" && mapString(auto, "button_text") != "" && revealText != "" {
-		// OpenReply / ManyChat style: opening DM is always a postback button.
-		// Tap fires messaging_postbacks → follow-gate (optional) → reveal DM with the link.
-		// Do NOT use web_url here — that would open the site immediately and skip the gate.
-		postbackPayload := "reveal:" + mapString(auto, "$id")
-		if mapBool(auto, "require_follow") {
-			postbackPayload = "followcheck:" + mapString(auto, "$id")
-		}
-		if err := r.Graph.SendPrivateReplyWithButton(
-			ctx,
-			igID,
-			commentID,
-			Personalize(dmText, commenterName),
-			mapString(auto, "button_text"),
-			postbackPayload,
-			token,
-		); err != nil {
-			if meta.IsTemplateRejection(err) {
-				commenterID := mapString(event, "commenter_id")
-				if commenterID == "" {
-					return err
-				}
-				fallbackMsg := Personalize(dmText, commenterName)
-				if fbErr := r.Graph.SendDirectMessage(ctx, igID, commenterID, fallbackMsg, token); fbErr != nil {
-					return err
-				}
-				if err := r.Store.UpdateLog(ctx, logID, map[string]any{
-					"action":     "dm_sent",
-					"reason":     nil,
-					"dm_sent_at": r.nowISO(),
-				}); err != nil {
-					return err
-				}
-				r.scheduleFollowUp(ctx, auto, commenterID, commenterName)
-				return nil
-			}
-			return err
-		}
-		if err := r.Store.UpdateLog(ctx, logID, map[string]any{
-			"action":     "button_dm_sent",
-			"reason":     nil,
-			"dm_sent_at": r.nowISO(),
-		}); err != nil {
-			return err
-		}
-		r.scheduleFollowUp(ctx, auto, mapString(event, "commenter_id"), commenterName)
-		return nil
-	}
-
-	if err := r.Graph.SendPrivateReply(ctx, igID, commentID, Personalize(dmText, commenterName), token); err != nil {
-		return err
-	}
-	if err := r.Store.UpdateLog(ctx, logID, map[string]any{
-		"action":     "dm_sent",
-		"reason":     nil,
-		"dm_sent_at": r.nowISO(),
-	}); err != nil {
-		return err
-	}
-	r.scheduleFollowUp(ctx, auto, mapString(event, "commenter_id"), commenterName)
-	return nil
+	return r.Sender.Send(ctx, auto, event, logRow, token, commenterName)
 }
 
 // RunSendReveal executes a send_reveal job payload.

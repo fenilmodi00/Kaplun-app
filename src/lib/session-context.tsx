@@ -12,11 +12,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { account, client } from '@/lib/appwrite';
 import {
   clearStoredSession,
-  getAppwriteJWT,
   isNetworkError,
   persistSession,
   restoreSession,
 } from '@/lib/auth-session';
+import { post } from '@/lib/api-go-client';
 import { addLog } from '@/lib/logger';
 
 type SessionContextValue = {
@@ -29,20 +29,11 @@ type SessionContextValue = {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 function fireEnsureProfile() {
-  const baseUrl = process.env.EXPO_PUBLIC_IG_API_BASE_URL;
-  if (!baseUrl) return;
-  getAppwriteJWT()
-    .then((jwt) => {
-      fetch(`${baseUrl}/auth/ensure-profile`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${jwt}` },
-      }).catch(() => {});
-    })
-    .catch((err: unknown) => {
-      addLog(
-        `[session] ensure-profile failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
+  post('/auth/ensure-profile').catch((err: unknown) => {
+    addLog(
+      `[session] ensure-profile failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
 }
 
 export function useSession(): SessionContextValue {

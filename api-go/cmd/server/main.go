@@ -207,6 +207,8 @@ func buildDependencies(cfg config.Config, logger *slog.Logger) (router.Dependenc
 			commentRunner.PublicBaseURL = strings.TrimRight(cfg.PublicBaseURL, "/")
 		}
 		commentRunner.Log = logger
+		commentRunner.Sender.Log = logger
+		commentRunner.Matcher.Log = logger
 		logger.Info("automations store ready")
 	} else if awClient != nil {
 		logger.Warn("automations store disabled: set all APPWRITE_*_TABLE_ID env vars")

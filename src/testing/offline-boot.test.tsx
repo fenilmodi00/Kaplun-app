@@ -5,6 +5,11 @@
 
 jest.mock('@/global.css', () => ({}), { virtual: true });
 
+jest.mock('@/lib/api-go-client', () => ({
+  post: jest.fn().mockResolvedValue(null),
+  get: jest.fn(),
+}));
+
 import React from 'react';
 import { Text } from 'react-native';
 import { render, waitFor } from '@testing-library/react-native';
@@ -17,6 +22,7 @@ import {
   isNetworkError,
   getAppwriteJWT,
 } from '@/lib/auth-session';
+import { post } from '@/lib/api-go-client';
 
 function TestConsumer() {
   const { session, isLoading } = useSession();
@@ -94,19 +100,12 @@ describe('Optimistic boot — SessionProvider', () => {
     (restoreSession as jest.Mock).mockResolvedValue('secret-123');
     (account.get as jest.Mock).mockResolvedValue({ $id: 'user-1' });
     (getAppwriteJWT as jest.Mock).mockResolvedValue('jwt-token');
-    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
-
     const { getByText } = await renderProvider();
     await waitFor(() => {
       expect(getByText('authenticated')).toBeTruthy();
     });
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith('http://test-api/auth/ensure-profile', expect.objectContaining({
-        method: 'POST',
-        headers: { Authorization: 'Bearer jwt-token' },
-      }));
+      expect(post).toHaveBeenCalledWith('/auth/ensure-profile');
     });
-
-    fetchSpy.mockRestore();
   });
 });

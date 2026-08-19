@@ -113,7 +113,7 @@ describe('createAutomation', () => {
     } as Response);
 
     await expect(createAutomation(createInput)).rejects.toThrow(
-      'automations request failed (422):',
+      'request failed (422):',
     );
   });
 });
