@@ -21,7 +21,7 @@ var ErrRequeue = errors.New("requeue")
 type TriggeredAutomation struct {
 	Automation     map[string]any
 	MatchedKeyword string
-	LogRow        map[string]any
+	LogRow         map[string]any
 }
 
 // TriggerMatcher matches comment events against active automations: keyword match,
@@ -149,7 +149,7 @@ func (m *TriggerMatcher) Match(ctx context.Context, event map[string]any) ([]Tri
 		triggered = append(triggered, TriggeredAutomation{
 			Automation:     auto,
 			MatchedKeyword: matchedKeyword,
-			LogRow:        logRow,
+			LogRow:         logRow,
 		})
 	}
 

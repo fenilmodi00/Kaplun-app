@@ -12,7 +12,7 @@ import (
 type dmStore struct {
 	logs      map[string]map[string]any
 	otherLogs []map[string]any
-	followUps  []map[string]any
+	followUps []map[string]any
 }
 
 func newDMStore() *dmStore {
@@ -20,7 +20,7 @@ func newDMStore() *dmStore {
 }
 
 func (s *dmStore) ListActiveForIG(context.Context, string) ([]map[string]any, error) { return nil, nil }
-func (s *dmStore) FindLog(context.Context, string, string) (map[string]any, error)  { return nil, nil }
+func (s *dmStore) FindLog(context.Context, string, string) (map[string]any, error)   { return nil, nil }
 func (s *dmStore) FindLogByCommentID(context.Context, string) ([]map[string]any, error) {
 	return s.otherLogs, nil
 }
@@ -48,9 +48,9 @@ func (s *dmStore) GetCreatorByClerkID(context.Context, string) (map[string]any, 
 	return nil, nil
 }
 func (s *dmStore) UpdateCreatorToken(context.Context, string, string, string) error { return nil }
-func (s *dmStore) GetAutomation(context.Context, string) (map[string]any, error)  { return nil, nil }
-func (s *dmStore) GetJob(context.Context, string) (map[string]any, error)        { return nil, nil }
-func (s *dmStore) UpdateJob(context.Context, string, map[string]any) error        { return nil }
+func (s *dmStore) GetAutomation(context.Context, string) (map[string]any, error)    { return nil, nil }
+func (s *dmStore) GetJob(context.Context, string) (map[string]any, error)           { return nil, nil }
+func (s *dmStore) UpdateJob(context.Context, string, map[string]any) error          { return nil }
 func (s *dmStore) CountRecentDMActions(context.Context, string, string) (int, error) {
 	return 0, nil
 }
@@ -58,7 +58,9 @@ func (s *dmStore) CreateJob(_ context.Context, _ string, payload map[string]any,
 	s.followUps = append(s.followUps, payload)
 	return "job1", nil
 }
-func (s *dmStore) HasPendingFollowUp(context.Context, string, string) (bool, error) { return false, nil }
+func (s *dmStore) HasPendingFollowUp(context.Context, string, string) (bool, error) {
+	return false, nil
+}
 
 // dmGraph is a minimal GraphSender stub for DMSender tests.
 type dmGraph struct {
@@ -114,7 +116,7 @@ func TestDMSenderDirectModeSendsPrivateReplyAndSchedulesFollowUp(t *testing.T) {
 	store := newDMStore()
 	graph := &dmGraph{}
 	auto := map[string]any{
-		"$id":              "a1",
+		"$id":               "a1",
 		"ig_user_id":        "ig1",
 		"dm_message":        "Hi {username}",
 		"follow_up_enabled": true,
@@ -148,11 +150,11 @@ func TestDMSenderButtonModeSendsButtonDM(t *testing.T) {
 	graph := &dmGraph{}
 	auto := map[string]any{
 		"$id":             "a1",
-		"ig_user_id":       "ig1",
+		"ig_user_id":      "ig1",
 		"dm_message":      "Hi {username}",
 		"opening_dm_mode": "button",
-		"button_text":      "Get link",
-		"reveal_message":   "https://kaplun.tech",
+		"button_text":     "Get link",
+		"reveal_message":  "https://kaplun.tech",
 	}
 	logRow := map[string]any{"$id": "log1"}
 	store.logs["log1"] = logRow
@@ -180,11 +182,11 @@ func TestDMSenderTemplateRejectionFallsBackToDirectMessage(t *testing.T) {
 	graph := &dmGraph{btnErr: &meta.MetaAPIError{Code: 100, Message: "template rejected"}}
 	auto := map[string]any{
 		"$id":             "a1",
-		"ig_user_id":       "ig1",
+		"ig_user_id":      "ig1",
 		"dm_message":      "Hi {username}",
 		"opening_dm_mode": "button",
-		"button_text":      "Get link",
-		"reveal_message":   "https://kaplun.tech",
+		"button_text":     "Get link",
+		"reveal_message":  "https://kaplun.tech",
 	}
 	logRow := map[string]any{"$id": "log1"}
 	store.logs["log1"] = logRow
@@ -254,8 +256,8 @@ func TestDMSenderFollowGateSendsFollowPromptButton(t *testing.T) {
 	following := false
 	graph.following = &following
 	auto := map[string]any{
-		"$id":           "a1",
-		"dm_message":    "hi",
+		"$id":            "a1",
+		"dm_message":     "hi",
 		"require_follow": true,
 	}
 	logRow := map[string]any{"$id": "log1"}

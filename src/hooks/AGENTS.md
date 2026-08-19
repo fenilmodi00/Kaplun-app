@@ -1,6 +1,6 @@
-# src/hooks/ — Data Layer
+# src/hooks/ — Data Layer + Domain/UI Hooks
 
-10 hooks: the app's data-fetching layer. All use `@tanstack/react-query` (useQuery/useMutation/useQueries) against `@/lib/repository` for Appwrite CRUD and `@/lib/instagram` for Instagram operations.
+12 hooks: the app's data-fetching layer plus domain-logic and UI-choreography hooks. Data hooks use `@tanstack/react-query` (useQuery/useMutation/useQueries) against `@/lib/repository` for Appwrite CRUD and `@/lib/instagram` for Instagram operations. Domain/UI hooks (`useAutomationDraft`, `useScrollRevealLayout`, `useClayAnimations`) own form state, scroll choreography, and animation primitives without data fetching.
 
 ## STRUCTURE
 
@@ -15,6 +15,8 @@
 | `useInsights` | `useInsights.ts` | Instagram via `@/lib/instagram` (`fetchProfile` + `fetchAccountInsights` + `fetchMedia`) | `useQueries` (parallel) | No | `{ profile, insights, topMedia, isLoading, error, refresh }`; takes `windowDays` (7/28), surfaces `'session_expired'` / `'insights_permission'` |
 | `useAutomations` | `useAutomations.ts` | Gin api-go via `@/lib/automations` | `useQuery` + `useMutation` | No | Automations CRUD + `useOverviewStats` / `useAutomationLogs` / `useAutomationStats` |
 | `useAutomationGate` | `useAutomationGate.ts` | Instagram OAuth | `useQuery` + `useMutation` | No | `{ connected, loading, connect }` |
+| `useAutomationDraft` | `useAutomationDraft.ts` | Gin api-go via `@/lib/api-go-client` | No (form state) | No | Automation draft state, keyword/message handlers, create handler, validation |
+| `useScrollRevealLayout` | `useScrollRevealLayout.ts` | — | No (layout) | No | Scroll-position tracking, input-focus scroll, section refs |
 
 ## WHERE TO LOOK
 
