@@ -16,14 +16,14 @@ import (
 // updates, and follow-up scheduling. CommentRunner delegates its send leg here.
 type DMSender struct {
 	Graph         GraphSender
-	Store         CommentStore
+	Store         SenderStore
 	PublicBaseURL string
 	Log           *slog.Logger
 	Now           func() time.Time
 }
 
 // NewDMSender constructs a DMSender with a UTC clock default.
-func NewDMSender(store CommentStore, graph GraphSender) *DMSender {
+func NewDMSender(store SenderStore, graph GraphSender) *DMSender {
 	return &DMSender{
 		Store: store,
 		Graph: graph,

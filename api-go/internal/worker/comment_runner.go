@@ -26,23 +26,58 @@ func IsDuplicateKey(err error) bool {
 
 var usernameTokenRE = regexp.MustCompile(`(?i)\{username\}`)
 
-// CommentStore is the persistence surface required by the automation job runner.
-type CommentStore interface {
-	ListActiveForIG(ctx context.Context, igUserID string) ([]map[string]any, error)
+// LogStore is the log-CRUD surface needed by TriggerMatcher and DMSender.
+type LogStore interface {
 	FindLog(ctx context.Context, automationID, commentID string) (map[string]any, error)
 	FindLogByCommentID(ctx context.Context, commentID string) ([]map[string]any, error)
 	FindButtonDMForUser(ctx context.Context, automationID, userID string) (map[string]any, error)
 	CreateLog(ctx context.Context, data map[string]any) (map[string]any, error)
 	UpdateLog(ctx context.Context, logID string, data map[string]any) error
+	CountRecentDMActions(ctx context.Context, igUserID, since string) (int, error)
+}
+
+// AutomationStore is the automation-query surface needed by TriggerMatcher.
+type AutomationStore interface {
+	ListActiveForIG(ctx context.Context, igUserID string) ([]map[string]any, error)
+	GetAutomation(ctx context.Context, automationID string) (map[string]any, error)
 	UpdateAutomation(ctx context.Context, automationID string, data map[string]any) error
+	HasPendingFollowUp(ctx context.Context, automationID, userID string) (bool, error)
+}
+
+// CreatorStore is the creator-query surface needed by TriggerMatcher and CommentRunner.
+type CreatorStore interface {
 	GetCreatorByClerkID(ctx context.Context, clerkUserID string) (map[string]any, error)
 	UpdateCreatorToken(ctx context.Context, creatorID, token, expiresAt string) error
-	GetAutomation(ctx context.Context, automationID string) (map[string]any, error)
+}
+
+// JobStore is the job-CRUD surface needed by DMSender and CommentRunner.
+type JobStore interface {
 	GetJob(ctx context.Context, jobID string) (map[string]any, error)
 	UpdateJob(ctx context.Context, jobID string, data map[string]any) error
-	CountRecentDMActions(ctx context.Context, igUserID, since string) (int, error)
 	CreateJob(ctx context.Context, jobType string, payload map[string]any, runAt, dedupKey string) (string, error)
+}
+
+// MatcherStore is the store surface TriggerMatcher needs.
+type MatcherStore interface {
+	AutomationStore
+	LogStore
+	CreatorStore
+}
+
+// SenderStore is the store surface DMSender needs.
+type SenderStore interface {
+	LogStore
+	JobStore
 	HasPendingFollowUp(ctx context.Context, automationID, userID string) (bool, error)
+}
+
+// CommentStore is the full persistence surface — all sub-interfaces combined.
+// New code should depend on the narrower MatcherStore / SenderStore instead.
+type CommentStore interface {
+	LogStore
+	AutomationStore
+	CreatorStore
+	JobStore
 }
 
 // GraphSender sends Instagram Graph messaging / reply calls.

@@ -28,13 +28,13 @@ type TriggeredAutomation struct {
 // dedup, creator token presence, and DM rate limiting. It returns the automations
 // that should send; the caller performs the actual send.
 type TriggerMatcher struct {
-	Store CommentStore
+	Store MatcherStore
 	Log   *slog.Logger
 	Now   func() time.Time
 }
 
 // NewTriggerMatcher constructs a TriggerMatcher with a UTC clock default.
-func NewTriggerMatcher(store CommentStore) *TriggerMatcher {
+func NewTriggerMatcher(store MatcherStore) *TriggerMatcher {
 	return &TriggerMatcher{
 		Store: store,
 		Now:   func() time.Time { return time.Now().UTC() },
