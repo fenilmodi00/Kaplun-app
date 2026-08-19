@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { View, Pressable, useCSSVariable } from '@/tw';
 import { SymbolIcon, type SymbolName } from '@/components/symbol-icon';
-import { hapticSelection } from '@/lib/haptics';
+import { hapticClick } from '@/lib/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView, LiquidGlassView } from '@sbaiahmed1/react-native-blur';
 import type { BottomTabBarProps } from "expo-router/js-tabs";
@@ -53,7 +53,7 @@ function TabButton({
   onPress,
 }: {
   isFocused: boolean;
-  tab: typeof TABS[number];
+  tab: (typeof TABS)[number];
   onPress: () => void;
 }) {
   const focus = useSharedValue(isFocused ? 1 : 0);
@@ -65,7 +65,6 @@ function TabButton({
     });
   }, [isFocused, focus]);
 
-  // Stacked muted/white glyph pairs scale+fade swap via `focus`.
   const activeIconStyle = useAnimatedStyle(() => ({
     opacity: focus.value,
     transform: [{ scale: focus.value }],
@@ -104,7 +103,7 @@ function TabButton({
   );
 }
 
-export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
+export function TabBar({ state, navigation, insets }: BottomTabBarProps & { hidden?: boolean }) {
   const minimize = useSharedValue(0);
   const accumulator = useRef(0);
   const canvas = (useCSSVariable('--color-background') as string) ?? '#000000';
@@ -133,8 +132,6 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
     navigation.preload('(insights)');
   }, [navigation]);
 
-  // Instagram-style whole-pill scale: REST_SCALE at rest, MIN_SCALE on scroll down,
-  // anchored bottom-center so the pill sinks toward the bottom edge. All tabs stay visible.
   const scaleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: REST_SCALE - minimize.value * (REST_SCALE - MIN_SCALE) }],
     transformOrigin: '50% 100%',
@@ -214,7 +211,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
                       isFocused={isFocused}
                       tab={tab}
                       onPress={() => {
-                        hapticSelection();
+                        hapticClick();
                         const event = navigation.emit({
                           type: 'tabPress',
                           target: state.routes[index].key,
@@ -245,7 +242,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
                       isFocused={isFocused}
                       tab={tab}
                       onPress={() => {
-                        hapticSelection();
+                        hapticClick();
                         const event = navigation.emit({
                           type: 'tabPress',
                           target: state.routes[index].key,

@@ -1,17 +1,5 @@
-/**
- * TabBar unit tests.
- *
- * Verifies:
- * - All 5 tabs render with accessibility labels
- * - Pressing a tab calls navigation.navigate with the correct route
- * - No navigation when already focused or event is prevented
- * - Hides on nested 'new' route
- * - All tabs expose the tab role
- */
-
 jest.mock('@/lib/haptics', () => ({
-  hapticSelection: jest.fn(),
-  hapticImpactLight: jest.fn(),
+  hapticClick: jest.fn(),
 }));
 
 // Mock SymbolIcon to avoid expo-image and @expo/vector-icons deps

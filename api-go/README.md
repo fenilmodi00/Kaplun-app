@@ -52,4 +52,3 @@ EXPO_PUBLIC_IG_API_BASE_URL=http://localhost:8000
 
 Leave `EXPO_PUBLIC_IG_API_PROXY_URL` unset — the app calls Instagram directly via `graph.instagram.com` (the old Appwrite ig-api-proxy is dead; Appwrite strips the reserved `x-appwrite-user-jwt` header).
 
-See `docs/fastapi-to-gin-inventory.md` and `docs/plans/2026-07-30-fastapi-to-gin-cutover.md`.

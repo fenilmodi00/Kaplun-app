@@ -1,6 +1,6 @@
 # api-go/ — Gin Backend
 
-Go/Gin replacement for the removed FastAPI `api/`. External contracts (routes, error shapes, auth) must match what the Expo app and Meta webhooks expect — the frozen reference is `../docs/fastapi-to-gin-inventory.md`. Module path: `kaplun/api-go`.
+Go/Gin backend service for Kaplun. External contracts (routes, error shapes, auth) match what the Expo app and Meta webhooks expect. Module path: `kaplun/api-go`.
 
 ## COMMANDS
 

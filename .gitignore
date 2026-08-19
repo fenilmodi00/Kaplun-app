@@ -42,10 +42,13 @@ opencode-rag.json
 /ios
 /android
 
-# agent metadata
+# agent metadata and caches
 .omo/
 .worktrees/
-
+.superpowers/
+.codegraph/
+.playwright-mcp/
+.pytest_cache/
 # Python
 __pycache__/
 *.py[cod]

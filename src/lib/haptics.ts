@@ -1,13 +1,21 @@
 import * as Haptics from 'expo-haptics';
-
-const IS_IOS = process.env.EXPO_OS === 'ios';
+import { Platform } from 'react-native';
 
 export function hapticSelection(): void {
-  if (!IS_IOS) return;
   Haptics.selectionAsync().catch(() => {});
 }
 
 export function hapticImpactLight(): void {
-  if (!IS_IOS) return;
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+}
+
+/** Short crisp click — selection tick on iOS, native context-click on Android. */
+export function hapticClick(): void {
+  if (Platform.OS === 'android') {
+    Haptics.performAndroidHapticsAsync(
+      Haptics.AndroidHaptics.Context_Click,
+    ).catch(() => {});
+  } else {
+    Haptics.selectionAsync().catch(() => {});
+  }
 }

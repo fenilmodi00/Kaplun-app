@@ -96,6 +96,7 @@ describe('useAutomationGate', () => {
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
+      expect(mockGetCreatorByClerkId).toHaveBeenCalled();
     });
 
     await act(async () => {
@@ -120,6 +121,7 @@ describe('useAutomationGate', () => {
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
+      expect(mockGetCreatorByClerkId).toHaveBeenCalled();
     });
 
     await expect(result.current.connect()).rejects.toThrow(/no usable token was saved/i);

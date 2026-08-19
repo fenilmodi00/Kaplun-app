@@ -76,7 +76,6 @@ Key architectural decisions:
 │   └── global.css          # Tailwind theme tokens (Clay design system)
 ├── __mocks__/              # Jest manual mocks (@expo/ui)
 ├── assets/                 # App icons + splash
-├── docs/                   # Architecture/design docs and migration plans
 ├── scripts/                # Repo checks (check-structure.mjs)
 ├── package.json            # Bun/Expo dependencies and scripts
 ├── app.json                # Expo app config
