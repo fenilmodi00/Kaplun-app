@@ -431,8 +431,6 @@ export default function AuthScreen() {
             <Tabs.Trigger value="login">Log In</Tabs.Trigger>
             <Tabs.Trigger value="signup">Sign Up</Tabs.Trigger>
           </Tabs.List>
-          <Tabs.Content value="login">{null}</Tabs.Content>
-          <Tabs.Content value="signup">{null}</Tabs.Content>
         </Tabs>
       </View>
 

@@ -13,7 +13,6 @@ Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, 
 | `edge-blur.tsx` | (DELETED — replaced by inline `LinearGradient` in TabBar and `(tabs)/_layout.tsx`) |
 | `screen-shell.tsx` | Screen padding shell; exports `TAB_BAR_OVERLAY` used with `useSafeAreaInsets` so content clears the floating tab bar |
 | `symbol-icon.tsx` | SF Symbol wrapper used by the tab bar |
-| `ui/error-state.tsx` | Shared error state: centered message + optional Retry button with mount-time shake. Consolidates per-screen private copies |
 
 ## FOLDER RULE — multi-file kits inside `ui/`
 
@@ -32,7 +31,7 @@ Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, 
 
 | Directory | Convention | Examples |
 |-----------|-----------|----------|
-| `ui/` | kebab-case | `toggle-card.tsx`, `error-state.tsx`, `glass-surface.tsx` |
+| `ui/` | kebab-case | `reveal.tsx` |
 | `ui/<kit>/` | kebab-case files | `bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx` |
 | `tab-bar/` | PascalCase | `TabBar.tsx` |
 | `auth/` | PascalCase | `AuthScreen.tsx` |
