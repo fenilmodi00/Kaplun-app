@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { View as RNView } from 'react-native';
 
-import { View, Pressable, useCSSVariable } from '@/tw';
+import { View, useCSSVariable } from '@/tw';
 import { Badge, Button, Card, Kpi, Task, Text } from 'panelui-native';
 import { addLog } from '@/lib/logger';
 import type { ActionPriority, ProfileReport, ReportMeta } from '@/lib/profile-score';
@@ -170,17 +170,16 @@ export function Scorecard({
         </Text>
       ) : null}
 
-      <Pressable
+      <Button
+        variant="ghost"
+        size="sm"
         onPress={onRefresh}
-        hitSlop={10}
-        className="flex-row items-center self-center gap-1.5 px-3 py-2"
         testID="score-refresh"
+        className="self-center"
+        startContent={<Ionicons name="refresh-outline" size={14} color={muted} />}
       >
-        <Ionicons name="refresh-outline" size={14} color={muted} />
-        <Text size="xs" muted>
-          Refresh analysis
-        </Text>
-      </Pressable>
+        Refresh analysis
+      </Button>
     </>
   );
 }

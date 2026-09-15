@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, useCSSVariable } from '@/tw';
@@ -8,6 +7,7 @@ import {
   Button,
   EmptyState,
   Input,
+  KeyboardAvoider,
   Marker,
   Message,
   MessageScroller,
@@ -153,11 +153,7 @@ export default function ThreadScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior="padding"
-      keyboardVerticalOffset={0}
-    >
+    <KeyboardAvoider className="flex-1">
       <View className="flex-1 bg-background">
         {/* Header: back, campaign_title, agent_assigned, status badge */}
         <View
@@ -224,6 +220,6 @@ export default function ThreadScreen() {
           </Button>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoider>
   );
 }

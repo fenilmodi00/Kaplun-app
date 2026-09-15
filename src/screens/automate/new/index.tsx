@@ -19,19 +19,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
-import { Button, Card, Input, Textarea, Switch } from 'panelui-native';
+import { Badge, Button, Card, Chip, Input, RadioGroup, Steps, Switch, TagInput, Textarea } from 'panelui-native';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { useAutomationDraft } from '@/hooks/useAutomationDraft';
 import { useScrollRevealLayout } from '@/hooks/useScrollRevealLayout';
 import type { TargetType, MatchMode, CampaignTemplate } from '@/lib/automations';
 import { listCampaignTemplates } from '@/lib/automations';
 import { addLog } from '@/lib/logger';
-import { View, Text, Pressable, ScrollView } from '@/tw';
+import { View, Text, ScrollView } from '@/tw';
 import { cn } from '@/tw/cn';
 import { Reveal } from '@/components/ui/reveal';
 import { AutomationDmPreview } from '@/components/automation/AutomationDmPreview';
 import { useMediaPicker } from './hooks';
-import { PressableScale, KeywordChip, MediaCarousel } from './components';
+import { MediaCarousel } from './components';
 
 const TARGET_OPTIONS: { value: TargetType; label: string; description?: string }[] = [
   { value: 'specific_posts', label: 'a specific post or reel' },
@@ -145,13 +145,13 @@ export default function NewAutomationScreen() {
     handleSubmit,
     handleKeywordInputChange,
     addExampleKeyword,
-    handleRemoveKeyword,
     toggleMedia,
     applyTemplate,
     selectedPreviewMedia,
   } = useAutomationDraft(templates, media);
 
   const [isConnectingIg, setIsConnectingIg] = useState(false);
+  const currentStepIndex = Math.max(0, STEPS.findIndex((s) => s.id === currentStep));
 
   // Load media when target switches to specific_posts
   useEffect(() => {
@@ -199,58 +199,35 @@ export default function NewAutomationScreen() {
         className="flex-row items-center justify-between px-2 pb-2.5 bg-background border-b border-border"
         style={{ paddingTop: insets.top + 8 }}
       >
-        <PressableScale
-          onPress={() => router.back()}
+        <Button
+          size="icon"
+          variant="ghost"
           accessibilityLabel="Back"
-          className="w-10 h-10 items-center justify-center"
-          hitSlop={8}
+          onPress={() => router.back()}
+          className="w-10 h-10"
         >
           <Ionicons name="chevron-back" size={24} color={foregroundColor} />
-        </PressableScale>
+        </Button>
         <Text className="font-semibold text-foreground" style={{ fontSize: 17, lineHeight: 22, letterSpacing: -0.2 }}>
           New Automation
         </Text>
         <View className="w-10 h-10" />
       </View>
 
-      <View className="flex-row items-center justify-center gap-2 py-3 bg-background border-b border-border">
-        {STEPS.map((step, index) => (
-          <React.Fragment key={step.id}>
-            <Pressable
-              onPress={() => scrollToSection(step.id)}
-              className="flex-row items-center gap-1.5"
-              accessibilityLabel={`Go to ${step.label}`}
-              accessibilityRole="button"
-            >
-              <View
-                className={cn(
-                  'w-6 h-6 rounded-full items-center justify-center',
-                  currentStep === step.id ? 'bg-primary' : 'bg-muted'
-                )}
-              >
-                <Text
-                  className={cn(
-                    'text-xs font-semibold',
-                    currentStep === step.id ? 'text-primary-foreground' : 'text-muted-foreground'
-                  )}
-                >
-                  {index + 1}
-                </Text>
-              </View>
-              <Text
-                className={cn(
-                  'text-sm font-medium',
-                  currentStep === step.id ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                {step.label}
-              </Text>
-            </Pressable>
-            {index < STEPS.length - 1 && (
-              <View className="w-3 h-[1px] bg-border" />
-            )}
-          </React.Fragment>
-        ))}
+      <View className="bg-background border-b border-border px-2 py-3">
+        <Steps
+          value={currentStepIndex}
+          onValueChange={(index) => scrollToSection(STEPS[index].id)}
+        >
+          {STEPS.map((step, index) => (
+            <Steps.Item key={step.id} step={index}>
+              <Steps.Trigger>
+                <Steps.Indicator />
+                <Steps.Title>{step.label}</Steps.Title>
+              </Steps.Trigger>
+            </Steps.Item>
+          ))}
+        </Steps>
       </View>
 
       <ScrollView
@@ -281,41 +258,31 @@ export default function NewAutomationScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 10, paddingVertical: 4, paddingHorizontal: 2 }}
               >
-                <PressableScale
+                <Chip
+                  selected={selectedTemplateSlug === null}
                   onPress={() => applyTemplate(null)}
-                  style={{ width: 132, minHeight: 72 }}
                   className={cn(
-                    'rounded-xl border-2 px-4 py-3 justify-center',
-                    selectedTemplateSlug === null ? 'border-primary bg-primary' : 'border-border bg-card'
+                    'min-h-[72px] min-w-[132px] justify-center rounded-xl px-4 py-3',
+                    selectedTemplateSlug === null ? 'bg-primary' : 'bg-card'
                   )}
                 >
-                  <Text
-                    className={cn('font-semibold text-sm', selectedTemplateSlug === null ? 'text-primary-foreground' : 'text-foreground')}
-                    numberOfLines={2}
-                  >
-                    Blank
-                  </Text>
-                </PressableScale>
+                  Blank
+                </Chip>
                 {templates.map((tmpl, idx) => {
                   const active = selectedTemplateSlug === tmpl.slug;
                   const palette = TEMPLATE_PALETTE[idx % TEMPLATE_PALETTE.length];
                   return (
-                    <PressableScale
+                    <Chip
                       key={tmpl.slug}
+                      selected={active}
                       onPress={() => applyTemplate(tmpl.slug)}
-                      style={{ width: 132, minHeight: 72 }}
                       className={cn(
-                        'rounded-xl border-2 px-4 py-3 justify-center',
-                        active ? `${palette.border} ${palette.bg}` : 'border-border bg-card'
+                        'min-h-[72px] min-w-[132px] justify-center rounded-xl px-4 py-3',
+                        active ? `${palette.border} ${palette.bg}` : 'bg-card'
                       )}
                     >
-                      <Text
-                        className={cn('font-semibold text-sm', active ? palette.text : 'text-foreground')}
-                        numberOfLines={2}
-                      >
-                        {tmpl.title}
-                      </Text>
-                    </PressableScale>
+                      {tmpl.title}
+                    </Chip>
                   );
                 })}
               </ScrollView>
@@ -348,80 +315,57 @@ export default function NewAutomationScreen() {
               <Text className="font-semibold text-foreground" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 When someone comments on
               </Text>
-              <View className="gap-2.5">
-                {TARGET_OPTIONS.map((opt) => {
-                  const selected = targetType === opt.value;
-                  return (
-                    <Card
-                      key={opt.value}
-                      className={cn(
-                        'gap-3 p-4',
-                        selected ? 'border-2 border-primary bg-primary/10' : 'border-2 border-border bg-card'
-                      )}
-                    >
-                      <Pressable
-                        onPress={() => {
-                          animateFormLayout();
-                          setTargetType(opt.value);
-                          if (opt.value !== 'specific_posts') {
-                            setSelectedMediaIds([]);
-                          }
-                          setTimeout(remeasureSections, 250);
-                        }}
-                        className="flex-row items-center gap-3"
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                      >
-                        <View
-                          className={cn(
-                            'h-[22px] w-[22px] rounded-full border-2 items-center justify-center',
-                            selected ? 'border-primary bg-primary' : 'border-border bg-transparent'
-                          )}
-                        >
-                          {selected && (
-                            <Ionicons name="checkmark" size={13} color={foregroundColor} />
-                          )}
-                        </View>
-                        <View className="flex-1 gap-1">
-                          <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>{opt.label}</Text>
-                          {opt.description ? (
-                            <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>{opt.description}</Text>
-                          ) : null}
-                        </View>
-                      </Pressable>
-                      {opt.value === 'specific_posts' && targetType === 'specific_posts' ? (
-                        <View className="gap-2">
-                          {mediaLoading && (
-                            <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>Loading posts…</Text>
-                          )}
-                          {mediaError && (
-                            <View className="gap-2">
-                              <Text className="text-destructive" style={{ fontSize: 14, lineHeight: 20 }}>
-                                {mediaError === 'session_expired'
-                                  ? 'Session expired. Please reconnect Instagram.'
-                                  : mediaError}
-                              </Text>
-                              <PressableScale onPress={loadMedia} className="self-start rounded-md bg-muted px-3 py-2">
-                                <Text className="font-semibold text-foreground" style={{ fontSize: 13 }}>Retry</Text>
-                              </PressableScale>
-                            </View>
-                          )}
-                          {!mediaLoading && !mediaError && media.length === 0 && (
-                            <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>No posts found</Text>
-                          )}
-                          {media.length > 0 && (
-                            <MediaCarousel
-                              media={media}
-                              selectedIds={selectedMediaIds}
-                              onToggle={toggleMedia}
-                            />
-                          )}
-                        </View>
-                      ) : null}
-                    </Card>
-                  );
-                })}
-              </View>
+              <RadioGroup
+                variant="card"
+                value={targetType}
+                onValueChange={(value) => {
+                  animateFormLayout();
+                  const next = value as TargetType;
+                  setTargetType(next);
+                  if (next !== 'specific_posts') {
+                    setSelectedMediaIds([]);
+                  }
+                  setTimeout(remeasureSections, 250);
+                }}
+              >
+                {TARGET_OPTIONS.map((opt) => (
+                  <RadioGroup.Item
+                    key={opt.value}
+                    value={opt.value}
+                    label={opt.label}
+                    description={opt.description}
+                  />
+                ))}
+              </RadioGroup>
+              {targetType === 'specific_posts' ? (
+                <View className="gap-2">
+                  {mediaLoading && (
+                    <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>Loading posts…</Text>
+                  )}
+                  {mediaError && (
+                    <View className="gap-2">
+                      <Text className="text-destructive" style={{ fontSize: 14, lineHeight: 20 }}>
+                        {mediaError === 'session_expired'
+                          ? 'Session expired. Please reconnect Instagram.'
+                          : mediaError}
+                      </Text>
+                      <Button variant="secondary" size="sm" onPress={loadMedia} className="self-start">
+                        Retry
+                      </Button>
+                    </View>
+                  )}
+                  {!mediaLoading && !mediaError && media.length === 0 && (
+                    <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>No posts found</Text>
+                  )}
+                  {media.length > 0 && (
+                    <MediaCarousel
+                      media={media}
+                      selectedIds={selectedMediaIds}
+                      onToggle={toggleMedia}
+                    />
+                  )}
+                </View>
+              ) : null}
 
               <Card className={cn('gap-3 p-4', dmTriggerEnabled ? 'border-2 border-primary bg-card' : 'border-2 border-border bg-card')}>
                 <View className="flex-row items-center justify-between gap-3">
@@ -429,17 +373,11 @@ export default function NewAutomationScreen() {
                     <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>also reply to DMs containing keywords</Text>
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>Auto-reply to inbound DMs that match your keywords</Text>
                   </View>
-                  <Pressable
-                    accessible
-                    accessibilityLabel="Enable DM trigger"
-                    accessibilityRole="switch"
-                    onPress={() => setDmTriggerEnabled(!dmTriggerEnabled)}
-                  >
-                    <Switch
-                      value={dmTriggerEnabled}
-                      onValueChange={setDmTriggerEnabled}
-                    />
-                  </Pressable>
+                  <Switch
+                    value={dmTriggerEnabled}
+                    onValueChange={setDmTriggerEnabled}
+                    label="Enable DM trigger"
+                  />
                 </View>
               </Card>
             </View>
@@ -453,131 +391,60 @@ export default function NewAutomationScreen() {
               <Text className="font-semibold text-foreground" style={{ fontSize: 16, lineHeight: 22, letterSpacing: -0.2 }}>
                 And this comment has
               </Text>
-              <View className="gap-2.5">
-                <Card
-                  className={cn(
-                    'gap-3 p-4',
-                    !matchAnyWord ? 'border-2 border-primary bg-primary/10' : 'border-2 border-border bg-card'
-                  )}
-                >
-                  <Pressable
-                    onPress={() => {
-                      animateFormLayout();
-                      setMatchAnyWord(false);
-                      setTimeout(remeasureSections, 250);
-                    }}
-                    className="flex-row items-center gap-3"
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: !matchAnyWord }}
-                  >
-                    <View
-                      className={cn(
-                        'h-[22px] w-[22px] rounded-full border-2 items-center justify-center',
-                        !matchAnyWord ? 'border-primary bg-primary' : 'border-border bg-transparent'
-                      )}
-                    >
-                      {!matchAnyWord && (
-                        <Ionicons name="checkmark" size={13} color={foregroundColor} />
-                      )}
-                    </View>
-                    <View className="flex-1 gap-1">
-                      <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>a specific word or words</Text>
-                    </View>
-                  </Pressable>
-                  {!matchAnyWord ? (
-                    <View className="gap-2.5">
-                      <RNView ref={registerRef('keywordInput')}>
-                        <Input
-                      value={keywordInput}
-                          placeholder="Enter a word or multiple"
-                          onChangeText={handleKeywordInputChange}
-                          onFocus={() => handleInputFocus('keywordInput')}
-                          onBlur={handleInputBlur}
-                          accessibilityLabel="Keywords"
-                        />
-                      </RNView>
-                      <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>
-                        Use commas to separate words
-                      </Text>
-                      <View className="flex-row flex-wrap items-center gap-2">
-                        <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>For example:</Text>
-                        {EXAMPLE_KEYWORDS.map((kw) => (
-                          <PressableScale
-                            key={kw}
-                            onPress={() => addExampleKeyword(kw)}
-                            className="h-[30px] justify-center rounded-full border border-border bg-muted px-3"
-                          >
-                            <Text className="text-foreground" style={{ fontSize: 13 }}>{kw}</Text>
-                          </PressableScale>
-                        ))}
-                      </View>
-                      {keywords.length > 0 && (
-                        <View className="flex-row flex-wrap gap-2">
-                          {keywords.map((kw) => (
-                            <KeywordChip key={kw} keyword={kw} onRemove={() => handleRemoveKeyword(kw)} />
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  ) : null}
-                </Card>
-                <Card
-                  className={cn(
-                    'gap-3 p-4',
-                    matchAnyWord ? 'border-2 border-primary bg-primary/10' : 'border-2 border-border bg-card'
-                  )}
-                >
-                  <Pressable
-                    onPress={() => {
-                      animateFormLayout();
-                      setMatchAnyWord(true);
-                      setTimeout(remeasureSections, 250);
-                    }}
-                    className="flex-row items-center gap-3"
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: matchAnyWord }}
-                  >
-                    <View
-                      className={cn(
-                        'h-[22px] w-[22px] rounded-full border-2 items-center justify-center',
-                        matchAnyWord ? 'border-primary bg-primary' : 'border-border bg-transparent'
-                      )}
-                    >
-                      {matchAnyWord && (
-                        <Ionicons name="checkmark" size={13} color={foregroundColor} />
-                      )}
-                    </View>
-                    <View className="flex-1 gap-1">
-                      <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>any word</Text>
-                      <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
-                        Every comment gets the DM — no keyword filter. Use with care.
-                      </Text>
-                    </View>
-                  </Pressable>
-                </Card>
-              </View>
+              <RadioGroup
+                variant="card"
+                value={matchAnyWord ? 'any' : 'specific'}
+                onValueChange={(value) => {
+                  animateFormLayout();
+                  setMatchAnyWord(value === 'any');
+                  setTimeout(remeasureSections, 250);
+                }}
+              >
+                <RadioGroup.Item value="specific" label="a specific word or words" />
+                <RadioGroup.Item
+                  value="any"
+                  label="any word"
+                  description="Every comment gets the DM — no keyword filter. Use with care."
+                />
+              </RadioGroup>
+              {!matchAnyWord ? (
+                <View className="gap-2.5">
+                  <RNView ref={registerRef('keywordInput')}>
+                    <TagInput
+                      label="Keywords"
+                      value={keywords}
+                      inputValue={keywordInput}
+                      onInputValueChange={handleKeywordInputChange}
+                      onValueChange={(tags) => handleKeywordInputChange(tags.join(', '))}
+                      placeholder="Enter a word or multiple"
+                      delimiters={[',']}
+                      description="Use commas to separate words"
+                      onFocus={() => handleInputFocus('keywordInput')}
+                      onBlur={handleInputBlur}
+                    />
+                  </RNView>
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <Text className="text-muted-foreground" style={{ fontSize: 14, lineHeight: 20 }}>For example:</Text>
+                    {EXAMPLE_KEYWORDS.map((kw) => (
+                      <Chip key={kw} variant="outline" onPress={() => addExampleKeyword(kw)}>
+                        {kw}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
 
               {!matchAnyWord ? (
                 <View className="gap-1.5">
-                  <View className="flex-row rounded-lg bg-muted p-0.5">
-                    {MATCH_OPTIONS.map((opt) => {
-                      const selected = matchMode === opt.value;
-                      return (
-                        <Pressable
-                          key={opt.value}
-                          onPress={() => setMatchMode(opt.value)}
-                          className={cn(
-                            'flex-1 items-center py-1.5 rounded-md',
-                            selected ? 'bg-card' : 'bg-transparent'
-                          )}
-                        >
-                          <Text className={cn('text-sm font-medium', selected ? 'text-foreground' : 'text-muted-foreground')}>
-                            {opt.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <RadioGroup
+                    orientation="horizontal"
+                    value={matchMode}
+                    onValueChange={(value) => setMatchMode(value as MatchMode)}
+                  >
+                    {MATCH_OPTIONS.map((opt) => (
+                      <RadioGroup.Item key={opt.value} value={opt.value} label={opt.label} />
+                    ))}
+                  </RadioGroup>
                   {matchMode === 'whole_word' && (
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>
                       "link" won't match "linking"
@@ -643,17 +510,11 @@ export default function NewAutomationScreen() {
                     <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>require them to follow you</Text>
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>Only send the link to people who follow your account</Text>
                   </View>
-                  <Pressable
-                    accessible
-                    accessibilityLabel="Enable follow gate"
-                    accessibilityRole="switch"
-                    onPress={() => setRequireFollow(!requireFollow)}
-                  >
-                    <Switch
-                      value={requireFollow}
-                      onValueChange={setRequireFollow}
-                    />
-                  </Pressable>
+                  <Switch
+                    value={requireFollow}
+                    onValueChange={setRequireFollow}
+                    label="Enable follow gate"
+                  />
                 </View>
                 {requireFollow ? (
                   <View className="gap-3 border-t border-border pt-3">
@@ -724,17 +585,11 @@ export default function NewAutomationScreen() {
                   <View className="flex-1 gap-0.5">
                     <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>reply to their comments under the post</Text>
                   </View>
-                  <Pressable
-                    accessible
-                    accessibilityLabel="Enable public reply"
-                    accessibilityRole="switch"
-                    onPress={() => setPublicReplyEnabled(!publicReplyEnabled)}
-                  >
-                    <Switch
-                      value={publicReplyEnabled}
-                      onValueChange={setPublicReplyEnabled}
-                    />
-                  </Pressable>
+                  <Switch
+                    value={publicReplyEnabled}
+                    onValueChange={setPublicReplyEnabled}
+                    label="Enable public reply"
+                  />
                 </View>
                 {publicReplyEnabled ? (
                   <View className="gap-3 border-t border-border pt-3">
@@ -782,17 +637,11 @@ export default function NewAutomationScreen() {
                     <Text className="font-medium text-foreground" style={{ fontSize: 15, lineHeight: 20 }}>send a follow-up message</Text>
                     <Text className="text-muted-foreground" style={{ fontSize: 13, lineHeight: 18 }}>Send an appreciation message after the link is delivered</Text>
                   </View>
-                  <Pressable
-                    accessible
-                    accessibilityLabel="Enable follow-up message"
-                    accessibilityRole="switch"
-                    onPress={() => setFollowUpEnabled(!followUpEnabled)}
-                  >
-                    <Switch
-                      value={followUpEnabled}
-                      onValueChange={setFollowUpEnabled}
-                    />
-                  </Pressable>
+                  <Switch
+                    value={followUpEnabled}
+                    onValueChange={setFollowUpEnabled}
+                    label="Enable follow-up message"
+                  />
                 </View>
                 {followUpEnabled ? (
                   <View className="gap-3 border-t border-border pt-3">
@@ -862,18 +711,10 @@ export default function NewAutomationScreen() {
             {(matchAnyWord || keywords.length > 0) && (
               <View className="flex-row flex-wrap items-center gap-2">
                 {matchAnyWord ? (
-                  <View className="rounded-full bg-primary/15 px-3 py-1.5">
-                    <Text className="font-medium text-primary" style={{ fontSize: 13 }}>
-                      Triggers on any comment
-                    </Text>
-                  </View>
+                  <Badge variant="info">Triggers on any comment</Badge>
                 ) : (
                   keywords.map((kw) => (
-                    <View key={kw} className="rounded-full bg-secondary/15 px-3 py-1.5">
-                      <Text className="font-medium text-secondary-foreground" style={{ fontSize: 13 }}>
-                        {kw}
-                      </Text>
-                    </View>
+                    <Badge key={kw} variant="secondary">{kw}</Badge>
                   ))
                 )}
               </View>
@@ -929,17 +770,16 @@ export default function NewAutomationScreen() {
         >
           Go Live
         </Button>
-        <PressableScale
+        <Button
+          variant="ghost"
           onPress={() => handleSubmit(false)}
           disabled={!isValid || creating || savingPaused}
+          loading={savingPaused}
           accessibilityLabel="Save as paused"
-          accessibilityRole="button"
-          style={{ alignSelf: 'center' }}
+          className="self-center"
         >
-          <Text className={cn('font-semibold text-muted-foreground text-sm', (!isValid || creating || savingPaused) && 'opacity-40')}>
-            {savingPaused ? 'Saving…' : 'Save as paused'}
-          </Text>
-        </PressableScale>
+          {savingPaused ? 'Saving…' : 'Save as paused'}
+        </Button>
       </View>
     </KeyboardAvoidingView>
   );

@@ -3,11 +3,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 
-import { View, Pressable, useCSSVariable } from '@/tw';
+import { View, useCSSVariable } from '@/tw';
 import { Image } from '@/tw/image';
 import { ScreenShell } from '@/components/screen-shell';
 import {
   Alert,
+  AnimatedPressable,
   BarChart,
   Button,
   Card,
@@ -244,7 +245,7 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
   }, [item.permalink]);
 
   return (
-    <Pressable onPress={open} className="flex-grow gap-1.5" style={{ flexBasis: '48%' }}>
+    <AnimatedPressable onPress={open} className="flex-grow gap-1.5" style={{ flexBasis: '48%' }}>
       <View className="aspect-square overflow-hidden rounded-xl border border-border bg-card">
         {item.imageUri ? (
           <Image
@@ -277,7 +278,7 @@ function TopPostTile({ item }: { item: TopMediaItem }) {
           </Text>
         </View>
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

@@ -39,6 +39,13 @@ describe('AuthScreen', () => {
     expect(getByText('Continue with Google')).toBeTruthy();
   });
 
+  it('calls setMode when Sign Up tab is pressed', async () => {
+    const { getByText } = await render(<AuthScreen />);
+
+    fireEvent.press(getByText('Sign Up'));
+    expect(mockFlow.setMode).toHaveBeenCalledWith('signup');
+  });
+
   it('gates Continue on a valid email, then submits the OTP flow', async () => {
     const { getByPlaceholderText, getByTestId } = await render(<AuthScreen />);
     const continueButton = () => getByTestId('auth-continue');

@@ -7,16 +7,9 @@ import React, {
   useState,
 } from 'react';
 
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { ScrollView, View } from '@/tw';
+import { View } from '@/tw';
 import { cn, sheetContent } from '@/tw/cn';
-import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetHeader,
-  type BottomSheetMethods,
-} from '@/components/ui/bottomsheet';
+import { BottomSheet } from 'panelui-native';
 import { useAutomationGate } from '@/hooks/useAutomationGate';
 import { useGenerateScore, useLatestScore } from '@/hooks/useProfileScore';
 import { addLog } from '@/lib/logger';
@@ -30,8 +23,11 @@ import {
 } from './components';
 import { Scorecard } from './scorecard';
 
-/** Imperative handle — `present()`/`dismiss()`, no open-state race on first tap. */
-export type ScoreSheetRef = BottomSheetMethods;
+/** Imperative handle — `present()`/`dismiss()` over controlled PanelUI `open`. */
+export type ScoreSheetRef = {
+  present: () => void;
+  dismiss: () => void;
+};
 
 type CeremonyPhase = 'idle' | 'theater' | 'ring' | 'stagger' | 'done';
 
@@ -42,11 +38,11 @@ const STAGGER_TOTAL_MS = 950;
 
 // ── Main screen ──────────────────────────────────────────────────────
 
-export const ScoreSheet = forwardRef<BottomSheetMethods>(function ScoreSheet(_props, ref) {
-  const sheetRef = useRef<BottomSheetMethods>(null);
+export const ScoreSheet = forwardRef<ScoreSheetRef>(function ScoreSheet(_props, ref) {
+  const [open, setOpen] = useState(false);
   useImperativeHandle(ref, () => ({
-    present: () => sheetRef.current?.present(),
-    dismiss: () => sheetRef.current?.dismiss(),
+    present: () => setOpen(true),
+    dismiss: () => setOpen(false),
   }), []);
 
   const gate = useAutomationGate();
@@ -59,7 +55,6 @@ export const ScoreSheet = forwardRef<BottomSheetMethods>(function ScoreSheet(_pr
   const [ringScore, setRingScore] = useState<number | null>(null);
   /** True once a ceremony has played in this mount — drives Scorecard cascade delays. */
   const didCeremonyRef = useRef(false);
-  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (phase === 'ring') {
@@ -103,23 +98,18 @@ export const ScoreSheet = forwardRef<BottomSheetMethods>(function ScoreSheet(_pr
   const dismissible = phase !== 'theater' && phase !== 'ring';
 
   return (
-    <BottomSheetModal
-      ref={sheetRef}
-      snapPoints={['90%']}
-      enablePanDownToClose={dismissible}
-    >
-      <BottomSheetView style={{ flex: 1, paddingBottom: insets.bottom + 8 }}>
+    <BottomSheet open={open} onOpenChange={setOpen}>
+      <BottomSheet.Content
+        size="full"
+        dismissible={dismissible}
+        showClose={dismissible}
+      >
         <View className={cn(sheetContent, 'flex-1')} testID="score-screen">
-          <BottomSheetHeader
+          <BottomSheet.Header
             title="Score"
-            subtitle="Your AI read on the last 30 days — refreshed weekly"
-            onClose={dismissible ? () => sheetRef.current?.dismiss() : undefined}
+            description="Your AI read on the last 30 days — refreshed weekly"
           />
-          <ScrollView
-            style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
-          >
+          <BottomSheet.Body contentContainerClassName="gap-3 pb-6">
             {booting ? (
               <ScoreSkeleton />
             ) : !gate.connected ? (
@@ -167,10 +157,10 @@ export const ScoreSheet = forwardRef<BottomSheetMethods>(function ScoreSheet(_pr
                 ) : null}
               </>
             )}
-          </ScrollView>
+          </BottomSheet.Body>
         </View>
-      </BottomSheetView>
-    </BottomSheetModal>
+      </BottomSheet.Content>
+    </BottomSheet>
   );
 });
 

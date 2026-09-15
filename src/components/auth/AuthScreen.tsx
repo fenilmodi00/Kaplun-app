@@ -18,22 +18,19 @@ import {
 import type { TextInput as RNTextInput, View as RNView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Input, OtpInput, Text } from 'panelui-native';
-import { Pressable, ScrollView, View, useCSSVariable } from '@/tw';
+import { Button, Card, Input, OtpInput, Tabs, Text } from 'panelui-native';
+import { ScrollView, View, useCSSVariable } from '@/tw';
 import { AnimatedView } from '@/tw/animated';
 import { cn } from '@/tw/cn';
 import {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  Easing,
 } from '@/lib/reanimated-platform';
 import { Reveal } from '@/components/ui/reveal';
 import { useAuthFlow, AuthMode } from '@/hooks/useAuthFlow';
 import { useShakeAnimation } from '@/tw/animated';
 
-const TOGGLE_WIDTH = 280;
-const PILL_WIDTH = TOGGLE_WIDTH / 2 - 3;
 /** Field height (h-11). */
 const INPUT_HEIGHT = 44;
 /** Room for focused field + password field + submit button. */
@@ -43,51 +40,6 @@ type AuthScrollApi = {
   ensureVisible: (target: RNView | RNTextInput | null) => void;
 };
 const AuthScrollContext = createContext<AuthScrollApi>({ ensureVisible: () => {} });
-
-// ─── Capsule Toggle ───
-function CapsuleToggle({ mode, onChange }: { mode: AuthMode; onChange: (m: AuthMode) => void }) {
-  const translateX = useSharedValue(mode === 'login' ? 0 : PILL_WIDTH);
-
-  useEffect(() => {
-    translateX.value = withTiming(mode === 'login' ? 0 : PILL_WIDTH, {
-      duration: 250,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [mode, translateX]);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  return (
-    <View
-      style={{ width: TOGGLE_WIDTH }}
-      className="h-11 flex-row items-center self-center rounded-full bg-secondary p-[3px]"
-    >
-      <AnimatedView
-        style={[pillStyle, { width: PILL_WIDTH }]}
-        className="absolute left-[3px] h-[38px] rounded-full bg-primary"
-      />
-      {(['login', 'signup'] as AuthMode[]).map((m) => (
-        <Pressable
-          key={m}
-          onPress={() => onChange(m)}
-          className="z-10 h-[38px] flex-1 items-center justify-center"
-          accessibilityRole="button"
-          accessibilityState={{ selected: mode === m }}
-        >
-          <Text
-            size="sm"
-            weight="semibold"
-            className={mode === m ? 'text-primary-foreground' : undefined}
-          >
-            {m === 'login' ? 'Log In' : 'Sign Up'}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
 
 // ─── Email Input ───
 function EmailField({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
@@ -130,13 +82,14 @@ function PasswordInput({ value, onChangeText }: { value: string; onChangeText: (
       className="h-11 rounded-xl"
       onFocus={() => ensureVisible(inputRef.current)}
       endContent={
-        <Pressable
+        <Button
+          size="icon"
+          variant="ghost"
           onPress={() => setVisible((v) => !v)}
-          className="h-11 w-11 items-center justify-center"
           accessibilityLabel={visible ? 'Hide password' : 'Show password'}
         >
           <Ionicons name={visible ? 'eye-off' : 'eye'} size={20} color={muted} />
-        </Pressable>
+        </Button>
       }
     />
   );
@@ -416,24 +369,22 @@ export default function AuthScreen() {
             Resend in {resendTimer}s
           </Text>
         ) : (
-          <Pressable onPress={handleResend} className="mb-4 mt-2 py-2">
-            <Text size="sm" weight="semibold" className="text-center text-primary">
-              Resend code
-            </Text>
-          </Pressable>
+          <Button variant="ghost" size="sm" onPress={handleResend} className="mb-4 mt-2">
+            Resend code
+          </Button>
         )}
 
-        <Pressable
+        <Button
+          variant="ghost"
+          size="sm"
           className="py-2"
           onPress={() => {
             setOtpCode('');
             setMode(mode);
           }}
         >
-          <Text size="sm" muted className="text-center">
-            ← Change email
-          </Text>
-        </Pressable>
+          ← Change email
+        </Button>
       </AuthShell>
     );
   }
@@ -470,7 +421,19 @@ export default function AuthScreen() {
       </View>
 
       <View className="mb-6">
-        <CapsuleToggle mode={mode} onChange={setMode} />
+        <Tabs
+          variant="segmented"
+          value={mode}
+          onValueChange={(v) => setMode(v as AuthMode)}
+          defaultValue="login"
+        >
+          <Tabs.List>
+            <Tabs.Trigger value="login">Log In</Tabs.Trigger>
+            <Tabs.Trigger value="signup">Sign Up</Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="login">{null}</Tabs.Content>
+          <Tabs.Content value="signup">{null}</Tabs.Content>
+        </Tabs>
       </View>
 
       <View className="w-full max-w-[340px] self-center">

@@ -12,7 +12,7 @@
  * become advanceable. Modern fake timers also mock Date.now for the count-up.
  */
 
-import React, { type ReactNode } from 'react';
+import React from 'react';
 import { act, render, screen, fireEvent, within } from '@testing-library/react-native';
 import type { ProfileReport, ProfileScoreResult, ReportMeta } from '@/lib/profile-score';
 
@@ -33,28 +33,6 @@ jest.mock('expo-sharing', () => ({
   isAvailableAsync: jest.fn(),
   shareAsync: jest.fn(),
 }));
-
-// The real sheet gates children behind `visible` (imperative present()) — tests
-// assert content directly, so the mock always renders. Refs no-op.
-jest.mock('@/components/ui/bottomsheet', () => {
-  const React = require('react');
-  const { View, Text } = require('react-native');
-  return {
-    BottomSheetModal: React.forwardRef(
-      ({ children }: { children?: ReactNode }, _ref: unknown) =>
-        React.createElement(View, null, children),
-    ),
-    BottomSheetView: ({ children }: { children?: ReactNode }) =>
-      React.createElement(View, null, children),
-    BottomSheetHeader: ({ title, subtitle }: { title: string; subtitle?: string }) =>
-      React.createElement(
-        View,
-        null,
-        React.createElement(Text, null, title),
-        subtitle ? React.createElement(Text, null, subtitle) : null,
-      ),
-  };
-});
 
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';

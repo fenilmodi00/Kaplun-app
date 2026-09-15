@@ -423,8 +423,20 @@ jest.mock('panelui-native', () => {
     Input: (props: any) => React.createElement(TextInput, props),
     OtpInput: (props: any) => React.createElement(TextInput, props),
     Textarea: (props: any) => React.createElement(TextInput, { ...props, multiline: true }),
-    Switch: (props: any) =>
-      React.createElement(View, { accessible: true, accessibilityRole: 'switch', ...props }, props?.children),
+    Switch: ({ value, onValueChange, accessibilityLabel, onPress, ...props }: any) =>
+      React.createElement(Pressable, {
+        accessible: true,
+        accessibilityRole: 'switch',
+        accessibilityLabel,
+        accessibilityState: { checked: value },
+        value,
+        onValueChange,
+        ...props,
+        onPress: (...args: unknown[]) => {
+          onPress?.(...args);
+          onValueChange?.(!value);
+        },
+      }),
     // Stateful mock mirroring the real component: Trigger/Close clone their
     // child and compose onPress; Content mounts only while open.
     Dialog: (() => {
@@ -547,6 +559,7 @@ jest.mock('panelui-native', () => {
     BottomSheet: Object.assign(
       (props: any) => React.createElement(View, props, props?.children),
       {
+        Trigger: viewPassthrough,
         Content: viewPassthrough,
         Header: ({ title, description }: any) =>
           React.createElement(View, null,
@@ -557,6 +570,119 @@ jest.mock('panelui-native', () => {
         Footer: viewPassthrough,
       },
     ),
+    // Stateful mock: Root tracks value/defaultValue/onValueChange; Trigger
+    // selects its tab value on press.
+    Tabs: (() => {
+      const TabsContext = React.createContext(null);
+      const useTabs = () => React.useContext(TabsContext);
+      const TabsRoot = (props: any) => {
+        const [internalValue, setInternalValue] = React.useState(props?.defaultValue ?? '');
+        const isControlled = props?.value !== undefined;
+        const value = isControlled ? props.value : internalValue;
+        const setValue = (v: string) => {
+          if (!isControlled) setInternalValue(v);
+          props?.onValueChange?.(v);
+        };
+        return React.createElement(
+          TabsContext.Provider,
+          { value: { value, setValue } },
+          props?.children,
+        );
+      };
+      const TabsTrigger = ({ children, value: tabValue, onPress, ...props }: any) => {
+        const ctx = useTabs();
+        return React.createElement(
+          Pressable,
+          {
+            ...props,
+            onPress: (...args: unknown[]) => {
+              onPress?.(...args);
+              if (tabValue !== undefined) ctx?.setValue(tabValue);
+            },
+          },
+          wrapTextChild(children),
+        );
+      };
+      return Object.assign(TabsRoot, {
+        List: viewPassthrough,
+        Trigger: TabsTrigger,
+        Content: viewPassthrough,
+      });
+    })(),
+    ToggleButton: Object.assign(
+      ({ children, ...props }: any) =>
+        React.createElement(Pressable, props, wrapTextChild(children)),
+      { Label: textPassthrough },
+    ),
+    ToggleButtonGroup: viewPassthrough,
+    KeyboardAvoider: viewPassthrough,
+    TagInput: ({
+      label,
+      accessibilityLabel,
+      value,
+      inputValue,
+      onChangeText,
+      onValueChange,
+      onInputValueChange,
+      ...props
+    }: any) =>
+      React.createElement(
+        View,
+        props,
+        React.createElement(TextInput, {
+          accessibilityLabel: label ?? accessibilityLabel,
+          value: inputValue ?? (Array.isArray(value) ? value.join(', ') : ''),
+          onChangeText: (text: string) => {
+            onChangeText?.(text);
+            onInputValueChange?.(text);
+            onValueChange?.(
+              text
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter(Boolean),
+            );
+          },
+        }),
+      ),
+    // Stateful mock: Root provides onValueChange; Item selects its value on press.
+    RadioGroup: (() => {
+      const RadioGroupContext = React.createContext(null);
+      const useRadioGroup = () => React.useContext(RadioGroupContext);
+      const RadioGroupRoot = ({ children, onValueChange, ...props }: any) =>
+        React.createElement(
+          RadioGroupContext.Provider,
+          { value: { onValueChange } },
+          React.createElement(View, props, children),
+        );
+      const RadioGroupItem = ({ children, label, description, value: itemValue, onPress, ...props }: any) => {
+        const ctx = useRadioGroup();
+        return React.createElement(
+          Pressable,
+          {
+            accessibilityRole: 'radio',
+            ...props,
+            onPress: (...args: unknown[]) => {
+              onPress?.(...args);
+              if (itemValue !== undefined) ctx?.onValueChange?.(itemValue);
+            },
+          },
+          label ? React.createElement(RNText, null, label) : wrapTextChild(children),
+          description ? React.createElement(RNText, null, description) : null,
+        );
+      };
+      return Object.assign(RadioGroupRoot, { Item: RadioGroupItem });
+    })(),
+    Steps: family({
+      Item: viewPassthrough,
+      Trigger: ({ children, ...props }: any) =>
+        React.createElement(Pressable, props, wrapTextChild(children)),
+      Indicator: viewPassthrough,
+      Title: textPassthrough,
+      Description: textPassthrough,
+      Separator: viewPassthrough,
+    }),
+    AnimatedPressable: (props: any) =>
+      React.createElement(Pressable, props, props?.children),
   };
 });
 

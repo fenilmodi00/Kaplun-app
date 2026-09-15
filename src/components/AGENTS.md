@@ -6,9 +6,9 @@ Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, 
 
 | Path | Role |
 |------|------|
-| `ui/` (bottomsheet + reveal) | Custom bottom sheet (`bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx`) and entrance/pop animation (`reveal.tsx`). Import `@/components/ui/bottomsheet` and `@/components/ui/reveal`. |
-| `ui/bottomsheet/` | Native modal bottom sheet (`index.tsx`, `header.tsx`, `backdrop.tsx`). Import `@/components/ui/bottomsheet` only — not `@expo/ui` directly. |
-| `auth/AuthScreen.tsx` | Login/signup OTP screen, 761 lines. Internal pieces: `CapsuleToggle`, `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
+| `ui/` (bottomsheet + reveal) | Custom bottom sheet kit (legacy; production Home/Score use `BottomSheet` from `panelui-native`) and entrance/pop animation (`reveal.tsx`). Import `@/components/ui/reveal` for reveal; prefer `panelui-native` for sheets. |
+| `ui/bottomsheet/` | Legacy native modal bottom sheet (`index.tsx`, `header.tsx`, `backdrop.tsx`). **Production call sites migrated to PanelUI** — kit kept on disk until device QA passes. Do not import from screens. |
+| `auth/AuthScreen.tsx` | Login/signup OTP screen. Internal pieces: `Tabs` (segmented), `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
 | `automation/AutomationDmPreview.tsx` | Simulated IG DM inbox preview for the automation builder; `{username}` substitution; hardcoded IG colors by design |
 | `edge-blur.tsx` | (DELETED — replaced by inline `LinearGradient` in TabBar and `(tabs)/_layout.tsx`) |
 | `screen-shell.tsx` | Screen padding shell; exports `TAB_BAR_OVERLAY` used with `useSafeAreaInsets` so content clears the floating tab bar |

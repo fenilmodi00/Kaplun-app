@@ -20,7 +20,7 @@ import {
   Switch,
   Text,
 } from 'panelui-native';
-import { Pressable, View, useCSSVariable } from '@/tw';
+import { View, useCSSVariable } from '@/tw';
 import { useAutomations, useAutomationLogs, useAutomationStats } from '@/hooks/useAutomations';
 import type { AutomationLog } from '@/lib/automations';
 import { TAB_BAR_OVERLAY } from '@/components/screen-shell';
@@ -120,13 +120,14 @@ export default function AutomationDetailScreen() {
         className="flex-row items-center gap-2 border-b border-border bg-background px-2 pb-3"
         style={{ paddingTop: insets.top + 12 }}
       >
-        <Pressable
+        <Button
+          size="icon"
+          variant="ghost"
           onPress={() => router.back()}
           accessibilityLabel="Back"
-          className="h-10 w-10 items-center justify-center"
         >
           <Ionicons name="chevron-back" size={24} color={foreground} />
-        </Pressable>
+        </Button>
         <Text size="lg" weight="semibold" numberOfLines={1} className="flex-1">
           {automation.name}
         </Text>

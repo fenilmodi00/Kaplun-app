@@ -1,12 +1,6 @@
 import { useCallback, useState } from 'react';
 import { fetchMedia, type InstagramMediaResponse } from '@/lib/instagram';
 import { addLog } from '@/lib/logger';
-import {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-} from '@/lib/reanimated-platform';
 
 export function useMediaPicker() {
   const [media, setMedia] = useState<InstagramMediaResponse[]>([]);
@@ -32,19 +26,4 @@ export function useMediaPicker() {
   }, [loading]);
 
   return { media, loading, error, hasLoaded, loadMedia };
-}
-
-export function usePressFeedback(scaleDown = 0.97) {
-  const scale = useSharedValue(1);
-  const onPressIn = useCallback(() => {
-    scale.value = withTiming(scaleDown, { duration: 100 });
-  }, [scale, scaleDown]);
-  const onPressOut = useCallback(() => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-  }, [scale]);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: scale.value < 1 ? 0.9 : 1,
-  }));
-  return { onPressIn, onPressOut, animatedStyle };
 }

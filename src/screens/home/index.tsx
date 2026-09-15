@@ -1,27 +1,21 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { View, Pressable, useCSSVariable } from '@/tw';
+import { View, useCSSVariable } from '@/tw';
 import {
   Alert,
   Avatar,
   Badge,
+  BottomSheet,
   Button,
   Card,
   Skeleton,
   Surface,
   Text,
 } from 'panelui-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenShell } from '@/components/screen-shell';
-import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetHeader,
-  type BottomSheetMethods,
-} from '@/components/ui/bottomsheet';
 import { sheetContent, cn } from '@/tw/cn';
 import { useAppwriteUser } from '@/hooks/useAppwriteUser';
 import { useBridge } from '@/lib/bridge-context';
@@ -42,18 +36,18 @@ const IG_BRAND_GLYPH = '#ffffff';
 function HeaderAvatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
   const router = useRouter();
   return (
-    <Pressable
-      onPress={() => router.push('/(tabs)/(profile)/view' as never)}
+    <Button
+      variant="ghost"
+      size="icon"
       accessibilityLabel="Profile"
-      accessibilityRole="button"
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      onPress={() => router.push('/(tabs)/(profile)/view' as never)}
     >
       <Avatar
         source={imageUrl ? { uri: imageUrl } : undefined}
         fallback={getInitials(name)}
         className="border border-border"
       />
-    </Pressable>
+    </Button>
   );
 }
 
@@ -212,16 +206,17 @@ function QuickActions() {
   return (
     <View className="flex-row gap-2.5">
       {actions.map((a) => (
-        <Pressable
+        <Button
           key={a.label}
+          variant="outline"
           onPress={() => router.push(a.route as never)}
-          className="min-h-16 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-card"
+          className="min-h-16 flex-1 flex-col gap-1.5 rounded-xl"
         >
           <Ionicons name={a.icon} size={17} color={foreground} />
           <Text size="xs" weight="semibold">
             {a.label}
           </Text>
-        </Pressable>
+        </Button>
       ))}
     </View>
   );
@@ -232,8 +227,7 @@ function QuickActions() {
 export default function HomeScreen() {
   const { data: user } = useAppwriteUser();
   const { isReady: bridgeReady } = useBridge();
-  const insets = useSafeAreaInsets();
-  const placeholderSheetRef = useRef<BottomSheetMethods>(null);
+  const [placeholderOpen, setPlaceholderOpen] = useState(false);
   const scoreSheetRef = useRef<ScoreSheetRef>(null);
   const mutedForeground = useCSSVariable('--color-muted-foreground') as string;
   const primaryForeground = useCSSVariable('--color-primary-foreground') as string;
@@ -404,7 +398,7 @@ export default function HomeScreen() {
           variant="outline"
           fullWidth
           accessibilityLabel="Open bottom sheet"
-          onPress={() => placeholderSheetRef.current?.present()}
+          onPress={() => setPlaceholderOpen(true)}
           className="mb-4"
         >
           Open bottom sheet
@@ -560,20 +554,19 @@ export default function HomeScreen() {
         </Reveal>
       )}
 
-      <BottomSheetModal ref={placeholderSheetRef} snapPoints={['40%', '75%']}>
-        <BottomSheetView style={{ paddingBottom: insets.bottom + 8 }}>
+      <BottomSheet open={placeholderOpen} onOpenChange={setPlaceholderOpen}>
+        <BottomSheet.Content size="full" blur>
           <View className={cn(sheetContent)}>
-            <BottomSheetHeader
+            <BottomSheet.Header
               title="Placeholder sheet"
-              subtitle="Swap this for real actions later"
-              onClose={() => placeholderSheetRef.current?.dismiss()}
+              description="Swap this for real actions later"
             />
             <Text>
               Bottom sheet is wired on Home. Swipe down or tap Close to dismiss.
             </Text>
           </View>
-        </BottomSheetView>
-      </BottomSheetModal>
+        </BottomSheet.Content>
+      </BottomSheet>
 
       <ScoreSheet ref={scoreSheetRef} />
     </ScreenShell>

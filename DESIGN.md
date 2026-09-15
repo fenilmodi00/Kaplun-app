@@ -315,7 +315,7 @@ PanelUI (`panelui-native`) is the primary component library. Import directly: `i
 
 Custom components kept outside PanelUI:
 - `src/components/tab-bar/TabBar.tsx` — floating liquid-glass tab bar with scroll-driven scale animation
-- `src/components/ui/bottomsheet/` — custom modal bottom sheet (gesture-handler + Reanimated)
+- `src/components/ui/bottomsheet/` — legacy modal bottom sheet kit (kept on disk; production Home/Score use `BottomSheet` from `panelui-native`)
 - `src/components/ui/reveal.tsx` — entrance/pop animation wrappers
 - `src/components/auth/AuthScreen.tsx` — auth flow with OTP input
 - `src/components/screen-shell.tsx` — standard scrollable screen shell
@@ -372,7 +372,7 @@ When creating or updating screens in `src/app/(tabs)/`:
    - `Image` from `@/tw/image` (NOT `react-native` or `expo-image`)
    - `AnimatedView`, `useShakeAnimation` from `@/tw/animated`
    - `cn` from `@/tw/cn`
-   - PanelUI components (`Button`, `Card`, `Input`, `Text`, `Spinner`, etc.) from `panelui-native`
+   - PanelUI components (`Button`, `Card`, `Input`, `Text`, `Spinner`, `BottomSheet`, etc.) from `panelui-native` — Home/Score sheets use `BottomSheet`, not `@/components/ui/bottomsheet`
    - Animation utilities from `@/lib/reanimated-platform`
 3. **No Direct Reanimated Imports in Screens**: Always use `@/hooks/useClayAnimations` or `@/lib/reanimated-platform`.
 4. **Web Safety (.web.tsx)**: When creating an animated component using Reanimated, you MUST create a matching `.web.tsx` file that uses plain React Native components for web stability (#8285).

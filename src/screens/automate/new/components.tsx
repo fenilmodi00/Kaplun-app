@@ -1,65 +1,12 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { AnimatedPressable } from 'panelui-native';
 import { useCSSVariable } from 'uniwind';
 import type { InstagramMediaResponse } from '@/lib/instagram';
-import { View, Text, Pressable, ScrollView } from '@/tw';
+import { View, Text, ScrollView } from '@/tw';
 import { Image } from '@/tw/image';
 import { cn } from '@/tw/cn';
-import { AnimatedView } from '@/tw/animated';
 import { Pop } from '@/components/ui/reveal';
-import { usePressFeedback } from './hooks';
-
-export function PressableScale({
-  children,
-  onPress,
-  disabled,
-  style,
-  className,
-  ...rest
-}: {
-  children: React.ReactNode;
-  onPress?: () => void;
-  disabled?: boolean;
-  style?: React.ComponentProps<typeof AnimatedView>['style'];
-  className?: string;
-} & Omit<React.ComponentProps<typeof Pressable>, 'onPress' | 'disabled' | 'style' | 'className'>) {
-  const { onPressIn, onPressOut, animatedStyle } = usePressFeedback(0.97);
-  const handlePressIn = useCallback(() => {
-    if (disabled) return;
-    onPressIn();
-  }, [disabled, onPressIn]);
-  const handlePressOut = useCallback(() => {
-    if (disabled) return;
-    onPressOut();
-  }, [disabled, onPressOut]);
-  return (
-    <AnimatedView style={[animatedStyle, style]}>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        disabled={disabled}
-        className={className}
-        {...rest}
-      >
-        {children}
-      </Pressable>
-    </AnimatedView>
-  );
-}
-
-export function KeywordChip({ keyword, onRemove }: { keyword: string; onRemove: () => void }) {
-  return (
-    <View className="h-[30px] flex-row items-center rounded-full bg-primary px-3">
-      <Text className="font-medium text-primary-foreground" style={{ fontSize: 13 }}>{keyword}</Text>
-      <PressableScale onPress={onRemove} hitSlop={8} accessibilityLabel={`Remove ${keyword}`} style={{ marginLeft: 4 }}>
-        <Text className="font-semibold text-primary-foreground" style={{ fontSize: 15, lineHeight: 18 }}>
-          ×
-        </Text>
-      </PressableScale>
-    </View>
-  );
-}
 
 export function MediaCarousel({
   media,
@@ -82,7 +29,7 @@ export function MediaCarousel({
         const uri = item.thumbnail_url ?? item.media_url ?? undefined;
         const isReel = item.media_product_type === 'REELS' || item.media_type === 'VIDEO';
         return (
-          <PressableScale
+          <AnimatedPressable
             key={item.id}
             onPress={() => onToggle(item.id)}
             style={{ width: 108, height: 192 }}
@@ -118,7 +65,7 @@ export function MediaCarousel({
                 </Pop>
               </View>
             )}
-          </PressableScale>
+          </AnimatedPressable>
         );
       })}
     </ScrollView>

@@ -182,12 +182,16 @@ describe('NewAutomationScreen', () => {
 
   const renderScreen = () => render(<NewAutomationScreen />, { wrapper: createQueryClientWrapper() });
 
+  /** PanelUI styled Switch exposes role but not label; public reply is the 3rd toggle. */
+  const publicReplySwitch = (screen: Awaited<ReturnType<typeof render>>) => screen.getAllByRole('switch')[2];
+
   it('renders all form sections', async () => {
-    const { getByLabelText, getByText } = await renderScreen();
+    const { getByLabelText, getByText, getAllByRole } = await renderScreen();
     expect(getByLabelText('Automation name')).toBeTruthy();
     expect(getByLabelText('Keywords')).toBeTruthy();
     expect(getByLabelText('DM message')).toBeTruthy();
-    expect(getByLabelText('Enable public reply')).toBeTruthy();
+    expect(getAllByRole('switch').length).toBeGreaterThanOrEqual(4);
+    expect(getByText('reply to their comments under the post')).toBeTruthy();
     expect(getByText('Go Live')).toBeTruthy();
   });
 
@@ -248,12 +252,12 @@ describe('NewAutomationScreen', () => {
   });
 
   it('shows public reply input when toggle is on', async () => {
-    const { getByLabelText, queryByLabelText } = await renderScreen();
-    expect(queryByLabelText('Public reply message')).toBeNull();
+    const screen = await renderScreen();
+    expect(screen.queryByLabelText('Public reply message')).toBeNull();
 
-    await fireEvent(getByLabelText('Enable public reply'), 'press');
+    await fireEvent.press(publicReplySwitch(screen));
 
-    expect(getByLabelText('Public reply message')).toBeTruthy();
+    expect(screen.getByLabelText('Public reply message')).toBeTruthy();
   });
 
   it('does not submit when public reply is enabled but empty', async () => {
@@ -263,14 +267,15 @@ describe('NewAutomationScreen', () => {
       creating: false,
     });
 
-    const { getByLabelText, getByText } = await renderScreen();
+    const screen = await renderScreen();
+    const { getByLabelText, getByText } = screen;
 
     await fireEvent.changeText(getByLabelText('Automation name'), 'Test');
     await fireEvent.changeText(getByLabelText('Keywords'), 'hello');
     await fireEvent(getByText('any post or reel'), 'press');
     await fireEvent.changeText(getByLabelText('DM message'), 'Hi!');
 
-    await fireEvent(getByLabelText('Enable public reply'), 'press');
+    await fireEvent.press(publicReplySwitch(screen));
 
     await fireEvent(getByText('Go Live'), 'press');
     expect(mockCreate).not.toHaveBeenCalled();

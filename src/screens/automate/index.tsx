@@ -12,7 +12,7 @@ import { FlatList, type NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Pressable, ScrollView, useCSSVariable } from '@/tw';
+import { View, ScrollView, useCSSVariable } from '@/tw';
 import {
   Badge,
   Button,
@@ -207,15 +207,15 @@ function Header({ onAdd }: { onAdd: () => void }) {
           Auto-DM when followers comment keywords
         </Text>
       </View>
-      <Pressable
+      <Button
+        size="icon"
+        variant="secondary"
         onPress={onAdd}
         accessibilityLabel="Create automation"
         accessibilityRole="button"
-        hitSlop={8}
-        className="h-11 w-11 items-center justify-center rounded-md bg-secondary"
       >
         <Ionicons name="add" size={22} color={foreground} />
-      </Pressable>
+      </Button>
     </View>
   );
 }
