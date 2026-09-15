@@ -39,7 +39,7 @@ Suites colocated in `src/screens/`:
 - `home`, `automate`/`automate-new`/`automate-detail`, `messages`, `thread`, `profile`, `insights` + 4 `utils.test.ts`
 
 Suites colocated in `src/components/`:
-- `tab-bar` (4 tabs, nested-route hide), `screen-shell`, `ui-components`, `error-state`
+- `tab-bar` (4 tabs, nested-route hide), `screen-shell`, `auth`
 
 ## KNOWN FAILURES
 

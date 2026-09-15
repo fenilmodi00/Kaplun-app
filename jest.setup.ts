@@ -556,20 +556,63 @@ jest.mock('panelui-native', () => {
       Item: textPassthrough,
       File: textPassthrough,
     }),
-    BottomSheet: Object.assign(
-      (props: any) => React.createElement(View, props, props?.children),
-      {
+    BottomSheet: (() => {
+      const SheetContext = React.createContext({
+        open: false,
+        setOpen: (_open: boolean) => {},
+      });
+      const Root = (props: any) => {
+        const [internalOpen, setInternalOpen] = React.useState(!!props?.defaultOpen);
+        const isControlled = props?.open !== undefined;
+        const open = isControlled ? !!props.open : internalOpen;
+        const setOpen = (next: boolean) => {
+          if (!isControlled) setInternalOpen(next);
+          props?.onOpenChange?.(next);
+        };
+        return React.createElement(
+          SheetContext.Provider,
+          { value: { open, setOpen } },
+          React.createElement(View, props, props?.children),
+        );
+      };
+      const Content = (props: any) => {
+        const { open, setOpen } = React.useContext(SheetContext);
+        if (!open) return null;
+        const dismissible = props?.dismissible !== false;
+        const showClose = props?.showClose !== false;
+        return React.createElement(
+          View,
+          { testID: 'bottom-sheet-content', ...props },
+          showClose
+            ? React.createElement(
+                Pressable,
+                {
+                  accessibilityLabel: 'Close',
+                  onPress: () => {
+                    if (dismissible) setOpen(false);
+                  },
+                },
+                React.createElement(RNText, null, 'Close'),
+              )
+            : null,
+          props?.children,
+        );
+      };
+      const Header = ({ title, description, ...rest }: any) =>
+        React.createElement(
+          View,
+          rest,
+          title ? React.createElement(RNText, null, title) : null,
+          description ? React.createElement(RNText, null, description) : null,
+        );
+      return Object.assign(Root, {
         Trigger: viewPassthrough,
-        Content: viewPassthrough,
-        Header: ({ title, description }: any) =>
-          React.createElement(View, null,
-            React.createElement(RNText, null, title),
-            description ? React.createElement(RNText, null, description) : null,
-          ),
+        Content,
+        Header,
         Body: viewPassthrough,
         Footer: viewPassthrough,
-      },
-    ),
+      });
+    })(),
     // Stateful mock: Root tracks value/defaultValue/onValueChange; Trigger
     // selects its tab value on press.
     Tabs: (() => {

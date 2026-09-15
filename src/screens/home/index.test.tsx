@@ -118,7 +118,7 @@ jest.mock('@/screens/score', () => {
 });
 
 import React from 'react';
-import { render, waitFor, fireEvent } from '@testing-library/react-native';
+import { act, render, waitFor, fireEvent } from '@testing-library/react-native';
 import HomeScreen from '@/screens/home';
 import { fetchProfile } from '@/lib/instagram';
 
@@ -229,5 +229,23 @@ describe('HomeScreen — Connected state', () => {
 
     // Present is imperative on the mock (no-op); the sheet stays mounted.
     expect(getByTestId('score-sheet')).toBeTruthy();
+  });
+
+  it('opens the placeholder PanelUI sheet', async () => {
+    const { getByLabelText, getByText, queryByText } = await render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(getByLabelText('Open bottom sheet')).toBeTruthy();
+    }, { timeout: 5000, interval: 100 });
+
+    expect(queryByText('Placeholder sheet')).toBeNull();
+    await act(async () => {
+      fireEvent.press(getByLabelText('Open bottom sheet'));
+    });
+    expect(getByText('Placeholder sheet')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByLabelText('Close'));
+    });
+    expect(queryByText('Placeholder sheet')).toBeNull();
   });
 });

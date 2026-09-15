@@ -315,7 +315,6 @@ PanelUI (`panelui-native`) is the primary component library. Import directly: `i
 
 Custom components kept outside PanelUI:
 - `src/components/tab-bar/TabBar.tsx` — floating liquid-glass tab bar with scroll-driven scale animation
-- `src/components/ui/bottomsheet/` — legacy modal bottom sheet kit (kept on disk; production Home/Score use `BottomSheet` from `panelui-native`)
 - `src/components/ui/reveal.tsx` — entrance/pop animation wrappers
 - `src/components/auth/AuthScreen.tsx` — auth flow with OTP input
 - `src/components/screen-shell.tsx` — standard scrollable screen shell
@@ -323,7 +322,7 @@ Custom components kept outside PanelUI:
 
 ### 7.4 The `@/tw` vs Raw-RN Convention
 - **Use `@/tw` primitives** by default (`View`, `Text`, `Pressable` from `@/tw`) for standard screens to consume CSS theme tokens automatically.
-- **Use Raw RN (`StyleSheet.create`)** for animation-critical components or components needing platform-specific APIs (e.g. `AuthScreen`, `bottomsheet/`). Use `useCSSVariable('--color-*')` for raw-RN color access.
+- **Use Raw RN (`StyleSheet.create`)** for animation-critical components or components needing platform-specific APIs (e.g. `AuthScreen`). Use `useCSSVariable('--color-*')` for raw-RN color access.
 - **Use PanelUI components** for buttons, cards, inputs, switches, dialogs, etc. — `import { Button, Card, ... } from 'panelui-native'`.
 
 ### 7.5 Dual Reanimated Web Strategy (.web.tsx)
@@ -372,7 +371,7 @@ When creating or updating screens in `src/app/(tabs)/`:
    - `Image` from `@/tw/image` (NOT `react-native` or `expo-image`)
    - `AnimatedView`, `useShakeAnimation` from `@/tw/animated`
    - `cn` from `@/tw/cn`
-   - PanelUI components (`Button`, `Card`, `Input`, `Text`, `Spinner`, `BottomSheet`, etc.) from `panelui-native` — Home/Score sheets use `BottomSheet`, not `@/components/ui/bottomsheet`
+   - PanelUI components (`Button`, `Card`, `Input`, `Text`, `Spinner`, `BottomSheet`, etc.) from `panelui-native`
    - Animation utilities from `@/lib/reanimated-platform`
 3. **No Direct Reanimated Imports in Screens**: Always use `@/hooks/useClayAnimations` or `@/lib/reanimated-platform`.
 4. **Web Safety (.web.tsx)**: When creating an animated component using Reanimated, you MUST create a matching `.web.tsx` file that uses plain React Native components for web stability (#8285).

@@ -1,13 +1,12 @@
 # src/components/ — Non-Clay Components
 
-Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, and root-level components. PanelUI (`panelui-native`) is the primary component library.
+Scope: the `ui/` kit (reveal), `auth/`, `automation/`, `tab-bar/`, and root-level components. PanelUI (`panelui-native`) is the primary component library.
 
 ## STRUCTURE
 
 | Path | Role |
 |------|------|
-| `ui/` (bottomsheet + reveal) | Custom bottom sheet kit (legacy; production Home/Score use `BottomSheet` from `panelui-native`) and entrance/pop animation (`reveal.tsx`). Import `@/components/ui/reveal` for reveal; prefer `panelui-native` for sheets. |
-| `ui/bottomsheet/` | Legacy native modal bottom sheet (`index.tsx`, `header.tsx`, `backdrop.tsx`). **Production call sites migrated to PanelUI** — kit kept on disk until device QA passes. Do not import from screens. |
+| `ui/reveal.tsx` | Entrance/pop animation. Import `@/components/ui/reveal`. Sheets use `BottomSheet` from `panelui-native`. |
 | `auth/AuthScreen.tsx` | Login/signup OTP screen. Internal pieces: `Tabs` (segmented), `EmailField`, `PasswordInput`, `OTPInput`, `AuthShell`. Raw-RN StyleSheet exception |
 | `automation/AutomationDmPreview.tsx` | Simulated IG DM inbox preview for the automation builder; `{username}` substitution; hardcoded IG colors by design |
 | `edge-blur.tsx` | (DELETED — replaced by inline `LinearGradient` in TabBar and `(tabs)/_layout.tsx`) |
@@ -23,7 +22,7 @@ Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, 
 | Single-file primitives (input, switch, badge) | 2+ related files (main + header + backdrop + tests) |
 | Stateless form/display atoms | Composite kits with re-exports |
 
-- Folder name: kebab-case (`bottomsheet/`, not `BottomSheet/`).
+- Folder name: kebab-case (`reveal/`, not `Reveal/`).
 - Public import: `@/components/ui/<name>` via `index.tsx` barrel.
 - Colocate tests beside the barrel (`index.test.tsx`).
 
@@ -32,7 +31,7 @@ Scope: the `ui/` kit (bottomsheet, reveal), `auth/`, `automation/`, `tab-bar/`, 
 | Directory | Convention | Examples |
 |-----------|-----------|----------|
 | `ui/` | kebab-case | `reveal.tsx` |
-| `ui/<kit>/` | kebab-case files | `bottomsheet/index.tsx`, `header.tsx`, `backdrop.tsx` |
+| `ui/<kit>/` | kebab-case files | `reveal/index.tsx` |
 | `tab-bar/` | PascalCase | `TabBar.tsx` |
 | `auth/` | PascalCase | `AuthScreen.tsx` |
 | `automation/` | PascalCase | `AutomationDmPreview.tsx` |
@@ -44,22 +43,10 @@ Existing files are grandfathered. New files must follow the convention for their
 ## `ui/` KIT CONVENTIONS
 
 - **className via `@/tw` + `cn()`** — variant/size maps are `Record<Type, string>` of Tailwind class strings.
-- **Compound components via context** — `Input`/`Textarea` provide variant+size+state to their field children; `RadioGroup` → `Radio` → `RadioIndicator`/`RadioLabel` throw outside the provider.
-- **`forwardRef` only on field inputs** — `InputField`/`TextareaInput` expose imperative `focus`/`blur`/`clear`/`setText`.
-- **StyleSheet exception is font-metric driven** — `input.tsx`/`textarea.tsx` use `StyleSheet.create()` because Tailwind typography tokens balloon line-height on Android. This is intentional, not debt.
 - **Theming** — raw-RN pieces read `useCSSVariable('--color-*')` from `@/tw`; PanelUI components theme automatically via `PanelUIProvider`.
-- **Reanimated only via `@/lib/reanimated-platform`** — `collapsible.tsx`/`reveal.tsx` guard web with `IS_REANIMATED_AVAILABLE` (web inits at final state).
-- **Accessibility** — `accessibilityRole`/`accessibilityState`/`accessibilityLabel`/`testID` throughout (see `radio.tsx` for the pattern).
+- **Reanimated only via `@/lib/reanimated-platform`** — `reveal.tsx` guards web with `IS_REANIMATED_AVAILABLE` (web inits at final state).
+- **Accessibility** — `accessibilityRole`/`accessibilityState`/`accessibilityLabel`/`testID` throughout.
 - **`glass-surface.tsx`** — (DELETED — replaced by inline `LiquidGlassView`/`BlurView` in `TabBar.tsx`).
-
-## `ui/bottomsheet/` CONVENTIONS
-
-- **Import path:** `@/components/ui/bottomsheet` only. Never `@expo/ui/community/bottom-sheet` from screens.
-- **Native-only** (iOS/Android dev client). No `.web.tsx` variant.
-- **Panel:** solid `canvas` background (AMOLED `#000000` dark, cream light) — not glass/blur on the sheet itself.
-- **Backdrop:** blurred + dimmed scrim via `@sbaiahmed1/react-native-blur` when open (Expo ignores `backdropComponent` on native).
-- **Re-exports:** scroll helpers, `useBottomSheet`, types. `sheetContent` padding utility lives in `@/tw/cn`.
-- **Companion:** `BottomSheetHeader` for title/subtitle/close row.
 
 ## GOTCHAS
 

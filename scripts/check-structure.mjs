@@ -13,9 +13,6 @@ const ALLOWED_RN = new Set([
 const EXCEPTIONS = new Set([
   // AuthScreen — UIManager + useWindowDimensions for platform layout animations
   'src/components/auth/AuthScreen.tsx',
-  // Bottom sheet — RN Animated/StyleSheet/useWindowDimensions are the sheet mechanics
-  'src/components/ui/bottomsheet/index.tsx',
-  'src/components/ui/bottomsheet/backdrop.tsx',
   // automate/new — Keyboard, LayoutAnimation, UIManager for form layout animations
   'src/screens/automate/new/index.tsx',
 ]);

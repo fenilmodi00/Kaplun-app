@@ -39,6 +39,4 @@
 - **NO `useThemeColors()`** — removed in Phase 3. Use `useCSSVariable('--color-*')` for raw-RN color access.
 - **Documented raw-RN escape hatches** (must match `scripts/check-structure.mjs` EXCEPTIONS):
   - `src/components/auth/AuthScreen.tsx` — `UIManager` + `useWindowDimensions` for platform layout animations
-  - `src/components/ui/bottomsheet/index.tsx` — `Modal`, `useWindowDimensions` for sheet mechanics
-  - `src/components/ui/bottomsheet/backdrop.tsx` — `StyleSheet`, `useWindowDimensions` for backdrop
   - `src/screens/automate/new/index.tsx` — `Keyboard`, `LayoutAnimation`, `UIManager` for form layout

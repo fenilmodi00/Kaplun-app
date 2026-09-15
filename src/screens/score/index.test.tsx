@@ -12,7 +12,7 @@
  * become advanceable. Modern fake timers also mock Date.now for the count-up.
  */
 
-import React from 'react';
+import React, { createRef } from 'react';
 import { act, render, screen, fireEvent, within } from '@testing-library/react-native';
 import type { ProfileReport, ProfileScoreResult, ReportMeta } from '@/lib/profile-score';
 
@@ -37,7 +37,7 @@ jest.mock('expo-sharing', () => ({
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 
-import ScoreSheet from '@/screens/score';
+import ScoreSheet, { type ScoreSheetRef } from '@/screens/score';
 
 const mockCaptureRef = jest.mocked(captureRef);
 const mockShareAvailable = jest.mocked(Sharing.isAvailableAsync);
@@ -128,6 +128,15 @@ async function press(target: Parameters<typeof fireEvent.press>[0]) {
   });
 }
 
+async function renderOpenSheet() {
+  const ref = createRef<ScoreSheetRef>();
+  const utils = await render(<ScoreSheet ref={ref} />);
+  await act(async () => {
+    ref.current?.present();
+  });
+  return { ...utils, ref };
+}
+
 /** Stage interval 2400ms / ring 1500ms+350ms tail / stagger 950ms — mirrors screen + components. */
 const RING_TOTAL_MS = 1850;
 const STAGGER_TOTAL_MS = 950;
@@ -151,7 +160,7 @@ afterEach(() => {
 describe('ScoreScreen', () => {
   it('loading: renders header with a skeleton below', async () => {
     setLatest({ loading: true });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.getByText('Score')).toBeTruthy();
     expect(screen.queryByText('Generate my score')).toBeNull();
@@ -168,7 +177,7 @@ describe('ScoreScreen', () => {
   it('not connected: steers to the Instagram connect flow', async () => {
     const connect = jest.fn().mockResolvedValue(undefined);
     setGate({ connected: false, connect });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.getByText('Connect Instagram to get scored')).toBeTruthy();
     await press(screen.getByText('Connect Instagram'));
@@ -177,7 +186,7 @@ describe('ScoreScreen', () => {
 
   it('session_expired: shows the reconnect card', async () => {
     setLatest({ error: 'session_expired' });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.getByText('Instagram disconnected')).toBeTruthy();
     expect(screen.getByText('Reconnect Instagram')).toBeTruthy();
@@ -187,7 +196,7 @@ describe('ScoreScreen', () => {
   it('empty state: explicit Generate CTA, no auto-start', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.getByText('Get your AI Profile Score')).toBeTruthy();
     await press(screen.getByText('Generate my score'));
@@ -197,7 +206,7 @@ describe('ScoreScreen', () => {
   it('theater: generate swaps the empty state for staged analysis rows', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
     await press(screen.getByText('Generate my score'));
 
     expect(screen.getByTestId('analysis-theater')).toBeTruthy();
@@ -214,7 +223,7 @@ describe('ScoreScreen', () => {
   it('theater: stages advance while the generate call is in flight', async () => {
     const generate = jest.fn().mockReturnValue(new Promise(() => {}));
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     // Fake timers before the press so the theater mounts onto the fake clock.
     jest.useFakeTimers();
@@ -230,7 +239,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     jest.useFakeTimers();
     await press(screen.getByText('Generate my score'));
@@ -264,7 +273,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     jest.useFakeTimers();
     await press(screen.getByText('Generate my score'));
@@ -296,7 +305,7 @@ describe('ScoreScreen', () => {
 
   it('cached reopen: scorecard renders directly, no theater or ring', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.queryByTestId('analysis-theater')).toBeNull();
     expect(screen.queryByTestId('score-ring')).toBeNull();
@@ -329,7 +338,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     jest.useFakeTimers();
     await press(screen.getByTestId('score-refresh'));
@@ -366,7 +375,7 @@ describe('ScoreScreen', () => {
     const d = deferred<ProfileScoreResult>();
     const generate = jest.fn().mockReturnValue(d.promise);
     setGenerate({ generate });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
     await press(screen.getByText('Generate my score'));
     expect(screen.getByTestId('analysis-theater')).toBeTruthy();
 
@@ -388,7 +397,7 @@ describe('ScoreScreen', () => {
   it('generic error: inline retry strip above the empty state', async () => {
     const refresh = jest.fn();
     setLatest({ error: 'Network request failed', refresh });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     expect(screen.getByText(/Couldn’t load your score/)).toBeTruthy();
     await press(screen.getByText('Retry'));
@@ -399,7 +408,7 @@ describe('ScoreScreen', () => {
 
   it('share: captures the hidden 9:16 card and opens the OS sheet', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     await press(screen.getByText('Share my score'));
 
@@ -415,7 +424,7 @@ describe('ScoreScreen', () => {
 
   it('share card content: hero score + label + mark only, no private metrics', async () => {
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     const card = within(screen.getByTestId('share-card'));
     expect(card.getByText('72')).toBeTruthy();
@@ -429,7 +438,7 @@ describe('ScoreScreen', () => {
   it('share failure: friendly inline message, CTA stays retryable', async () => {
     mockCaptureRef.mockRejectedValueOnce(new Error('boom'));
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     await press(screen.getByText('Share my score'));
 
@@ -444,11 +453,56 @@ describe('ScoreScreen', () => {
   it('share unavailable: named error maps to a device-specific message', async () => {
     mockShareAvailable.mockResolvedValueOnce(false);
     setLatest({ report: baseReport, meta: baseMeta });
-    await render(<ScoreSheet />);
+    await renderOpenSheet();
 
     await press(screen.getByText('Share my score'));
 
     expect(screen.getByText('Sharing isn’t available on this device.')).toBeTruthy();
     expect(mockShareAsync).not.toHaveBeenCalled();
+  });
+
+  it('starts closed until present(), then dismiss() unmounts the sheet', async () => {
+    const ref = createRef<ScoreSheetRef>();
+    await render(<ScoreSheet ref={ref} />);
+    expect(screen.queryByText('Score')).toBeNull();
+    await act(async () => {
+      ref.current?.present();
+    });
+    expect(screen.getByText('Score')).toBeTruthy();
+    await act(async () => {
+      ref.current?.dismiss();
+    });
+    expect(screen.queryByText('Score')).toBeNull();
+  });
+
+  it('hides Close during theater and ring, then Close dismisses after stagger', async () => {
+    const d = deferred<ProfileScoreResult>();
+    const generate = jest.fn().mockReturnValue(d.promise);
+    setGenerate({ generate });
+    await renderOpenSheet();
+    expect(screen.getByLabelText('Close')).toBeTruthy();
+
+    jest.useFakeTimers();
+    await press(screen.getByText('Generate my score'));
+    expect(screen.queryByLabelText('Close')).toBeNull();
+
+    mockUseLatestScore.mockReturnValue({
+      report: baseReport,
+      meta: baseMeta,
+      loading: false,
+      error: null,
+      refresh: jest.fn(),
+    });
+    await act(async () => {
+      d.resolve({ report: baseReport, meta: baseMeta });
+    });
+    expect(screen.queryByLabelText('Close')).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(RING_TOTAL_MS + STAGGER_TOTAL_MS);
+    });
+    expect(screen.getByLabelText('Close')).toBeTruthy();
+    await press(screen.getByLabelText('Close'));
+    expect(screen.queryByText('Score')).toBeNull();
   });
 });
