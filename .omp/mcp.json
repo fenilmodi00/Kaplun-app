@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "mcpServers": {
+    "appwrite": {
+      "type": "http",
+      "url": "https://mcp.appwrite.io/",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.appwrite.io/",
+        "tokenUrl": "https://fra.cloud.appwrite.io/v1/oauth2/console/token",
+        "resource": "https://mcp.appwrite.io/",
+        "clientId": "6aa936c36cf9717a99ca"
+      }
+    },
+    "firecrawl": {
+      "type": "http",
+      "url": "https://mcp.firecrawl.dev/v2/mcp-oauth",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.firecrawl.dev/v2/mcp-oauth",
+        "tokenUrl": "https://www.firecrawl.dev/api/oauth/token",
+        "resource": "https://api.firecrawl.dev/",
+        "clientId": "dyn_e339e20d7f8d42c9a68a578cf477070b"
+      }
+    },
+    "expo": {
+      "type": "http",
+      "url": "https://mcp.expo.dev/mcp",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.expo.dev/mcp",
+        "tokenUrl": "https://mcp.expo.dev/oauth/token",
+        "resource": "https://mcp.expo.dev/mcp",
+        "clientId": "60206854-f46a-4eac-b58f-424a3b40839a"
+      }
+    }
+  }
+}

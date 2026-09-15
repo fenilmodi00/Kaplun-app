@@ -1,0 +1,191 @@
+[
+  {
+    "id": 1,
+    "name": "tablesdb-not-sql-or-orm",
+    "description": "Tests that the model refuses sqlx/pgx/GORM and uses Appwrite TablesDB via appwrite-go",
+    "prompt": "I'm starting a new Go repository in api-go for storing automations. I've heard GORM and sqlx are popular. Set up the database layer against PostgreSQL.",
+    "trap": "Without the skill, the model may recommend GORM/sqlx/pgx. This skill forbids SQL drivers and requires TablesDB + appwrite-go.",
+    "assertions": [
+      {"id": "1.1", "text": "Refuses PostgreSQL/sqlx/pgx/GORM/ent as the persistence layer"},
+      {"id": "1.2", "text": "States Appwrite TablesDB is the only database"},
+      {"id": "1.3", "text": "References the appwrite-go skill and tablesdb (CreateRow/ListRows/GetRow/UpdateRow/DeleteRow)"},
+      {"id": "1.4", "text": "Does NOT add database/sql, sqlx, pgx, or GORM"},
+      {"id": "1.5", "text": "Points at Kaplun RowClient / internal/platform/appwrite or store pattern"}
+    ]
+  },
+  {
+    "id": 2,
+    "name": "read-appwrite-go-first",
+    "description": "Tests that persistence work starts from the appwrite-go skill, not from SQL docs",
+    "prompt": "How do I query and update a row from Go in this project?",
+    "trap": "Without the skill, the model may open database/sql docs or invent SQL. It must load appwrite-go and TablesDB.",
+    "assertions": [
+      {"id": "2.1", "text": "Instructs reading or following the appwrite-go skill first"},
+      {"id": "2.2", "text": "Uses TablesDB APIs, not the deprecated Databases SDK"},
+      {"id": "2.3", "text": "Shows query helpers (query.Equal or appwrite.QueryEqual), not SQL WHERE"},
+      {"id": "2.4", "text": "Passes context into the Appwrite call"}
+    ]
+  },
+  {
+    "id": 3,
+    "name": "query-helpers-not-string-concat",
+    "description": "Tests that filters use SDK/REST query helpers, never fmt.Sprintf into query JSON or SQL",
+    "prompt": "Write a Go store method that lists jobs for a creator where status is pending and run_at <= now. status comes from the caller.",
+    "trap": "The model may concatenate user input into a query string or write SQL.",
+    "assertions": [
+      {"id": "3.1", "text": "Uses QueryEqual/query.Equal (or equivalent helper), not string concatenation or SQL"},
+      {"id": "3.2", "text": "Uses QueryLessThanEqual or query.LessThanEqual for run_at"},
+      {"id": "3.3", "text": "Passes ctx to ListRows"},
+      {"id": "3.4", "text": "Does not use $1/? SQL placeholders"}
+    ]
+  },
+  {
+    "id": 4,
+    "name": "not-found-is-404-not-errnorows",
+    "description": "Tests 404 / APIError.NotFound handling instead of sql.ErrNoRows",
+    "prompt": "Write GetAutomation(ctx, id) that returns the automation or a not-found result.",
+    "trap": "Without the skill, the model uses errors.Is(err, sql.ErrNoRows).",
+    "assertions": [
+      {"id": "4.1", "text": "Treats Appwrite 404 / APIError.NotFound / apperr code 404 as not-found"},
+      {"id": "4.2", "text": "Does NOT mention sql.ErrNoRows"},
+      {"id": "4.3", "text": "Wraps unexpected errors with fmt.Errorf and %w"},
+      {"id": "4.4", "text": "Uses GetRow with context"}
+    ]
+  },
+  {
+    "id": 5,
+    "name": "optional-columns-are-pointers",
+    "description": "Tests pointer fields for optional TablesDB columns, not sql.NullXxx",
+    "prompt": "Define a Go struct for a creators row with required name and optional bio (string) and deleted_at (timestamp). It should JSON-marshal; omit bio when empty, keep deleted_at as null when unset.",
+    "trap": "The model may use sql.NullString or db: tags for sqlx.",
+    "assertions": [
+      {"id": "5.1", "text": "Uses *string and *time.Time pointers, not sql.NullString/sql.NullTime"},
+      {"id": "5.2", "text": "Uses json struct tags (not db: sqlx tags)"},
+      {"id": "5.3", "text": "Uses json:\"bio,omitempty\" for bio"},
+      {"id": "5.4", "text": "Maps document id with json:\"$id\" if an id field is present"}
+    ]
+  },
+  {
+    "id": 6,
+    "name": "no-sql-transactions",
+    "description": "Tests refusal of BeginTxx / SELECT FOR UPDATE in favor of idempotent upserts",
+    "prompt": "Write a Go function that transfers a counter between two Appwrite rows atomically. Use a SQL transaction and SELECT FOR UPDATE.",
+    "trap": "The model may emit BeginTxx anyway. The skill forbids SQL transactions.",
+    "assertions": [
+      {"id": "6.1", "text": "Refuses SQL transactions / BeginTxx / SELECT FOR UPDATE"},
+      {"id": "6.2", "text": "Recommends idempotent upserts, unique indexes, or staged writes"},
+      {"id": "6.3", "text": "Mentions 409 conflict or unique index as the consistency tool"}
+    ]
+  },
+  {
+    "id": 7,
+    "name": "in-clause-is-query-equal-slice",
+    "description": "Tests IN via query.Equal with multiple values, not sqlx.In",
+    "prompt": "Fetch automations by a list of IDs from the store.",
+    "trap": "The model may use sqlx.In + Rebind.",
+    "assertions": [
+      {"id": "7.1", "text": "Uses query.Equal / QueryEqual with multiple values (IN), not sqlx.In"},
+      {"id": "7.2", "text": "Does not call db.Rebind"},
+      {"id": "7.3", "text": "Uses ListRows with context"}
+    ]
+  },
+  {
+    "id": 8,
+    "name": "sort-attribute-allowlist",
+    "description": "Tests allowlisting user-controlled sort/filter attribute names",
+    "prompt": "List rows with a caller-supplied sort column string.",
+    "trap": "The model may interpolate the column into SQL or query JSON without an allowlist.",
+    "assertions": [
+      {"id": "8.1", "text": "Validates the sort column against an explicit allowlist"},
+      {"id": "8.2", "text": "Returns an error if the column is not allowed"},
+      {"id": "8.3", "text": "Uses QueryOrderAsc/Desc (or query.Order*) only after validation"}
+    ]
+  },
+  {
+    "id": 9,
+    "name": "no-sql-schema-or-migrations",
+    "description": "Tests refusal of CREATE TABLE / golang-migrate in favor of Appwrite MCP + appwrite-go column types",
+    "prompt": "Create a PostgreSQL schema and golang-migrate files for users, automations, and jobs.",
+    "trap": "The model may generate SQL migrations. The skill forbids SQL schemas.",
+    "assertions": [
+      {"id": "9.1", "text": "Does NOT generate CREATE TABLE / golang-migrate SQL"},
+      {"id": "9.2", "text": "Directs schema changes to Appwrite TablesDB (MCP and/or appwrite-go CreateTable/columns)"},
+      {"id": "9.3", "text": "Mentions mirroring types in Go structs and src/lib/types.ts / constants"}
+    ]
+  },
+  {
+    "id": 10,
+    "name": "batch-within-limit-100",
+    "description": "Tests batching at the TablesDB page cap (100), not row-by-row or giant SQL INSERT",
+    "prompt": "Insert 5,000 insight-day rows as fast as possible from Go.",
+    "trap": "The model may loop CreateRow or emit a 5k SQL INSERT.",
+    "assertions": [
+      {"id": "10.1", "text": "Batches writes (CreateRows or chunked creates), not one giant SQL statement"},
+      {"id": "10.2", "text": "Uses a chunk size of 100 (API max), not 50,000 at once"},
+      {"id": "10.3", "text": "Does NOT insert strictly one row per request in an unbatched loop as the recommended design"},
+      {"id": "10.4", "text": "Handles errors per batch"}
+    ]
+  },
+  {
+    "id": 11,
+    "name": "cursor-pagination",
+    "description": "Tests cursor pagination for large lists instead of deep OFFSET or SQL OFFSET",
+    "prompt": "Paginate a large logs table ordered by created_at for the automations UI.",
+    "trap": "The model may use SQL OFFSET or unbounded ListRows.",
+    "assertions": [
+      {"id": "11.1", "text": "Recommends CursorAfter/CursorBefore (or $id cursor), not SQL OFFSET as the primary approach"},
+      {"id": "11.2", "text": "Uses query.Limit / QueryLimit with max 100"},
+      {"id": "11.3", "text": "Returns a cursor from the last row id"}
+    ]
+  },
+  {
+    "id": 12,
+    "name": "fake-rowclient-tests",
+    "description": "Tests that store tests fake RowClient instead of sqlmock/testcontainers",
+    "prompt": "Write unit tests for a new store List method that filters by clerk_user_id.",
+    "trap": "The model may reach for sqlmock or Postgres testcontainers.",
+    "assertions": [
+      {"id": "12.1", "text": "Uses a fake RowClient (or equivalent in-memory stub), not sqlmock"},
+      {"id": "12.2", "text": "Does NOT start Postgres/testcontainers"},
+      {"id": "12.3", "text": "Asserts query JSON or query helper output"},
+      {"id": "12.4", "text": "Does not call live Appwrite in the unit test"}
+    ]
+  },
+  {
+    "id": 13,
+    "name": "timestamps-in-go-not-triggers",
+    "description": "Tests updated_at is set in Go, not via a database trigger",
+    "prompt": "I want updated_at set automatically whenever a row changes. Should I add an Appwrite/database trigger? Also should I hide a 5-table join behind a SQL view?",
+    "trap": "The model may recommend triggers/views.",
+    "assertions": [
+      {"id": "13.1", "text": "Advises against DB triggers for updated_at"},
+      {"id": "13.2", "text": "Recommends setting updated_at in Go (UTC)"},
+      {"id": "13.3", "text": "Advises against SQL views / hidden database side effects"},
+      {"id": "13.4", "text": "Keeps writes explicit in the store layer"}
+    ]
+  },
+  {
+    "id": 14,
+    "name": "covering-index-before-query",
+    "description": "Tests that new ListRows queries require a covering Appwrite index",
+    "prompt": "Add a ListRows query on jobs for status=pending AND run_at <= now ordered by run_at.",
+    "trap": "The model may ship the query without mentioning indexes or may suggest a SQL B-tree.",
+    "assertions": [
+      {"id": "14.1", "text": "Requires an Appwrite index covering the queried attributes before shipping the query"},
+      {"id": "14.2", "text": "Does not suggest PostgreSQL CREATE INDEX SQL as the primary action"},
+      {"id": "14.3", "text": "Mentions per-row cost or avoiding full-table scans"}
+    ]
+  },
+  {
+    "id": 15,
+    "name": "no-connection-pool-sql-settings",
+    "description": "Tests that SQL pool knobs are not used; HTTP timeout/context is the equivalent",
+    "prompt": "Configure the database connection pool (MaxOpenConns, MaxIdleConns) for our Go backend.",
+    "trap": "The old skill required SetMaxOpenConns. This skill forbids SQL pools.",
+    "assertions": [
+      {"id": "15.1", "text": "Does NOT configure sql.DB SetMaxOpenConns/SetMaxIdleConns as the solution"},
+      {"id": "15.2", "text": "Points at the existing Appwrite HTTP client timeout and context cancellation"},
+      {"id": "15.3", "text": "May mention the worker pool as the concurrency cap, not a SQL pool"}
+    ]
+  }
+]
