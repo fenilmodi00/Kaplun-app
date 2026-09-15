@@ -50,7 +50,7 @@ Key architectural decisions:
 │   │   ├── handlers/       # HTTP handlers (bridge, automations, webhooks, cron, oauth)
 │   │   ├── services/       # Business logic (automations, bridge, oauth, reconcile, insights, etc.)
 │   │   ├── store/          # Appwrite persistence layer
-│   │   ├── platform/       # External clients (appwrite, clerk JWT, meta, cloudflare, webhooks)
+│   │   ├── platform/       # External clients (appwrite JWT via /account, meta, cloudflare, webhooks)
 │   │   ├── models/         # Request/response types
 │   │   └── worker/         # Job pool, sweeper, comment runner
 │   ├── .env.example        # Backend env template
@@ -161,7 +161,7 @@ Direct native deps (custom dev client, not Expo Go): `@react-native-community/ne
 ```bash
 cd api-go
 cp .env.example .env     # first run; fill secrets
-go run ./cmd/server      # dev server on :8000 (IG_API_PORT); cold build 30–60s
+go run ./cmd/server      # IG_API_PORT (code default :8000; this project's live .env is :8001); cold build 30–60s
 go build -o server.exe ./cmd/server && ./server.exe   # faster re-runs
 go test ./...            # all backend tests
 go test ./internal/services/automations  # single package
@@ -196,7 +196,7 @@ Auth bridge:
 
 ### Backend (api-go)
 
-- `cmd/server/main.go` loads `.env`, builds optional dependencies, starts the HTTP server, and optionally launches a Cloudflare quick tunnel in the background.
+- `cmd/server/main.go` loads `.env`, builds optional dependencies, starts the HTTP server, and optionally launches a Cloudflare tunnel in the background (this project: named tunnel `kaplun-api` → `http://127.0.0.1:8001`, public `https://api-dev.kaplun.tech`).
 - Route groups are registered only when their dependencies are available, so `/health` always answers even if secrets are missing.
 - Auth modes:
   - Appwrite JWT Bearer for app-facing routes (`/auth/*`, `/automations/*`).
@@ -261,48 +261,56 @@ Auth bridge:
 - **Appwrite:** the app uses `EXPO_PUBLIC_APPWRITE_ENDPOINT` + `EXPO_PUBLIC_APPWRITE_PROJECT_ID`. The backend uses `APPWRITE_API_KEY` for server-side operations and verifies Appwrite JWTs by calling Appwrite `/account` (no server-side JWT key).
 - **Instagram:** OAuth app ID/secret (`INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`) must match `EXPO_PUBLIC_IG_APP_ID`. Webhook HMAC verification uses `FACEBOOK_APP_SECRET`.
 - **Cron endpoints** require `CRON_SECRET` in the `X-Cron-Secret` header.
-- **Cloudflare tunnel:** the backend can open a public quick tunnel locally. Quick tunnels get a new `*.trycloudflare.com` host on every restart; do not use them for production.
+- **Cloudflare tunnel:** this project uses named tunnel `kaplun-api` (`https://api-dev.kaplun.tech`). Empty name+token falls back to an ephemeral `*.trycloudflare.com` quick tunnel — new host each restart; do not use quick tunnels for production.
 - **Plaintext tokens:** creator Instagram access tokens are stored unencrypted by design (the app reads them directly). Treat the Appwrite project and API key as highly sensitive.
 - **Webhook signature bypass:** `WEBHOOK_INSECURE_SKIP_SIGNATURE` exists for local diagnosis only and must never be enabled in production.
 
 ## DEPLOYMENT AND LOCAL DEVELOPMENT
 
 - **No CI workflows, no Dockerfile.** Deployment is currently manual. `eas.json` exists (development/preview/production profiles, CLI >= 14) for manual EAS builds: `eas build --profile development --platform android` produces a dev-client APK with `EXPO_PUBLIC_*` env embedded.
-- **Local backend:** run `api-go` with `cp .env.example .env && go run ./cmd/server`. Default port `:8000`.
-- **Local tunnel:** Cloudflare quick tunnel is enabled by default (`CLOUDFLARE_TUNNEL_ENABLED=true`) so Meta webhooks/OAuth work without ngrok's free interstitial. Requires `cloudflared` on PATH or `api-go/tools/cloudflared.exe`.
-- **Expo dev client:** point the app at the backend with `EXPO_PUBLIC_IG_API_BASE_URL` (e.g., `http://localhost:8000` for emulator, your LAN IP for a physical device, or the Cloudflare tunnel URL).
-- **Meta developer settings:** when using a quick tunnel, update the Meta OAuth redirect URI, webhook callback URL, `REDIRECT_URI`, and `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` to match the logged public URL. Use a named Cloudflare tunnel for a stable hostname.
+- **Local backend:** run `api-go` with `cp .env.example .env && go run ./cmd/server`. `IG_API_PORT` defaults to `8000` in code; this project's live `.env` is `8001`.
+- **Local tunnel:** Cloudflare tunnel is enabled by default (`CLOUDFLARE_TUNNEL_ENABLED=true`). This project uses named tunnel `kaplun-api` (`CLOUDFLARE_TUNNEL_NAME` + `CLOUDFLARE_TUNNEL_URL=https://api-dev.kaplun.tech`) with ingress `http://127.0.0.1:8001`. Empty name+token falls back to an ephemeral `*.trycloudflare.com` quick tunnel. Requires `cloudflared` on PATH or `api-go/tools/cloudflared.exe`.
+- **Expo dev client:** point the app at the backend with `EXPO_PUBLIC_IG_API_BASE_URL` (e.g., `https://api-dev.kaplun.tech` for the named tunnel, `http://localhost:8001` for emulator against this project's live port, or a LAN IP matching `IG_API_PORT`).
+- **Meta developer settings:** OAuth redirect URI, webhook callback URL, `REDIRECT_URI`, and `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` must match the public URL (`https://api-dev.kaplun.tech` for the named tunnel). Quick tunnels get a new host each restart — prefer the named tunnel.
 
 ## ENVIRONMENT VARIABLES
 
 ### App (`/.env`)
 
+Expo reads only `EXPO_PUBLIC_*`. Backend secrets stay in `api-go/.env`.
+
 | Variable | Used in | Purpose |
 |----------|---------|---------|
 | `EXPO_PUBLIC_APPWRITE_ENDPOINT` | `lib/appwrite.ts` | Appwrite API endpoint |
-| `EXPO_PUBLIC_APPWRITE_PROJECT_ID` | `lib/appwrite.ts` | Appwrite project ID |
-| `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/session-context.tsx`, `lib/automations.ts` | Gin api-go base URL |
+| `EXPO_PUBLIC_APPWRITE_PROJECT_ID` | `lib/appwrite.ts`, `lib/auth-session.ts` | Appwrite project ID |
+| `EXPO_PUBLIC_IG_API_BASE_URL` | `lib/api-go-client.ts` (session + automations) | Gin api-go base URL |
 | `EXPO_PUBLIC_IG_APP_ID` | `lib/instagram-oauth.ts` | Instagram OAuth app ID |
 | `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI` | `lib/instagram-oauth.ts` | Instagram OAuth redirect URI |
 
 ### Backend (`/api-go/.env`)
 
+Keys `config.go` `FromMap` actually reads, plus the two read outside config (`COMMENT_POLL_INTERVAL_MS` in `adapters.go`, `WEBHOOK_INSECURE_SKIP_SIGNATURE` in `main.go`). Do not add `GIN_MODE`, `FACEBOOK_APP_ID`, `APPWRITE_JWT_KEY`, `TOKEN_ENCRYPTION_KEY`, `NGROK_ENABLED`, or `CLERK_*` — unread.
+
 | Variable | Purpose |
 |----------|---------|
-| `IG_API_PORT` | Server port (default 8000) |
-| `APPWRITE_ENDPOINT` / `APPWRITE_PROJECT_ID` / `APPWRITE_API_KEY` | Appwrite server client (JWTs are verified by calling Appwrite `/account`; no server-side JWT key) |
+| `IG_API_PORT` | Server port (code default 8000; this project's live `.env` is 8001) |
+| `CORS_ORIGINS` | Gin CORS allowlist (default `*`) |
+| `APPWRITE_ENDPOINT` / `APPWRITE_PROJECT_ID` / `APPWRITE_API_KEY` | Appwrite server client (JWTs verified via Appwrite `/account`; no server JWT signing key) |
 | `APPWRITE_DATABASE_ID` / `APPWRITE_CREATORS_TABLE_ID` | Appwrite DB/table IDs |
 | `APPWRITE_AUTOMATIONS_TABLE_ID` / `APPWRITE_AUTOMATION_LOGS_TABLE_ID` / `APPWRITE_AUTOMATION_JOBS_TABLE_ID` | Automation tables |
 | `APPWRITE_CREATOR_MEDIA_TABLE_ID` / `APPWRITE_CREATOR_INSIGHT_DAYS_TABLE_ID` / `APPWRITE_CREATOR_AUDIENCE_DEMOGRAPHICS_TABLE_ID` / `APPWRITE_CREATOR_ONLINE_FOLLOWERS_TABLE_ID` / `APPWRITE_MENTIONED_MEDIA_TABLE_ID` | Insights tables (all 5 required for insights sync) |
-| `CORS_ORIGINS` | Gin CORS allowlist (default `*`) |
-| `COMMENT_POLL_INTERVAL_MS` | Reconcile poller interval (default 300000; read directly in adapters.go, not config.go) |
-| `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` / `REDIRECT_URI` | Instagram OAuth |
-| `WEBHOOK_VERIFY_TOKEN` / `FACEBOOK_APP_SECRET` | Meta webhook verification |
+| `APPWRITE_PROFILE_REPORTS_TABLE_ID` | Profile Score reports table |
+| `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` / `REDIRECT_URI` | Instagram OAuth (`GET /instagram/callback`) |
+| `WEBHOOK_VERIFY_TOKEN` / `FACEBOOK_APP_SECRET` | Meta webhook verify + HMAC (`x-hub-signature-256`) |
+| `WEBHOOK_INSECURE_SKIP_SIGNATURE` | Local diagnosis only; never production (`main.go`) |
 | `CRON_SECRET` | Cron endpoint auth |
 | `PUBLIC_BASE_URL` | Public URL for webhooks/OAuth |
 | `AUTOMATION_SWEEPER_ENABLED` | Starts in-process worker/sweeper/reconcile loops (default true) |
 | `INSIGHTS_SYNC_ENABLED` | Starts first-party insights sync (default false) |
-| `CLOUDFLARE_TUNNEL_ENABLED` / `CLOUDFLARE_TUNNEL_TOKEN` / `CLOUDFLARE_TUNNEL_NAME` / `CLOUDFLARE_TUNNEL_URL` | Cloudflare tunnel settings |
+| `COMMENT_POLL_INTERVAL_MS` | Reconcile poller interval (default 300000; read in `adapters.go`, not `config.go`) |
+| `WORKER_POOL_SIZE` / `WORKER_QUEUE_SIZE` / `SWEEPER_INTERVAL_MS` | Worker pool tuning (defaults 4 / 64 / 60000) |
+| `CLOUDFLARE_TUNNEL_ENABLED` / `CLOUDFLARE_TUNNEL_TOKEN` / `CLOUDFLARE_TUNNEL_NAME` / `CLOUDFLARE_TUNNEL_URL` | Cloudflare tunnel (this project: named `kaplun-api` → `https://api-dev.kaplun.tech`) |
+| `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY` / `LLM_TIMEOUT_SECONDS` | Profile Score LLM (api-go only) |
 
 ## ANTI-PATTERNS
 
@@ -328,7 +336,7 @@ Auth bridge:
 - **Large-file hotspots** (prefer targeted edits): `src/components/auth/AuthScreen.tsx` (~761 lines), `api-go/internal/worker/comment_runner.go` (~1247 lines), `src/screens/automate/new/index.tsx` (~1112 lines, largest screen file). Route files are all 1-line re-exports now (≤5 lines each).
 - **`jest.setup.ts` is ~315 lines of global mocks** — check it before adding per-file mocks; conventions live in `src/testing/AGENTS.md`.
 - **`EdgeBlur` removed** — was a plain `LinearGradient` canvas scrim; replaced by inline `LinearGradient` in `TabBar.tsx` and `(tabs)/_layout.tsx` using `useCSSVariable('--color-background')`.
-- **api-go in-process loops** — sweeper, reconcile poller, token refresh, and insights sync all run inside the server process. No external scheduler is required.
+- **api-go in-process loops** — sweeper, reconcile poller, token refresh, and insights sync all run inside the server process. No external scheduler is required. Insights sync currently fails with Appwrite `Unknown attribute: "views"` on `creator_media` (schema mismatch; out of scope here).
 - **Reanimated web crash (#8285)** — `metro.config.js` aliases `react-native-reanimated` and `react-native-worklets` to no-op stubs on web. `metro.config.js` also keeps `inlineRequires` lazy imports for worklets (#9445) — do not remove.
 - **Theme system** — PanelUI tokens live in `src/global.css` (imports `panelui-native/theme.css` + custom AMOLED dark `#000000` override via `@variant dark`). System chrome reads `useCSSVariable('--color-*')` from `@/tw`. `useThemeMode()` from PanelUI drives light/dark switching. `setThemePreference()` calls `Uniwind.setTheme()`. `(profile)` is not a tab — it is pushed from the home avatar via `router.push('/(tabs)/(profile)/view' as never)`.
 - **Rule exceptions found in code** — `src/components/auth/AuthScreen.tsx` uses `StyleSheet.create()` (Android font-metric stability, intentional); `src/screens/profile/index.tsx` and `src/screens/automate/detail/index.tsx` use `StyleSheet.create()` as documented escape hatches; `src/screens/messages/thread.tsx` calls `tablesDB.getRow()` directly and casts `Reanimated.SlideInUp as any` (known smells, fix or consciously preserve).

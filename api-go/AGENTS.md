@@ -6,7 +6,7 @@ Go/Gin backend service for Kaplun. External contracts (routes, error shapes, aut
 
 ```bash
 cp .env.example .env     # first run; fill secrets
-go run ./cmd/server      # dev server on :8000 (IG_API_PORT); cold build 30-60s with no logs
+go run ./cmd/server      # IG_API_PORT (code default :8000; this project's live .env is :8001); cold build 30-60s with no logs
 go build -o server.exe ./cmd/server && ./server.exe   # faster re-runs
 go test ./...            # all tests
 go test ./internal/services/automations  # one package
@@ -20,7 +20,7 @@ go test ./internal/services/automations  # one package
 - `internal/handlers` — HTTP handlers per domain (bridge, automations, webhooks, cron, instagram_oauth)
 - `internal/services` — business logic (automations, insights, keywords, oauth, ratelimit, reconcile, templates). There is NO `bridge` package — the auth bridge is `handlers/ensure_profile.go` + `platform/appwrite` client methods
 - `internal/store` — Appwrite persistence (automations, jobs, logs, reconcile, insights)
-- `internal/platform` — external clients: `appwrite` (TablesDB REST + profile bootstrap), `meta` (Graph API client + DM sender), `webhooks` (HMAC `x-hub-signature-256` verify + event parsers), `cloudflare` (tunnel). There is NO `clerk` package — Appwrite JWTs are verified by calling Appwrite `/account`
+- `internal/platform` — external clients: `appwrite` (TablesDB REST + profile bootstrap + JWT verify via Appwrite `/account`; no server JWT signing key), `meta` (Graph API client + DM sender), `webhooks` (HMAC `x-hub-signature-256` verify + event parsers), `cloudflare` (tunnel). Auth is Appwrite JWT Bearer — remaining `clerk_*` names are compatibility fields, not a live Clerk mode.
 - `internal/worker` — job pool, sweeper, comment_runner (4 job types: `process_comment`, `send_reveal`, `send_followup`, `process_message`)
 
 ## ROUTES
@@ -59,7 +59,7 @@ Cleanup is LIFO: `sweeper.Stop` → pool cancel → `pool.Shutdown`.
 
 - **Nil-dependency route skipping** — `router.Dependencies` fields are optional; nil means the route group is not registered, so `/health` still answers when secrets are missing. Keep this pattern when adding routes.
 - **Env loading** — `main.go` loads `api-go/.env` via godotenv before `config.Load()`; process env vars override `.env`.
-- **Cloudflare quick tunnel on by default** — logs the public URL + OAuth/webhook paths a few seconds after listen. Quick tunnels get a NEW `*.trycloudflare.com` host each restart: update Meta redirect URIs, `REDIRECT_URI`, and the app's `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`. Disable with `CLOUDFLARE_TUNNEL_ENABLED=false`. Needs `cloudflared` on PATH (or `tools/cloudflared.exe`).
+- **Cloudflare tunnel on by default** — this project uses named tunnel `kaplun-api` (`CLOUDFLARE_TUNNEL_NAME` + `CLOUDFLARE_TUNNEL_URL=https://api-dev.kaplun.tech`) with ingress `http://127.0.0.1:8001`. Empty name+token falls back to an ephemeral `*.trycloudflare.com` quick tunnel (NEW host each restart — update Meta redirect URIs, `REDIRECT_URI`, and `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`). Disable with `CLOUDFLARE_TUNNEL_ENABLED=false`. Needs `cloudflared` on PATH (or `tools/cloudflared.exe`).
 - **Auth modes** — Appwrite JWT Bearer (app calls), `X-Cron-Secret` (`/cron/*`), Meta HMAC `x-hub-signature-256` (`POST /webhooks/instagram`), none (`/health`, `/instagram/callback`, `GET /webhooks/instagram`).
 - **Contract preservation** — ownership mismatches return `404` (not 403); expired sessions return `401 {"error":"session_expired"}`; automation list/detail responses are wrapped (`{"automation":{...}}`), stats are bare objects; valid webhooks always return `200 {"status":"ok"}` even when processing fails.
 - **Instagram auth** — The app uses the official Meta Graph API for all Instagram operations. Instagram OAuth (`GET /instagram/callback`) exchanges codes for long-lived tokens via `services/oauth`. The old instagrapi-based `POST /login`, `GET /profile|/media|/insights`, and `POST /disconnect` endpoints have been removed.
@@ -77,4 +77,6 @@ Cleanup is LIFO: `sweeper.Stop` → pool cancel → `pool.Shutdown`.
 - `AUTOMATION_SWEEPER_ENABLED=true` starts the sweeper loop that retries pending jobs — required for comment automations to actually send. The same flag also starts the in-process reconcile poller (`startReconcileLoop`) and the daily token-refresh loop — no external scheduler needed.
 - Never write `ig_session_json` to the creators table — the column does not exist (enforced in `oauth/service_test.go`).
 - `store/insights_store.go` per-media upserts must not zero out previously stored metrics when a newer fetch lacks them.
-- `APPWRITE_JWT_KEY` is not read anywhere; JWT verification calls Appwrite `/account` with endpoint + project ID. Do not add it to `.env.example` — there is no server-side JWT signing key.
+- JWT verification calls Appwrite `/account` with endpoint + project ID. There is no server-side JWT signing key — do not add `APPWRITE_JWT_KEY`. Also unread (do not re-add): `GIN_MODE` (router hardcodes `gin.ReleaseMode`), `FACEBOOK_APP_ID`, `TOKEN_ENCRYPTION_KEY`, `NGROK_ENABLED`, `CLERK_*`. `COMMENT_POLL_INTERVAL_MS` is read in `adapters.go`, not `config.go`. `WEBHOOK_INSECURE_SKIP_SIGNATURE` is read in `main.go`.
+- Named tunnel: `CLOUDFLARE_TUNNEL_NAME=kaplun-api`, public `https://api-dev.kaplun.tech`, live `IG_API_PORT=8001` (code default remains 8000).
+- Insights sync currently fails with Appwrite `Unknown attribute: "views"` on `creator_media` (schema mismatch; out of scope here).

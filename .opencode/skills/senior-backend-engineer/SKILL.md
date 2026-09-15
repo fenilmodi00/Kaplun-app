@@ -19,7 +19,7 @@ You implement and operate the Kaplun backend AND you think like a senior backend
 
 | Layer | Tech | Notes |
 |---|---|---|
-| Server | Go 1.25, Gin 1.12 | Entry `api-go/cmd/server`; port `:8000` (`IG_API_PORT`) |
+| Server | Go 1.25, Gin 1.12 | Entry `api-go/cmd/server`; `IG_API_PORT` code default `:8000`, this project's live `.env` is `:8001` (named tunnel `kaplun-api` ingress `http://127.0.0.1:8001`) |
 | Database | Appwrite TablesDB | Document-store API only — NEVER the SQL `Databases` SDK |
 | Auth | Appwrite JWT Bearer | Verified by calling Appwrite `/account` (no server JWT key) |
 | External API | Meta Graph API v26.0 | OAuth callback, DM send, webhooks (HMAC) |
@@ -50,7 +50,7 @@ Useful TablesDB tools (search to discover more): `tables_db_create_table`, `tabl
 |---|---|---|
 | TablesDB | DBs: `vernacular_saas` (THE app database — `DATABASE_ID` in `src/lib/constants.ts`), `agents`, `insta_scraper` | All app + backend persistence; table IDs in `constants.ts` (app) and `APPWRITE_*_TABLE_ID` env (backend) |
 | Account/Users | ~10 users | App auth; backend verifies user JWTs via `GET /account` |
-| Functions | `clerk-bridge`, `ig-oauth-callback`, `ig-api-proxy` (node-18) | LEGACY — `ig-api-proxy` is dead (Appwrite strips `x-appwrite-user-jwt`); never wire new code to it or `EXPO_PUBLIC_IG_API_PROXY_URL` |
+| Functions | leftover Appwrite Function names (`clerk-bridge`, `ig-oauth-callback`, `ig-api-proxy`, node-18) | LEGACY — not live auth. Auth is Appwrite JWT Bearer verified via `/account`. `ig-api-proxy` is dead (Appwrite strips `x-appwrite-user-jwt`); never wire new code to it or `EXPO_PUBLIC_IG_API_PROXY_URL` |
 | Sites | `Kaplun-web` (nextjs SSR) | Web surface; not part of api-go |
 | Storage | 0 buckets (`attachments` ID reserved in constants) | Create via MCP (`confirm_write=true`) if a feature needs files |
 | Messaging | Unused | Available for future email/push |
@@ -183,7 +183,7 @@ Senior judgment includes knowing what NOT to build yet. These are legitimate sen
 
 ```bash
 cd api-go
-go run ./cmd/server                                 # dev (:8000); cold build 30-60s, quiet
+go run ./cmd/server                                 # IG_API_PORT (code default :8000; live .env is :8001); cold build 30-60s, quiet
 go build -o server.exe ./cmd/server && ./server.exe # faster re-runs
 go test ./...                                       # all tests
 go test ./internal/services/automations             # one package
@@ -191,11 +191,10 @@ go test ./internal/services/automations             # one package
 
 ## Gotchas that bite
 
-- Cloudflare quick tunnel (on by default) gets a NEW `*.trycloudflare.com` host every restart → update Meta OAuth redirect, webhook URL, `REDIRECT_URI`, and the app's `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`.
+- Cloudflare named tunnel `kaplun-api` (`https://api-dev.kaplun.tech`, ingress `http://127.0.0.1:8001`) is the stable hostname. Empty name+token falls back to a quick tunnel with a NEW `*.trycloudflare.com` host every restart → update Meta OAuth redirect, webhook URL, `REDIRECT_URI`, and the app's `EXPO_PUBLIC_IG_OAUTH_REDIRECT_URI`.
 - `AUTOMATION_SWEEPER_ENABLED=true` is required for comment automations to actually send (also starts the reconcile poller + daily token refresh).
 - `INSIGHTS_SYNC_ENABLED` gates first-party insights sync separately; all 5 insights table env IDs are required for it.
-- `GIN_MODE`, `FACEBOOK_APP_ID`, `APPWRITE_TRACKED_LINKS_TABLE_ID`, `APPWRITE_LINK_CLICKS_TABLE_ID`, and `APPWRITE_WEBHOOK_EVENTS_TABLE_ID` in `.env.example` are template placeholders — `config.go` never reads them. `APPWRITE_JWT_KEY` is also unread.
-- `COMMENT_POLL_INTERVAL_MS` is read in `adapters.go`, not `config.go`.
+- Do not add unread env keys: `GIN_MODE` (router hardcodes `gin.ReleaseMode`), `FACEBOOK_APP_ID`, `APPWRITE_JWT_KEY`, `TOKEN_ENCRYPTION_KEY`, `NGROK_ENABLED`, `CLERK_*`. `COMMENT_POLL_INTERVAL_MS` is read in `adapters.go`, not `config.go`. `WEBHOOK_INSECURE_SKIP_SIGNATURE` is read in `main.go`.
 - Never write `ig_session_json` to the creators table (column does not exist; enforced by `oauth/service_test.go`).
 - `server.exe` and `tools/*.log` are gitignored artifacts — don't commit.
 
